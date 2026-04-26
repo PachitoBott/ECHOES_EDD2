@@ -1,0 +1,153 @@
+{
+  "intro": {
+    "id": "intro",
+    "etapa": 0,
+    "paneles": [
+      {
+        "texto": "Cada dia, millones de personas enfrentan el ciberacoso.",
+        "duracion": 3.5,
+        "color_fondo": [8, 12, 28],
+        "color_texto": [220, 220, 220],
+        "fade_in": 1.0,
+        "fade_out": 0.8
+      },
+      {
+        "texto": "Mensajes hirientes. Fotos sin permiso. Rumores digitales.",
+        "duracion": 3.5,
+        "color_fondo": [8, 12, 28],
+        "color_texto": [220, 100, 100],
+        "fade_in": 0.8,
+        "fade_out": 0.8
+      },
+      {
+        "texto": "Esta es tu historia.\nEsta es tu oportunidad de sobrevivir.",
+        "duracion": 4.0,
+        "color_fondo": [8, 12, 28],
+        "color_texto": [100, 200, 255],
+        "fade_in": 1.0,
+        "fade_out": 1.2
+      },
+      {
+        "texto": "ECHOES",
+        "duracion": 2.5,
+        "color_fondo": [8, 12, 28],
+        "color_texto": [255, 255, 255],
+        "fade_in": 1.0,
+        "fade_out": 1.0,
+        "subtitulo": "Una aventura sobre ciberacoso"
+      }
+    ]
+  },
+  "etapa_2": {
+    "id": "etapa_2",
+    "etapa": 2,
+    "paneles": [
+      {
+        "texto": "Las cosas se complican.\nMas voces se suman al ataque.",
+        "duracion": 3.0,
+        "color_fondo": [20, 8, 8],
+        "color_texto": [220, 160, 100],
+        "fade_in": 1.0,
+        "fade_out": 0.8
+      },
+      {
+        "texto": "Pero no estas solo/a.\nAlex sigue aqui.",
+        "duracion": 3.0,
+        "color_fondo": [8, 20, 28],
+        "color_texto": [100, 200, 255],
+        "fade_in": 0.8,
+        "fade_out": 0.8
+      }
+    ]
+  },
+  "boss": {
+    "id": "boss",
+    "etapa": 3,
+    "paneles": [
+      {
+        "texto": "Has llegado al origen.\nEl Coordinador del odio te espera.",
+        "duracion": 4.0,
+        "color_fondo": [15, 5, 25],
+        "color_texto": [200, 100, 255],
+        "fade_in": 1.5,
+        "fade_out": 1.0
+      },
+      {
+        "texto": "Todo lo que has aprendido\nllega a este momento.",
+        "duracion": 3.5,
+        "color_fondo": [15, 5, 25],
+        "color_texto": [220, 220, 220],
+        "fade_in": 0.8,
+        "fade_out": 0.8
+      }
+    ]
+  },
+  "final_bueno": {
+    "id": "final_bueno",
+    "etapa": 4,
+    "paneles": [
+      {
+        "texto": "Lo lograste.",
+        "duracion": 3.0,
+        "color_fondo": [8, 25, 15],
+        "color_texto": [100, 255, 150],
+        "fade_in": 2.0,
+        "fade_out": 0.5
+      },
+      {
+        "texto": "La evidencia fue presentada.\nLas cuentas fueron suspendidas.",
+        "duracion": 4.0,
+        "color_fondo": [8, 25, 15],
+        "color_texto": [220, 220, 220],
+        "fade_in": 0.8,
+        "fade_out": 0.8
+      },
+      {
+        "texto": "Y lo mas importante:\nAprendiste que pedir ayuda es valentia,\nno debilidad.",
+        "duracion": 5.0,
+        "color_fondo": [8, 25, 15],
+        "color_texto": [255, 255, 200],
+        "fade_in": 1.0,
+        "fade_out": 1.5
+      },
+      {
+        "texto": "Si estas pasando por ciberacoso,\nhabla con alguien de confianza.\nNo estas solo/a.",
+        "duracion": 6.0,
+        "color_fondo": [8, 12, 28],
+        "color_texto": [180, 220, 255],
+        "fade_in": 1.2,
+        "fade_out": 1.0
+      }
+    ]
+  },
+  "final_malo": {
+    "id": "final_malo",
+    "etapa": 4,
+    "paneles": [
+      {
+        "texto": "Caiste.\nPero caer no es el fin.",
+        "duracion": 4.0,
+        "color_fondo": [20, 8, 8],
+        "color_texto": [220, 180, 180],
+        "fade_in": 1.5,
+        "fade_out": 0.8
+      },
+      {
+        "texto": "El ciberacoso no desaparece solo.\nPero tampoco dura para siempre.",
+        "duracion": 4.0,
+        "color_fondo": [8, 12, 28],
+        "color_texto": [200, 200, 220],
+        "fade_in": 1.0,
+        "fade_out": 0.8
+      },
+      {
+        "texto": "Si necesitas ayuda, busca a alguien.\nUn adulto de confianza, un consejero.\nMerecen saber lo que te pasa.",
+        "duracion": 6.0,
+        "color_fondo": [8, 12, 28],
+        "color_texto": [180, 220, 255],
+        "fade_in": 1.0,
+        "fade_out": 1.5
+      }
+    ]
+  }
+}

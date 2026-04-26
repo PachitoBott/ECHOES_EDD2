@@ -8,9 +8,9 @@ from typing import Dict, List, Optional, Tuple, Type
 import pygame
 
 from Config import CFG
-from Enemy import Enemy, FastChaserEnemy, TankEnemy, ShooterEnemy, BasicEnemy
-import Enemy as enemy_mod  # <- para usar enemy_mod.WANDER
-from asset_paths import assets_dir
+from entities.Enemy import Enemy, FastChaserEnemy, TankEnemy, ShooterEnemy, BasicEnemy
+import entities.Enemy as enemy_mod  # <- para usar enemy_mod.WANDER
+from core.asset_paths import assets_dir
 
 # Plantillas de encuentros por umbral de dificultad.
 ENCOUNTER_TABLE: list[tuple[int, list[list[Type[Enemy]]]]] = [

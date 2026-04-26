@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pygame
 
-from Entity import Entity
+from core.Entity import Entity
 from Config import CFG
-from Weapons import WeaponFactory
+from entities.Weapons import WeaponFactory
 
 
 PLAYER_SPRITE_SIZE = (64, 64)
@@ -508,8 +508,8 @@ class Player(Entity):
         self.dash_duration = self.base_dash_duration
         self.dash_cooldown = self.base_dash_cooldown
         self.dash_iframe_duration = self.dash_duration + 0.08
-        self._grant_weapon("short_rifle")
-        self.equip_weapon("short_rifle")
+        self._grant_weapon("bloqueo")
+        self.equip_weapon("bloqueo")
 
     def has_weapon(self, weapon_id: str) -> bool:
         return weapon_id in self._owned_weapons

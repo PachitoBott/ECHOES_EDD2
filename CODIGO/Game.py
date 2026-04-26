@@ -9,36 +9,44 @@ from pathlib import Path
 import pygame
 
 from Config import Config
-from StartMenu import StartMenu
-from Tileset import Tileset
-from Player import Player
-from Dungeon import Dungeon
-from Minimap import Minimap
-from Projectile import ProjectileGroup
-from Shop import Shop
-from Shopkeeper import Shopkeeper
-from HudPanels import HudPanels
-from PauseMenu import PauseMenu, PauseMenuButton
-from GameOverScreen import GameOverScreen
+from ui.StartMenu import StartMenu
+from core.Tileset import Tileset
+from entities.Player import Player
+from world.Dungeon import Dungeon
+from ui.Minimap import Minimap
+from core.Projectile import ProjectileGroup
+from ui.Shop import Shop
+from ui.Shopkeeper import Shopkeeper
+from ui.HudPanels import HudPanels
+from ui.PauseMenu import PauseMenu, PauseMenuButton
+from ui.GameOverScreen import GameOverScreen
 from Statistics import StatisticsManager
-from Pickup import MicrochipPickup
-from asset_paths import WEAPON_SPRITE_FILENAMES, assets_dir, weapon_sprite_path
+from entities.Pickup import Pickup
+from core.asset_paths import WEAPON_SPRITE_FILENAMES, assets_dir, weapon_sprite_path
+
+# --- Herramientas de desarrollo ---
+from dev.logger import log_game, log_asset, log_room, log_player
+from dev.hot_reload import AssetWatcher
+from dev.debug_console import DebugConsole
 
 
 class Game:
-    MICROCHIP_SPRITE_NAME = "chip_moneda.png"
-    MICROCHIP_ICON_DEFAULT_SCALE = 1.5
-    MICROCHIP_PICKUP_SIZE = (12, 12)
+    COIN_SPRITE_NAME = "moneda.png"
+    COIN_ICON_DEFAULT_SCALE = 1.5
+    COIN_PICKUP_SIZE = (12, 12)
 
-    def __init__(self, cfg: Config) -> None:
+    def __init__(self, cfg: Config, *, debug_mode: bool = False) -> None:
         pygame.init()
         self.cfg = cfg
+        self._debug_mode = debug_mode
 
         # ---------- Ventana ----------
         self.screen = pygame.display.set_mode(
             (cfg.SCREEN_W * cfg.SCREEN_SCALE, cfg.SCREEN_H * cfg.SCREEN_SCALE)
         )
-        pygame.display.set_caption("Roguelike — Dungeon + Minimap")
+        pygame.display.set_caption("Echoes")
+        log_game.info("Ventana inicializada (%dx%d, escala %dx)",
+                      cfg.SCREEN_W, cfg.SCREEN_H, cfg.SCREEN_SCALE)
         self.clock = pygame.time.Clock()
         self.world = pygame.Surface((cfg.SCREEN_W, cfg.SCREEN_H))
         pygame.mouse.set_visible(False)
@@ -46,14 +54,14 @@ class Game:
 
         # ---------- UI ----------
         self.ui_font = pygame.font.SysFont(None, 18)
-        icon_source, pickup_sprite = self._create_microchip_sprites()
-        self._microchip_icon_source = icon_source
-        self._chip_pickup_sprite = pickup_sprite
-        self.microchip_icon_scale = self.MICROCHIP_ICON_DEFAULT_SCALE * 0.8
+        icon_source, pickup_sprite = self._create_coin_sprites()
+        self._coin_icon_source = icon_source
+        self._coin_pickup_sprite = pickup_sprite
+        self.coin_icon_scale = self.COIN_ICON_DEFAULT_SCALE * 0.8
         
-        # Usa los métodos set_microchip_icon_scale/offset/value_offset para ajustar
+        # Usa los métodos set_coin_icon_scale/offset/value_offset para ajustar
         # manualmente la presentación del icono dentro del HUD.
-        self._coin_icon = self._scale_microchip_icon(self.microchip_icon_scale)
+        self._coin_icon = self._scale_coin_icon(self.coin_icon_scale)
         self._battery_states = self._load_battery_states()
         self._life_battery_highlight = pygame.Color(110, 200, 255)
         # Ajusta este offset para reposicionar las vidas en el HUD.
@@ -71,9 +79,9 @@ class Game:
         self._weapon_icons = self._load_weapon_icons()
         self._weapon_icon_cache: dict[tuple[str, float], pygame.Surface] = {}
         self.current_seed: int | None = None
-        self.microchip_icon_offset = pygame.Vector2(193, 42)
-        self.microchip_value_offset = pygame.Vector2(0, -100)
-        self.microchip_value_color = pygame.Color(255, 240, 180)
+        self.coin_icon_offset = pygame.Vector2(193, 42)
+        self.coin_value_offset = pygame.Vector2(0, -100)
+        self.coin_value_color = pygame.Color(255, 240, 180)
 
         # --- Tienda ---
         self.shop = Shop(font=self.ui_font, on_gold_spent=self._register_gold_spent)
@@ -114,6 +122,135 @@ class Game:
         self._run_gold_spent: int = 0
         self._run_kills: int = 0
 
+        # ---------- Herramientas de desarrollo ----------
+        # Consola de debug (F1): siempre creada, solo visible en debug_mode
+        self.debug_console = DebugConsole(self)
+
+        # Hot-reload: monitorea assets para recargar sin reiniciar
+        self.asset_watcher = AssetWatcher(check_interval=0.5)
+        self._register_asset_watchers()
+
+        if self._debug_mode:
+            log_game.info("Modo debug activo — F1 abre la consola de debug")
+
+    # ------------------------------------------------------------------ #
+    # Hot-reload de assets
+    # ------------------------------------------------------------------ #
+
+    def _register_asset_watchers(self) -> None:
+        """
+        Registra los archivos de assets a vigilar para hot-reload.
+
+        Al cambiar cualquier PNG en 'weapons/' se recargan los iconos
+        de armas. Al cambiar sprites de UI se recarga el icono de moneda.
+        """
+        weapons_dir = assets_dir("weapons")
+        ui_dir      = assets_dir("ui")
+
+        count = self.asset_watcher.watch_dir(
+            weapons_dir, "*.png", self._on_weapon_sprite_changed
+        )
+        log_asset.debug(f"Vigilando {count} sprites de armas")
+
+        count = self.asset_watcher.watch_dir(
+            ui_dir, "*.png", self._on_ui_sprite_changed
+        )
+        log_asset.debug(f"Vigilando {count} sprites de UI")
+
+    def _on_weapon_sprite_changed(self, path: Path) -> None:
+        """Callback: recarga el sprite del arma que cambió."""
+        filename  = path.name
+        weapon_id = next(
+            (wid for wid, fn in WEAPON_SPRITE_FILENAMES.items() if fn == filename),
+            None,
+        )
+        if weapon_id is None:
+            return   # no es un sprite de arma conocido
+
+        try:
+            surface = pygame.image.load(path.as_posix()).convert_alpha()
+            self._weapon_icons[weapon_id] = surface
+            # Limpiar entradas de caché para este weapon_id
+            stale = [k for k in self._weapon_icon_cache if k[0] == weapon_id]
+            for k in stale:
+                del self._weapon_icon_cache[k]
+            log_asset.info(f"Sprite de arma recargado: {weapon_id}")
+        except Exception as exc:
+            log_asset.error(f"Error recargando sprite de arma '{path.name}': {exc}")
+
+    def _on_ui_sprite_changed(self, path: Path) -> None:
+        """Callback: recarga elementos de UI cuando cambia un sprite."""
+        if path.name == self.COIN_SPRITE_NAME:
+            try:
+                icon_source, pickup_sprite = self._create_coin_sprites()
+                self._coin_icon_source = icon_source
+                self._coin_pickup_sprite    = pickup_sprite
+                self._coin_icon = self._scale_coin_icon(self.coin_icon_scale)
+                log_asset.info("Icono de moneda recargado")
+            except Exception as exc:
+                log_asset.error(f"Error recargando icono de moneda: {exc}")
+
+    # ------------------------------------------------------------------ #
+    # Inicio rápido (sin menú) — para flags CLI y tests
+    # ------------------------------------------------------------------ #
+
+    def quick_start(
+        self,
+        seed: int | None = None,
+        start_room: tuple[int, int] | None = None,
+    ) -> None:
+        """
+        Inicia el juego directamente sin pasar por el menú de inicio.
+
+        Parámetros
+        ----------
+        seed:
+            Seed para la generación del dungeon (None = aleatoria).
+        start_room:
+            Tupla (i, j) para teletransportar al jugador a una sala
+            concreta después de crear el dungeon.
+        """
+        self.start_new_run(seed=seed)
+
+        if start_room is not None:
+            dungeon = self.dungeon
+            if start_room in dungeon.rooms:
+                dungeon.i, dungeon.j = start_room
+                dungeon.explored.add(start_room)
+                room   = dungeon.current_room
+                cx, cy = room.center_px()
+                self.player.x = float(cx) - self.player.w / 2.0
+                self.player.y = float(cy) - self.player.h / 2.0
+                log_game.info(f"Jugador ubicado en sala {start_room}")
+            else:
+                log_game.warning(
+                    f"Sala {start_room} no existe en el dungeon generado "
+                    f"(seed={self.current_seed}). Se inicia en la sala por defecto."
+                )
+
+        self._frame_counter = 0
+        self._run_quick_loop()
+
+    def _run_quick_loop(self) -> None:
+        """Bucle principal compartido con run() cuando se salta el menú."""
+        while self.running:
+            dt = self.clock.tick(self.cfg.FPS) / 1000.0
+            self.door_cooldown = max(0.0, self.door_cooldown - dt)
+
+            events = self._handle_events()
+            if self._skip_frame:
+                self._skip_frame = False
+                continue
+
+            self._update_fps_counter()
+            self._update(dt, events)
+            self._render()
+
+        pygame.mouse.set_visible(True)
+        self._finalize_run_statistics("shutdown")
+        pygame.quit()
+        sys.exit(0)
+
     # ------------------------------------------------------------------ #
     # Nueva partida / regenerar dungeon (misma o nueva seed)
     # ------------------------------------------------------------------ #
@@ -132,7 +269,8 @@ class Game:
 
         self.dungeon = Dungeon(**params, seed=seed)
         self.current_seed = self.dungeon.seed
-        pygame.display.set_caption(f"Roguelike — Seed {self.current_seed}")
+        pygame.display.set_caption(f"Echoes — Seed {self.current_seed}")
+        log_game.info(f"Nueva partida — seed={self.current_seed}  salas={len(self.dungeon.rooms)}")
 
         # preparar inventario de la tienda para esta seed
         if hasattr(self, "shop"):
@@ -206,7 +344,7 @@ class Game:
                 gold_spent=gold_spent,
             )
         except Exception as exc:  # pragma: no cover - logging best effort
-            print(f"[WARN] No se pudo guardar la estadística: {exc}", file=sys.stderr)
+            log_game.warning(f"No se pudo guardar la estadística: {exc}")
 
         self._run_start_time = None
         self._stats_pending_reason = None
@@ -241,11 +379,25 @@ class Game:
 
     def _handle_events(self) -> list:
         events = pygame.event.get()
+        remaining: list = []
+
         for e in events:
             if e.type == pygame.QUIT:
                 self._finalize_run_statistics("quit")
                 self.running = False
-            elif e.type == pygame.KEYDOWN:
+                continue
+
+            # F1: alternar consola de debug (disponible siempre, útil en modo debug)
+            if e.type == pygame.KEYDOWN and e.key == pygame.K_F1:
+                self.debug_console.toggle()
+                continue
+
+            # Si la consola está abierta, ella consume todos los eventos de teclado
+            if self.debug_console.handle_event(e):
+                continue
+
+            # Resto del manejo de teclas del juego
+            if e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_ESCAPE:
                     self._show_pause_menu()
                     return []
@@ -255,7 +407,10 @@ class Game:
                 elif e.key == pygame.K_n:
                     self._stats_pending_reason = "manual_new_seed"
                     self.start_new_run(seed=None)
-        return events
+
+            remaining.append(e)
+
+        return remaining
 
     def _open_start_menu(self) -> bool:
         pygame.mouse.set_visible(True)
@@ -321,11 +476,15 @@ class Game:
     def _update_fps_counter(self) -> None:
         self._frame_counter += 1
         if self._frame_counter % 90 == 0:
+            debug_tag = " [DEBUG]" if self._debug_mode else ""
             pygame.display.set_caption(
-                f"Roguelike — Seed {self.current_seed} — FPS {self.clock.get_fps():.1f}"
+                f"Echoes — Seed {self.current_seed} — FPS {self.clock.get_fps():.1f}{debug_tag}"
             )
 
     def _update(self, dt: float, events: list) -> None:
+        # Hot-reload: verificar si algún asset cambió en disco
+        self.asset_watcher.tick()
+
         room = self.dungeon.current_room
         self._update_player(dt, room)
         self._spawn_room_enemies(room)
@@ -339,6 +498,10 @@ class Game:
         self._update_shop(events)
 
     def _update_player(self, dt: float, room) -> None:
+        # Modo dios: mantener el timer de invulnerabilidad alto
+        if getattr(self.player, "_debug_god_mode", False):
+            self.player.invulnerable_timer = 9999.0
+
         self.player.update(dt, room)
         mx, my = pygame.mouse.get_pos()
         mx //= self.cfg.SCREEN_SCALE
@@ -448,7 +611,7 @@ class Game:
             ready_fn = getattr(enemy, "is_ready_to_remove", None)
             dying_fn = getattr(enemy, "is_dying", None)
             if callable(ready_fn) and ready_fn():
-                self._drop_enemy_microchips(enemy, room)
+                self._drop_enemy_coins(enemy, room)
                 continue
             if callable(dying_fn) and dying_fn():
                 survivors.append(enemy)
@@ -456,14 +619,14 @@ class Game:
             if getattr(enemy, "hp", 1) > 0:
                 survivors.append(enemy)
             else:
-                self._drop_enemy_microchips(enemy, room)
+                self._drop_enemy_coins(enemy, room)
         defeated_enemies = max(0, initial_enemy_count - len(survivors))
         if defeated_enemies:
             self._run_kills = max(0, self._run_kills) + defeated_enemies
             try:
                 self.stats_manager.record_kill(defeated_enemies)
             except Exception as exc:  # pragma: no cover - registro best effort
-                print(f"[WARN] No se pudo guardar kills: {exc}", file=sys.stderr)
+                log_game.warning(f"No se pudo guardar kills: {exc}")
         room.enemies = survivors
         self.projectiles.prune()
         self.enemy_projectiles.prune()
@@ -475,14 +638,14 @@ class Game:
             return True
         return False
 
-    def _drop_enemy_microchips(self, enemy, room) -> None:
+    def _drop_enemy_coins(self, enemy, room) -> None:
         total_value = int(getattr(enemy, "gold_reward", 0))
         if total_value <= 0:
             return
         if not hasattr(room, "pickups"):
             room.pickups = []
 
-        min_count, max_count = self._chip_count_for_reward(total_value)
+        min_count, max_count = self._coin_count_for_reward(total_value)
         max_count = max(1, min(total_value, max_count))
         min_count = max(1, min(min_count, max_count))
         count = random.randint(min_count, max_count)
@@ -494,8 +657,8 @@ class Game:
             for idx in random.sample(range(count), remainder):
                 values[idx] += 1
 
-        sprite_w = self._chip_pickup_sprite.get_width()
-        sprite_h = self._chip_pickup_sprite.get_height()
+        sprite_w = self._coin_pickup_sprite.get_width()
+        sprite_h = self._coin_pickup_sprite.get_height()
         center_x = enemy.x + enemy.w / 2.0
         center_y = enemy.y + enemy.h / 2.0
 
@@ -504,17 +667,17 @@ class Game:
             speed = random.uniform(70.0, 130.0)
             jitter_x = math.cos(angle) * 4.0
             jitter_y = math.sin(angle) * 4.0
-            pickup = MicrochipPickup(
+            pickup = Pickup(
                 center_x - sprite_w / 2.0 + jitter_x,
                 center_y - sprite_h / 2.0 + jitter_y,
                 value,
-                self._chip_pickup_sprite,
+                self._coin_pickup_sprite,
                 angle=angle,
                 speed=speed,
             )
             room.pickups.append(pickup)
 
-    def _chip_count_for_reward(self, total_value: int) -> tuple[int, int]:
+    def _coin_count_for_reward(self, total_value: int) -> tuple[int, int]:
         if total_value <= 5:
             return (1, 2)
         if total_value <= 9:
@@ -530,7 +693,7 @@ class Game:
 
         player_rect = self.player.rect()
         collected_total = 0
-        survivors: list[MicrochipPickup] = []
+        survivors: list[Pickup] = []
         for pickup in pickups:
             pickup.update(dt, room)
             if pickup.collected:
@@ -623,6 +786,7 @@ class Game:
                 enemy.y = player_rect.top - enemy.h
 
     def _handle_player_death(self, room) -> None:
+        log_player.warning("Jugador murió — lives=%s", getattr(self.player, "lives", "?"))
         can_continue = False
         if hasattr(self.player, "lose_life"):
             try:
@@ -673,7 +837,7 @@ class Game:
         try:
             self.stats_manager.record_death()
         except Exception as exc:  # pragma: no cover - registro best effort
-            print(f"[WARN] No se pudo guardar muerte: {exc}", file=sys.stderr)
+            log_game.warning(f"No se pudo guardar muerte: {exc}")
 
     def _collect_run_summary(self) -> dict[str, int]:
         rooms_explored = 0
@@ -743,6 +907,8 @@ class Game:
         self.enemy_projectiles.clear()
 
         new_room = self.dungeon.current_room
+        depth = self.dungeon.depth_map.get((self.dungeon.i, self.dungeon.j), -1)
+        log_room.room_enter((self.dungeon.i, self.dungeon.j), depth)
         self._spawn_room_enemies(new_room)
         self._update_room_lock(new_room)
 
@@ -791,6 +957,9 @@ class Game:
         self.shop.draw(self.world)
 
     def _draw_debug_door_triggers(self, room) -> None:
+        # Solo dibuja los triggers si el flag de debug está activo
+        if not (self.debug_draw_doors or self._debug_mode):
+            return
         for rect in room._door_trigger_rects().values():
             pygame.draw.rect(self.world, (0, 255, 0), rect, 1)
 
@@ -806,7 +975,7 @@ class Game:
         weapon_rect = self._draw_weapon_hud(inventory_rect)
 
         gold_amount = getattr(self.player, "gold", 0)
-        microchip_rect = self._draw_microchip_counter(inventory_rect, weapon_rect, gold_amount)
+        microchip_rect = self._draw_coin_counter(inventory_rect, weapon_rect, gold_amount)
 
         seed_text = self.ui_font.render(f"Seed: {self.current_seed}", True, (230, 230, 230))
 
@@ -850,34 +1019,37 @@ class Game:
         cursor_rect = self._cursor_surface.get_rect(center=(mx, my))
         self.screen.blit(self._cursor_surface, cursor_rect.topleft)
 
+        # Consola de debug: se dibuja encima de todo, incluyendo el cursor
+        self.debug_console.draw(self.screen)
+
         pygame.display.flip()
 
-    def set_microchip_icon_scale(self, scale: float) -> None:
+    def set_coin_icon_scale(self, scale: float) -> None:
         scale = max(0.1, float(scale))
-        if math.isclose(scale, self.microchip_icon_scale, rel_tol=1e-4, abs_tol=1e-4):
+        if math.isclose(scale, self.coin_icon_scale, rel_tol=1e-4, abs_tol=1e-4):
             return
-        self.microchip_icon_scale = scale
-        self._coin_icon = self._scale_microchip_icon(scale)
+        self.coin_icon_scale = scale
+        self._coin_icon = self._scale_coin_icon(scale)
 
-    def set_microchip_icon_offset(
+    def set_coin_icon_offset(
         self, offset: tuple[float, float] | pygame.Vector2
     ) -> None:
         if isinstance(offset, pygame.Vector2):
-            self.microchip_icon_offset.update(offset)
+            self.coin_icon_offset.update(offset)
         else:
             ox, oy = offset
-            self.microchip_icon_offset.update(ox, oy)
+            self.coin_icon_offset.update(ox, oy)
 
-    def set_microchip_value_offset(
+    def set_coin_value_offset(
         self, offset: tuple[float, float] | pygame.Vector2
     ) -> None:
         if isinstance(offset, pygame.Vector2):
-            self.microchip_value_offset.update(offset)
+            self.coin_value_offset.update(offset)
         else:
             ox, oy = offset
-            self.microchip_value_offset.update(ox, oy)
+            self.coin_value_offset.update(ox, oy)
 
-    def _draw_microchip_counter(
+    def _draw_coin_counter(
         self,
         inventory_rect: pygame.Rect,
         weapon_rect: pygame.Rect,
@@ -894,49 +1066,51 @@ class Game:
             anchor_y = inventory_rect.top + int(self.weapon_icon_offset.y)
 
         icon_position = (
-            int(anchor_x + self.microchip_icon_offset.x),
-            int(anchor_y + self.microchip_icon_offset.y),
+            int(anchor_x + self.coin_icon_offset.x),
+            int(anchor_y + self.coin_icon_offset.y),
         )
         icon_rect = icon_surface.get_rect(topleft=icon_position)
         self.screen.blit(icon_surface, icon_rect.topleft)
 
-        value_surface = self.ui_font.render(str(int(amount)), True, self.microchip_value_color)
+        value_surface = self.ui_font.render(str(int(amount)), True, self.coin_value_color)
         value_rect = value_surface.get_rect()
         value_rect.midtop = (
-            icon_rect.centerx + int(self.microchip_value_offset.x),
-            icon_rect.bottom + int(self.microchip_value_offset.y),
+            icon_rect.centerx + int(self.coin_value_offset.x),
+            icon_rect.bottom + int(self.coin_value_offset.y),
         )
         self.screen.blit(value_surface, value_rect.topleft)
 
         return icon_rect.union(value_rect)
 
-    def _scale_microchip_icon(self, scale: float) -> pygame.Surface:
-        source = getattr(self, "_microchip_icon_source", None)
+    def _scale_coin_icon(self, scale: float) -> pygame.Surface:
+        source = getattr(self, "_coin_icon_source", None)
         if source is None:
-            source, _ = self._create_procedural_microchip()
-            self._microchip_icon_source = source
+            source, _ = self._create_procedural_coin()
+            self._coin_icon_source = source
 
         width = max(1, int(source.get_width() * scale))
         height = max(1, int(source.get_height() * scale))
         return pygame.transform.smoothscale(source, (width, height))
 
-    def _create_microchip_sprites(self) -> tuple[pygame.Surface, pygame.Surface]:
-        procedural_icon, pickup_sprite = self._create_procedural_microchip()
-        sprite_path = assets_dir("ui", self.MICROCHIP_SPRITE_NAME)
+    def _create_coin_sprites(self) -> tuple[pygame.Surface, pygame.Surface]:
+        procedural_icon, pickup_sprite = self._create_procedural_coin()
+        sprite_path = assets_dir("ui", self.COIN_SPRITE_NAME)
         sprite = self._load_surface(sprite_path)
         icon_source = sprite if sprite is not None else procedural_icon
         return icon_source, pickup_sprite
 
     def _load_surface(self, path: Path) -> pygame.Surface | None:
         try:
-            return pygame.image.load(path.as_posix()).convert_alpha()
+            surface = pygame.image.load(path.as_posix()).convert_alpha()
+            log_asset.asset_loaded(path.name)
+            return surface
         except FileNotFoundError:
-            print(f"[HUD] Advertencia: no se encontró la imagen '{path}'. Se usará un marcador.")
+            log_asset.asset_missing(str(path))
         except pygame.error as exc:  # pragma: no cover - depende de SDL
-            print(f"[HUD] Error al cargar '{path}': {exc}. Se usará un marcador.")
+            log_asset.asset_error(str(path), exc)
         return None
 
-    def _create_procedural_microchip(self) -> tuple[pygame.Surface, pygame.Surface]:
+    def _create_procedural_coin(self) -> tuple[pygame.Surface, pygame.Surface]:
         base_size = 32
         chip = pygame.Surface((base_size, base_size), pygame.SRCALPHA)
         chip.fill((0, 0, 0, 0))
@@ -989,7 +1163,7 @@ class Game:
             pygame.draw.rect(chip, pin_color, bottom_pin)
             pygame.draw.rect(chip, pin_shadow, bottom_pin, 1)
 
-        pickup = pygame.transform.smoothscale(chip, self.MICROCHIP_PICKUP_SIZE)
+        pickup = pygame.transform.smoothscale(chip, self.COIN_PICKUP_SIZE)
         return chip, pickup
 
     def _load_weapon_icons(self) -> dict[str, pygame.Surface]:
@@ -998,13 +1172,12 @@ class Game:
             path = weapon_sprite_path(weapon_id)
             try:
                 surface = pygame.image.load(path.as_posix()).convert_alpha()
+                log_asset.asset_loaded(path.name)
             except FileNotFoundError:
-                print(
-                    f"[HUD] Advertencia: sprite de arma '{path}' no encontrado. Se usará un marcador.")
+                log_asset.asset_missing(str(path))
                 surface = self._create_weapon_placeholder_icon(weapon_id)
             except pygame.error as exc:  # pragma: no cover - depende de SDL
-                print(
-                    f"[HUD] Error al cargar '{path}': {exc}. Se usará un marcador.")
+                log_asset.asset_error(str(path), exc)
                 surface = self._create_weapon_placeholder_icon(weapon_id)
             icons[weapon_id] = surface
 

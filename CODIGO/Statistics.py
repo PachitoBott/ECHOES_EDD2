@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Sequence
 
-from asset_paths import assets_dir
+from core.asset_paths import assets_dir
 
 
 @dataclass(frozen=True)

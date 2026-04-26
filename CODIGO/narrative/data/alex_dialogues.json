@@ -1,0 +1,98 @@
+{
+  "id": "alex_root",
+  "texto": "Hola... soy Alex. Escucha, sé lo que está pasando. No estás solo/a en esto.",
+  "meta": { "emocion": "neutral", "sprite": "alex_idle", "etapa": 1 },
+  "hijos": [
+    {
+      "id": "resp_que_haces",
+      "texto": "¿Quién eres y por qué estás aquí?",
+      "meta": { "emocion": "jugador" },
+      "hijos": [
+        {
+          "id": "alex_presentacion",
+          "texto": "Soy alguien que pasó por lo mismo. El ciberacoso deja marcas, pero también enseña. Vine a ayudarte.",
+          "meta": { "emocion": "serio", "sprite": "alex_serious" },
+          "hijos": []
+        }
+      ]
+    },
+    {
+      "id": "resp_necesito_ayuda",
+      "texto": "Sí, necesito ayuda. No sé qué hacer.",
+      "meta": { "emocion": "jugador" },
+      "hijos": [
+        {
+          "id": "alex_consejo_1",
+          "texto": "Primero: no respondas a las provocaciones. Cada respuesta los alimenta. Bloquea y reporta.",
+          "meta": { "emocion": "firme", "sprite": "alex_point" },
+          "hijos": [
+            {
+              "id": "resp_como_bloqueo",
+              "texto": "¿Cómo bloqueo?",
+              "meta": { "emocion": "jugador" },
+              "hijos": [
+                {
+                  "id": "alex_explica_bloqueo",
+                  "texto": "Tu arma 'Bloqueo' corta el contacto inmediatamente. Úsala cuando un enemigo se acerque demasiado.",
+                  "meta": {
+                    "emocion": "didactico",
+                    "sprite": "alex_explain",
+                    "efecto": { "tipo": "apoyo", "valor": 5 }
+                  },
+                  "hijos": []
+                }
+              ]
+            },
+            {
+              "id": "resp_y_reportar",
+              "texto": "¿Y reportar?",
+              "meta": { "emocion": "jugador" },
+              "hijos": [
+                {
+                  "id": "alex_explica_reportar",
+                  "texto": "Reportar llama la atención de quienes pueden actuar. No es rendirse, es usar los sistemas disponibles.",
+                  "meta": {
+                    "emocion": "esperanzador",
+                    "sprite": "alex_smile",
+                    "efecto": { "tipo": "apoyo", "valor": 5 }
+                  },
+                  "hijos": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "resp_estoy_bien",
+      "texto": "Estoy bien, puedo solo/a.",
+      "meta": { "emocion": "jugador" },
+      "hijos": [
+        {
+          "id": "alex_respeta",
+          "texto": "Respeto eso. Pero si cambias de opinión, aquí estaré. Nadie debería enfrentar esto sin apoyo.",
+          "meta": { "emocion": "cálido", "sprite": "alex_idle" },
+          "hijos": []
+        }
+      ]
+    },
+    {
+      "id": "resp_evidencia",
+      "texto": "Encontré algo llamado 'Evidencia'. ¿Para qué sirve?",
+      "meta": { "emocion": "jugador", "condicion_clave": "tiene_evidencia" },
+      "hijos": [
+        {
+          "id": "alex_evidencia",
+          "texto": "¡Excelente! La evidencia documentada es poderosa. Capturas de pantalla, fechas, mensajes guardados. La verdad es tu escudo.",
+          "meta": {
+            "emocion": "entusiasta",
+            "sprite": "alex_excited",
+            "efecto": { "tipo": "apoyo", "valor": 15 }
+          },
+          "hijos": []
+        }
+      ]
+    }
+  ]
+}

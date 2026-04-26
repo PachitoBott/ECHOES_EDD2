@@ -21,7 +21,7 @@ from typing import Dict, Iterable, List
 
 import pygame
 
-from asset_paths import assets_dir
+from core.asset_paths import assets_dir
 
 # ---------------------------------------------------------------------------
 # Filesystem helpers

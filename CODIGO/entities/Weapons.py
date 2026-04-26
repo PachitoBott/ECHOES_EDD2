@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Sequence
 
-from Projectile import Projectile
+from core.Projectile import Projectile
 
 
 @dataclass(frozen=True)
@@ -203,16 +203,16 @@ class WeaponFactory:
 
     def __init__(self) -> None:
         self._registry: Dict[str, WeaponSpec] = {
-            "short_rifle": WeaponSpec(
-                weapon_id="short_rifle",
+            "bloqueo": WeaponSpec(
+                weapon_id="bloqueo",
                 cooldown=0.25,
                 spread_deg=10.0,
                 bullet_speed=340.0,
                 magazine_size=10,
                 reload_time=1.1,
             ),
-            "dual_pistols": WeaponSpec(
-                weapon_id="dual_pistols",
+            "reportar": WeaponSpec(
+                weapon_id="reportar",
                 cooldown=0.36,
                 spread_deg=16.0,
                 bullet_speed=320.0,
@@ -220,16 +220,16 @@ class WeaponFactory:
                 magazine_size=12,
                 reload_time=1.25,
             ),
-            "light_rifle": WeaponSpec(
-                weapon_id="light_rifle",
+            "apoyo_amigo": WeaponSpec(
+                weapon_id="apoyo_amigo",
                 cooldown=0.16,
                 spread_deg=4.0,
                 bullet_speed=360.0,
                 magazine_size=14,
                 reload_time=1.4,
             ),
-            "arcane_salvo": WeaponSpec(
-                weapon_id="arcane_salvo",
+            "pausa_digital": WeaponSpec(
+                weapon_id="pausa_digital",
                 cooldown=0.68,
                 spread_deg=32.0,
                 bullet_speed=280.0,
@@ -238,8 +238,8 @@ class WeaponFactory:
                 magazine_size=8,
                 reload_time=1.85,
             ),
-            "pulse_rifle": WeaponSpec(
-                weapon_id="pulse_rifle",
+            "autoestima": WeaponSpec(
+                weapon_id="autoestima",
                 cooldown=0.12,
                 spread_deg=2.5,
                 bullet_speed=390.0,
@@ -254,8 +254,8 @@ class WeaponFactory:
                     }
                 },
             ),
-            "tesla_gloves": WeaponSpec(
-                weapon_id="tesla_gloves",
+            "evidencia": WeaponSpec(
+                weapon_id="evidencia",
                 cooldown=0.24,
                 spread_deg=28.0,
                 bullet_speed=240.0,
@@ -273,8 +273,8 @@ class WeaponFactory:
                     },
                 ),
             ),
-            "ember_carbine": WeaponSpec(
-                weapon_id="ember_carbine",
+            "modo_incognito": WeaponSpec(
+                weapon_id="modo_incognito",
                 cooldown=0.22,
                 spread_deg=8.0,
                 bullet_speed=325.0,

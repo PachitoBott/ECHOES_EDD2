@@ -3,7 +3,8 @@ import math
 from collections import deque
 from typing import Dict, Tuple, Set
 from Config import CFG
-from Room import Room
+from world.Room import Room
+from data_structures.graph import Grafo
 
 Vec = Tuple[int, int]
 DIRS: Dict[str, Vec] = {"N": (0, -1), "S": (0, 1), "E": (1, 0), "W": (-1, 0)}
@@ -39,6 +40,9 @@ class Dungeon:
         self.explored: Set[Tuple[int, int]] = set()
         self.main_path: list[Tuple[int, int]] = []  # <<< NUEVO: orden del camino principal
         self.depth_map: Dict[Tuple[int, int], int] = {}
+        # Grafo académico (Fase 2): representa la red de salas del dungeon.
+        # Se construye en _build_grafo_y_depth_map() tras generar todas las salas.
+        self.grafo: Grafo = Grafo(dirigido=False)
 
 
         # 1) Camino principal
@@ -64,10 +68,10 @@ class Dungeon:
             {"name": "Tónico curativo (+2 HP)", "type": "heal", "amount": 2, "weight": 3},
             {"name": "Viales reparadores (curación total)", "type": "consumable", "id": "heal_full", "weight": 2},
             {"name": "Ración de campaña (+1 HP)", "type": "consumable", "id": "heal_small", "amount": 1, "weight": 4},
-            {"name": "Pistolas dobles", "type": "weapon", "id": "dual_pistols", "weight": 1},
-            {"name": "Rifle ligero", "type": "weapon", "id": "light_rifle", "weight": 1},
-            {"name": "Guantes tesla", "type": "weapon", "id": "tesla_gloves", "weight": 1},
-            {"name": "Carabina incandescente", "type": "weapon", "id": "ember_carbine", "weight": 0.8},
+            {"name": "Pistolas dobles", "type": "weapon", "id": "reportar", "weight": 1},
+            {"name": "Rifle ligero", "type": "weapon", "id": "apoyo_amigo", "weight": 1},
+            {"name": "Guantes tesla", "type": "weapon", "id": "evidencia", "weight": 1},
+            {"name": "Carabina incandescente", "type": "weapon", "id": "modo_incognito", "weight": 0.8},
             {
                 "name": "Fardo del aventurero",
                 "type": "bundle",
@@ -92,8 +96,10 @@ class Dungeon:
         # 3) Definir puertas según vecinos + tallar corredores
         self._link_neighbors_and_carve()
 
-        # 4) Calcular profundidad (distancia en pasos desde el inicio)
-        self._build_depth_map()
+        # 4) Construir el grafo académico y calcular el mapa de profundidades
+        #    El grafo modela cada sala como nodo y cada puerta como arista.
+        #    bfs_con_distancias() reemplaza el BFS manual de _build_depth_map().
+        self._build_grafo_y_depth_map()
 
         # <<< NUEVO: ubicar la tienda cerca del inicio del camino principal
         self._place_shop_room()
@@ -270,24 +276,46 @@ class Dungeon:
             # Corredores visuales
             room.carve_corridors(width_tiles=2, length_tiles=3)
             
-    def _build_depth_map(self) -> None:
-        """BFS desde la sala inicial para asignar una profundidad a cada habitación."""
-        self.depth_map = {}
-        start = self.start
-        if start not in self.rooms:
+    def _build_grafo_y_depth_map(self) -> None:
+        """
+        Construye el grafo académico de salas y calcula el mapa de profundidades.
+
+        Cada sala del dungeon se añade al Grafo como un nodo con metadata
+        (tipo de sala).  Cada puerta entre dos salas adyacentes se añade
+        como una arista de peso 1.0.
+
+        El mapa de profundidades se obtiene directamente llamando a
+        ``grafo.bfs_con_distancias(inicio)``, eliminando así el BFS manual
+        que existía en _build_depth_map().
+        """
+        self.grafo = Grafo(dirigido=False)
+
+        if self.start not in self.rooms:
+            self.depth_map = {}
             return
 
-        queue = deque([(start, 0)])
-        visited: Set[Tuple[int, int]] = {start}
+        # 1) Añadir un nodo por cada sala con su tipo como metadato
+        for pos, room in self.rooms.items():
+            tipo = getattr(room, "type", "normal")
+            es_inicio = (pos == self.start)
+            self.grafo.agregar_nodo(pos, tipo=tipo, inicio=es_inicio)
 
-        while queue:
-            (x, y), depth = queue.popleft()
-            self.depth_map[(x, y)] = depth
+        # 2) Añadir una arista por cada par de salas vecinas conectadas
+        #    Recorremos sólo las cuatro direcciones canónicas para evitar
+        #    agregar la misma arista dos veces (el Grafo lo maneja, pero
+        #    es más claro así).
+        visitadas_aristas: Set[Tuple[Tuple[int,int], Tuple[int,int]]] = set()
+        for (x, y) in self.rooms:
             for dx, dy in DIRS.values():
-                nx, ny = x + dx, y + dy
-                if (nx, ny) in self.rooms and (nx, ny) not in visited:
-                    visited.add((nx, ny))
-                    queue.append(((nx, ny), depth + 1))        
+                vecino = (x + dx, y + dy)
+                if vecino in self.rooms:
+                    par = (min((x, y), vecino), max((x, y), vecino))
+                    if par not in visitadas_aristas:
+                        visitadas_aristas.add(par)
+                        self.grafo.agregar_arista((x, y), vecino, peso=1.0)
+
+        # 3) El mapa de profundidades viene directo del BFS del grafo
+        self.depth_map = self.grafo.bfs_con_distancias(self.start)        
     def _place_shop_room(self) -> None:
         """
         Marca como 'shop' la sala ubicada aproximadamente a mitad del camino principal.

@@ -8,7 +8,7 @@ import pygame
 from Config import CFG
 
 
-class MicrochipPickup:
+class Pickup:
     """Moneda física que puede recoger el jugador."""
 
     def __init__(

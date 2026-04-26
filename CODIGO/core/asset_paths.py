@@ -11,9 +11,14 @@ from pathlib import Path
 
 @lru_cache(maxsize=1)
 def project_root() -> Path:
-    """Return the absolute path to the repository root."""
+    """
+    Retorna la ruta absoluta a la raíz del repositorio.
 
-    return Path(__file__).resolve().parent.parent
+    La jerarquía es:
+        <repo_root>/CODIGO/core/asset_paths.py
+                     ↑ parent ↑ parent ↑ parent = repo_root
+    """
+    return Path(__file__).resolve().parent.parent.parent
 
 
 @lru_cache(maxsize=None)
@@ -40,13 +45,13 @@ def assets_dir(*extra: str | Path) -> Path:
 # ``assets/weapons``.  Mantén esta lista sincronizada con las armas
 # registradas en ``Weapons.WeaponFactory``.
 WEAPON_SPRITE_FILENAMES: dict[str, str] = {
-    "short_rifle": "short_rifle.png",
-    "dual_pistols": "dual_pistols.png",
-    "light_rifle": "light_rifle.png",
-    "arcane_salvo": "arcane_salvo.png",
-    "pulse_rifle": "pulse_rifle.png",
-    "tesla_gloves": "tesla_gloves.png",
-    "ember_carbine": "ember_carbine.png",
+    "bloqueo": "bloqueo.png",
+    "reportar": "reportar.png",
+    "apoyo_amigo": "apoyo_amigo.png",
+    "pausa_digital": "pausa_digital.png",
+    "autoestima": "autoestima.png",
+    "evidencia": "evidencia.png",
+    "modo_incognito": "modo_incognito.png",
 }
 
 
