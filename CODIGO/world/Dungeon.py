@@ -3,8 +3,8 @@ import math
 from collections import deque
 from typing import Dict, Tuple, Set
 from Config import CFG
-from Room import Room
-from Bosses import BOSS_BLUEPRINTS
+from world.Room import Room
+from data_structures.graph import Grafo
 
 Vec = Tuple[int, int]
 DIRS: Dict[str, Vec] = {"N": (0, -1), "S": (0, 1), "E": (1, 0), "W": (-1, 0)}
@@ -25,10 +25,7 @@ class Dungeon:
                  branch_chance: float = 0.45,
                  branch_min: int = 2,
                  branch_max: int = 4,
-                 seed: int | None = None,
-                 corrupted_room_chance: float = 0.08,
-                 corrupted_bonus_mode: str = "upgrade",
-                 corrupted_chip_bonus: float = 0.5) -> None:
+                 seed: int | None = None) -> None:
         if seed is not None:
             random.seed(seed)
         if seed is None:
@@ -43,11 +40,9 @@ class Dungeon:
         self.explored: Set[Tuple[int, int]] = set()
         self.main_path: list[Tuple[int, int]] = []  # <<< NUEVO: orden del camino principal
         self.depth_map: Dict[Tuple[int, int], int] = {}
-
-        # Salas corruptas (glitch)
-        self.corrupted_room_chance = max(0.0, min(1.0, float(corrupted_room_chance)))
-        self.corrupted_bonus_mode = corrupted_bonus_mode
-        self.corrupted_chip_bonus = max(0.0, float(corrupted_chip_bonus))
+        # Grafo académico (Fase 2): representa la red de salas del dungeon.
+        # Se construye en _build_grafo_y_depth_map() tras generar todas las salas.
+        self.grafo: Grafo = Grafo(dirigido=False)
 
 
         # 1) Camino principal
@@ -62,18 +57,21 @@ class Dungeon:
             {"name": "Bolsa de oro (+40)", "type": "gold", "amount": 40, "weight": 6},
             {"name": "Saco pesado de oro (+65)", "type": "gold", "amount": 65, "weight": 4},
             {"name": "Lingote antiguo (+120)", "type": "gold", "amount": 120, "weight": 2},
+            {"name": "Vida extra (+1)", "type": "upgrade", "id": "hp_up", "weight": 5},
+            {"name": "Blindaje reforzado (+1 golpe)", "type": "upgrade", "id": "armor_up", "weight": 3},
             {"name": "Talismán de recarga (-10%)", "type": "upgrade", "id": "cdr_charm", "weight": 4},
             {"name": "Aumento de velocidad (+5%)", "type": "upgrade", "id": "spd_up", "weight": 4},
             {"name": "Manual de puntería (-12% cd)", "type": "upgrade", "id": "cdr_core", "weight": 2},
             {"name": "Botas relámpago (+10% sprint)", "type": "upgrade", "id": "sprint_core", "weight": 3},
             {"name": "Condensador de fase (-15% dash)", "type": "upgrade", "id": "dash_core", "weight": 2},
             {"name": "Impulso cinético (+duración dash)", "type": "upgrade", "id": "dash_drive", "weight": 2},
-            {"name": "Batería verde completa", "type": "consumable", "id": "heal_battery_full", "weight": 1.5},
+            {"name": "Tónico curativo (+2 HP)", "type": "heal", "amount": 2, "weight": 3},
+            {"name": "Viales reparadores (curación total)", "type": "consumable", "id": "heal_full", "weight": 2},
             {"name": "Ración de campaña (+1 HP)", "type": "consumable", "id": "heal_small", "amount": 1, "weight": 4},
-            {"name": "Pistolas dobles", "type": "weapon", "id": "dual_pistols", "weight": 1},
-            {"name": "Rifle ligero", "type": "weapon", "id": "light_rifle", "weight": 1},
-            {"name": "Guantes tesla", "type": "weapon", "id": "tesla_gloves", "weight": 1},
-            {"name": "Carabina incandescente", "type": "weapon", "id": "ember_carbine", "weight": 0.8},
+            {"name": "Pistolas dobles", "type": "weapon", "id": "reportar", "weight": 1},
+            {"name": "Rifle ligero", "type": "weapon", "id": "apoyo_amigo", "weight": 1},
+            {"name": "Guantes tesla", "type": "weapon", "id": "evidencia", "weight": 1},
+            {"name": "Carabina incandescente", "type": "weapon", "id": "modo_incognito", "weight": 0.8},
             {
                 "name": "Fardo del aventurero",
                 "type": "bundle",
@@ -89,28 +87,19 @@ class Dungeon:
                 "type": "bundle",
                 "contents": [
                     {"type": "gold", "amount": 70},
-                    {"type": "consumable", "id": "heal_small", "amount": 2},
+                    {"type": "consumable", "id": "heal_medium", "amount": 2},
                 ],
                 "weight": 2,
             },
         ]
 
-        self._boss_loot_table: list[dict] = list(self._treasure_loot_table) + [
-            {"name": "Arca blindada (+120)", "type": "gold", "amount": 120, "weight": 5},
-            {"name": "Catalizador épico", "type": "upgrade", "id": "cdr_core", "weight": 2},
-            {"name": "Prototipo Centinela", "type": "weapon", "id": "ember_carbine", "weight": 1.5},
-            {"name": "Carga experimental", "type": "bundle", "contents": [
-                {"type": "gold", "amount": 80},
-                {"type": "upgrade", "id": "spd_up"},
-                {"type": "consumable", "id": "heal_small", "amount": 2},
-            ], "weight": 3},
-        ]
-
         # 3) Definir puertas según vecinos + tallar corredores
         self._link_neighbors_and_carve()
 
-        # 4) Calcular profundidad (distancia en pasos desde el inicio)
-        self._build_depth_map()
+        # 4) Construir el grafo académico y calcular el mapa de profundidades
+        #    El grafo modela cada sala como nodo y cada puerta como arista.
+        #    bfs_con_distancias() reemplaza el BFS manual de _build_depth_map().
+        self._build_grafo_y_depth_map()
 
         # <<< NUEVO: ubicar la tienda cerca del inicio del camino principal
         self._place_shop_room()
@@ -118,19 +107,8 @@ class Dungeon:
         # <<< NUEVO: ubicar salas de tesoro en el recorrido
         self._place_treasure_rooms()
 
-        # Sala de boss dedicada
-        self._place_boss_room()
-
-        # Cofre rúnico especial
-        self._place_rune_chest_room()
-
         # Obstáculos en salas hostiles
         self._populate_hostile_obstacles()
-
-        # Marca la sala inicial para decoraciones especiales (p.ej. grafitis).
-        start_room = self.rooms.get(self.start)
-        if start_room is not None:
-            setattr(start_room, "is_start_room", True)
 
 
         # marcar inicial como explorado
@@ -146,11 +124,6 @@ class Dungeon:
         di, dj = DIRS[direction]
         ni, nj = self.i + di, self.j + dj
         return (ni, nj) in self.rooms
-
-    def room_in_direction(self, direction: str):
-        di, dj = DIRS[direction]
-        pos = (self.i + di, self.j + dj)
-        return self.rooms.get(pos)
 
     def move(self, direction: str) -> None:
         di, dj = DIRS[direction]
@@ -205,12 +178,6 @@ class Dungeon:
             rh = random.choice(height_choices)
 
             r.build_centered(rw, rh)
-
-            # Probabilidad de sala corrupta (excepto inicio)
-            if (x, y) != self.start and random.random() < self.corrupted_room_chance:
-                r.is_corrupted = True
-                r.corrupted_loot_mode = getattr(self, "corrupted_bonus_mode", "upgrade")
-                r.corrupted_chip_bonus = getattr(self, "corrupted_chip_bonus", 0.5)
 
             # Puertas se setean luego cuando enlaces vecinos (si ya lo haces)
             self.rooms[(x, y)] = r
@@ -307,26 +274,48 @@ class Dungeon:
             room.doors["W"] = (x-1, y) in self.rooms
             room.doors["E"] = (x+1, y) in self.rooms
             # Corredores visuales
-            room.carve_corridors(width_tiles=2, length_tiles=3, side_height_tiles=3)
+            room.carve_corridors(width_tiles=2, length_tiles=3)
             
-    def _build_depth_map(self) -> None:
-        """BFS desde la sala inicial para asignar una profundidad a cada habitación."""
-        self.depth_map = {}
-        start = self.start
-        if start not in self.rooms:
+    def _build_grafo_y_depth_map(self) -> None:
+        """
+        Construye el grafo académico de salas y calcula el mapa de profundidades.
+
+        Cada sala del dungeon se añade al Grafo como un nodo con metadata
+        (tipo de sala).  Cada puerta entre dos salas adyacentes se añade
+        como una arista de peso 1.0.
+
+        El mapa de profundidades se obtiene directamente llamando a
+        ``grafo.bfs_con_distancias(inicio)``, eliminando así el BFS manual
+        que existía en _build_depth_map().
+        """
+        self.grafo = Grafo(dirigido=False)
+
+        if self.start not in self.rooms:
+            self.depth_map = {}
             return
 
-        queue = deque([(start, 0)])
-        visited: Set[Tuple[int, int]] = {start}
+        # 1) Añadir un nodo por cada sala con su tipo como metadato
+        for pos, room in self.rooms.items():
+            tipo = getattr(room, "type", "normal")
+            es_inicio = (pos == self.start)
+            self.grafo.agregar_nodo(pos, tipo=tipo, inicio=es_inicio)
 
-        while queue:
-            (x, y), depth = queue.popleft()
-            self.depth_map[(x, y)] = depth
+        # 2) Añadir una arista por cada par de salas vecinas conectadas
+        #    Recorremos sólo las cuatro direcciones canónicas para evitar
+        #    agregar la misma arista dos veces (el Grafo lo maneja, pero
+        #    es más claro así).
+        visitadas_aristas: Set[Tuple[Tuple[int,int], Tuple[int,int]]] = set()
+        for (x, y) in self.rooms:
             for dx, dy in DIRS.values():
-                nx, ny = x + dx, y + dy
-                if (nx, ny) in self.rooms and (nx, ny) not in visited:
-                    visited.add((nx, ny))
-                    queue.append(((nx, ny), depth + 1))        
+                vecino = (x + dx, y + dy)
+                if vecino in self.rooms:
+                    par = (min((x, y), vecino), max((x, y), vecino))
+                    if par not in visitadas_aristas:
+                        visitadas_aristas.add(par)
+                        self.grafo.agregar_arista((x, y), vecino, peso=1.0)
+
+        # 3) El mapa de profundidades viene directo del BFS del grafo
+        self.depth_map = self.grafo.bfs_con_distancias(self.start)        
     def _place_shop_room(self) -> None:
         """
         Marca como 'shop' la sala ubicada aproximadamente a mitad del camino principal.
@@ -365,9 +354,8 @@ class Dungeon:
         # Marca de tipo (no rompe si Room no define 'type')
         setattr(room, "type", "shop")     # <<< etiqueta directa en Room
         self.shop_pos = (sx, sy)          # <<< guarda la coordenada para otras clases
-        room.is_corrupted = False
 
-    def _place_treasure_rooms(self, max_rooms: int = 2, base_chance: float = 0.12) -> None:
+    def _place_treasure_rooms(self, max_rooms: int = 1, base_chance: float = 0.12) -> None:
         """Selecciona algunas salas y las convierte en cuartos del tesoro."""
         if not self.rooms:
             return
@@ -387,27 +375,19 @@ class Dungeon:
         main_candidates.sort(key=depth_of)
         branch_candidates.sort(key=depth_of)
 
-        candidates = [pos for pos in main_candidates + branch_candidates if depth_of(pos) > 0]
-        if not candidates:
-            return
-
-        max_pickable = min(max_rooms, 2)
-        target_rooms = random.randint(1, min(max_pickable, len(candidates)))
-
         chosen: list[tuple[int, int]] = []
+
         rng = random.random
-        for pos in candidates:
-            if len(chosen) >= target_rooms:
+        for pos in main_candidates + branch_candidates:
+            if len(chosen) >= max_rooms:
                 break
             depth = depth_of(pos)
+            if depth <= 0:
+                continue
             chance = base_chance + 0.04 * min(depth, 5)
-            if rng() <= min(0.55, chance):
-                chosen.append(pos)
-
-        if len(chosen) < target_rooms:
-            remaining = [pos for pos in candidates if pos not in chosen]
-            remaining.sort(key=depth_of, reverse=True)
-            chosen.extend(remaining[: target_rooms - len(chosen)])
+            if rng() > min(0.55, chance):
+                continue
+            chosen.append(pos)
 
         self.treasure_rooms: set[tuple[int, int]] = set()
         for pos in chosen:
@@ -423,7 +403,7 @@ class Dungeon:
             return
 
         salt = 0xC0BB1E
-        safe_types = {"shop", "boss"}
+        safe_types = {"shop", "treasure"}
 
         for pos, room in sorted(self.rooms.items()):
             if pos == self.start:
@@ -466,86 +446,6 @@ class Dungeon:
             new_room.on_enter(player, cfg, ShopkeeperCls=ShopkeeperCls)
 
         return True
-
-    def _place_boss_room(self) -> None:
-        if not self.rooms:
-            return
-        forbidden: set[tuple[int, int]] = {self.start}
-        if hasattr(self, "shop_pos"):
-            forbidden.add(self.shop_pos)
-        forbidden.update(getattr(self, "treasure_rooms", set()))
-        farthest: tuple[int, int] | None = None
-        farthest_depth = -1
-        for pos, room in self.rooms.items():
-            if pos in forbidden:
-                continue
-            depth = self.depth_map.get(pos, 0)
-            if depth > farthest_depth:
-                farthest_depth = depth
-                farthest = pos
-        if farthest is None:
-            return
-        room = self.rooms.get(farthest)
-        if room is None:
-            return
-        rng = random.Random(self.seed ^ 0xB055B055)
-        if BOSS_BLUEPRINTS:
-            room.boss_blueprint = rng.choice(BOSS_BLUEPRINTS)
-        if hasattr(room, "build_centered"):
-            room.build_centered(CFG.BOSS_ROOM_W, CFG.BOSS_ROOM_H)
-        if hasattr(room, "carve_corridors"):
-            room.carve_corridors(width_tiles=2, length_tiles=3, side_height_tiles=3)
-        self.boss_pos = farthest
-        setattr(room, "type", "boss")
-        room.is_corrupted = False
-        room.no_spawn = True
-        room.safe = False
-        room.locked = False
-        if hasattr(room, "clear_obstacles"):
-            room.clear_obstacles()
-
-    def _place_rune_chest_room(self) -> None:
-        if not self.rooms:
-            return
-        forbidden: set[tuple[int, int]] = {self.start}
-        forbidden.update(getattr(self, "treasure_rooms", set()))
-        if hasattr(self, "shop_pos"):
-            forbidden.add(getattr(self, "shop_pos"))
-        boss_pos = getattr(self, "boss_pos", None)
-        if boss_pos:
-            forbidden.add(boss_pos)
-
-        max_depth = max(self.depth_map.values()) if self.depth_map else 0
-        target_depth = max_depth - 1 if max_depth > 2 else max_depth
-
-        def depth_of(pos: tuple[int, int]) -> int:
-            return self.depth_map.get(pos, 0)
-
-        candidates: list[tuple[int, int]] = []
-        for pos, room in self.rooms.items():
-            if pos in forbidden:
-                continue
-            if getattr(room, "type", "normal") != "normal":
-                continue
-            depth = depth_of(pos)
-            if depth < max(2, target_depth):
-                continue
-            candidates.append(pos)
-
-        if not candidates:
-            return
-        candidates.sort(key=depth_of, reverse=True)
-
-        chosen_pos = candidates[0]
-        room = self.rooms.get(chosen_pos)
-        if room is None:
-            return
-
-        prefer_bottom = bool(getattr(room, "no_spawn", False) or getattr(room, "safe", False))
-        loot = [{"name": "MotherBoard Boss", "type": "key_item", "id": "motherboard_boss", "weight": 1}]
-        if hasattr(room, "setup_rune_chest"):
-            room.setup_rune_chest(loot, prefer_bottom=prefer_bottom)
-        self.rune_chest_pos = chosen_pos
 
     def enter_initial_room(self, player, cfg, ShopkeeperCls=None):
         """Llama on_enter para la sala inicial (start)."""

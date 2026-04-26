@@ -9,7 +9,7 @@ from Config import CFG
 from rewards import apply_reward_entry
 
 
-class MicrochipPickup:
+class Pickup:
     """Moneda física que puede recoger el jugador."""
 
     def __init__(

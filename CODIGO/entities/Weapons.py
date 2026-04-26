@@ -4,12 +4,9 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Dict, Iterable, List, Sequence
 
-import pygame
-
-from Projectile import Projectile
+from core.Projectile import Projectile
 
 
 @dataclass(frozen=True)
@@ -18,7 +15,7 @@ class WeaponSpec:
     cooldown: float
     spread_deg: float
     bullet_speed: float
-    projectile_radius: int = 4
+    projectile_radius: int = 3
     offsets: Sequence[float] = field(default_factory=lambda: (0.0,))
     forward_spawn: float = 8.0
     magazine_size: int = 10
@@ -40,12 +37,6 @@ class Weapon:
         self._shots_since_reload = 0
         self._time_since_last_shot = 999.0
         self._continuous_fire_time = 0.0
-        
-        # Cargar sonidos para el arma
-        self._gun_sound = None
-        self._reload_sound = None
-        self._load_gun_sound()
-        self._load_reload_sound()
 
     # ------------------------- Temporización -------------------------
     def tick(self, dt: float) -> None:
@@ -102,11 +93,6 @@ class Weapon:
         self._reload_timer = self.spec.reload_time
         self._shots_in_mag = 0
         self._shots_since_reload = 0
-        
-        # Reproducir sonido de recarga
-        if self._reload_sound:
-            self._reload_sound.play()
-        
         return True
 
     # ------------------------ Generación balas -----------------------
@@ -158,16 +144,8 @@ class Weapon:
         if self._shots_in_mag <= 0:
             self._shots_in_mag = 0
             self._reload_timer = self.spec.reload_time
-            # Reproducir sonido de recarga automática
-            if self._reload_sound:
-                self._reload_sound.play()
         self._shots_since_reload += 1
         self._time_since_last_shot = 0.0
-        
-        # Reproducir sonido de disparo
-        if self._gun_sound:
-            self._gun_sound.play()
-        
         return bullets
 
     # ----------------------- Ajustes dinámicos -----------------------
@@ -176,66 +154,6 @@ class Weapon:
         self._cooldown_scale = max(0.05, cooldown_scale)
 
     # -------------------------- Especiales --------------------------
-    def _load_gun_sound(self) -> None:
-        """Carga el sonido de disparo del arma basado en su weapon_id."""
-        try:
-            # Mapeo de armas a archivos de sonido específicos
-            sound_file_mapping = {
-                "arcane_salvo": "shotgun_sfx.mp3",
-            }
-            
-            # Volúmenes personalizados por arma (default: 0.1)
-            volume_settings = {
-                "light_rifle": 0.05,
-                "short_rifle": 0.20,
-            }
-            
-            # Determinar archivo de sonido a usar
-            sound_filename = sound_file_mapping.get(
-                self.spec.weapon_id,
-                f"{self.spec.weapon_id}_sfx.mp3"
-            )
-            
-            audio_path = Path("assets/audio") / sound_filename
-            
-            if not audio_path.exists():
-                # Intentar ruta relativa desde CODIGO
-                audio_path = Path(__file__).parent / "assets" / "audio" / sound_filename
-            
-            if audio_path.exists():
-                self._gun_sound = pygame.mixer.Sound(audio_path.as_posix())
-                # Aplicar volumen personalizado o default (10%)
-                volume = volume_settings.get(self.spec.weapon_id, 0.1)
-                self._gun_sound.set_volume(volume)
-            else:
-                # Fallback a sonido por defecto si no existe sonido específico
-                fallback_path = Path(__file__).parent / "assets" / "audio" / "default_gun_sfx.mp3"
-                if fallback_path.exists():
-                    self._gun_sound = pygame.mixer.Sound(fallback_path.as_posix())
-                    volume = volume_settings.get(self.spec.weapon_id, 0.1)
-                    self._gun_sound.set_volume(volume)
-                else:
-                    self._gun_sound = None
-        except (pygame.error, FileNotFoundError):
-            self._gun_sound = None
-    
-    def _load_reload_sound(self) -> None:
-        """Carga el sonido de recarga universal para todas las armas."""
-        try:
-            audio_path = Path("assets/audio/reload_sfx.mp3")
-            
-            if not audio_path.exists():
-                # Intentar ruta relativa desde CODIGO
-                audio_path = Path(__file__).parent / "assets" / "audio" / "reload_sfx.mp3"
-            
-            if audio_path.exists():
-                self._reload_sound = pygame.mixer.Sound(audio_path.as_posix())
-                self._reload_sound.set_volume(0.15)  # 15% del volumen
-            else:
-                self._reload_sound = None
-        except (pygame.error, FileNotFoundError):
-            self._reload_sound = None
-    
     def _effective_spread_deg(self) -> float:
         base = self.spec.spread_deg
         recoil_cfg = self.spec.special.get("recoil_ramp")
@@ -285,44 +203,44 @@ class WeaponFactory:
 
     def __init__(self) -> None:
         self._registry: Dict[str, WeaponSpec] = {
-            "short_rifle": WeaponSpec(
-                weapon_id="short_rifle",
+            "bloqueo": WeaponSpec(
+                weapon_id="bloqueo",
                 cooldown=0.25,
                 spread_deg=10.0,
                 bullet_speed=340.0,
                 magazine_size=10,
                 reload_time=1.1,
             ),
-            "dual_pistols": WeaponSpec(
-                weapon_id="dual_pistols",
+            "reportar": WeaponSpec(
+                weapon_id="reportar",
                 cooldown=0.36,
-                spread_deg=18.0,
+                spread_deg=16.0,
                 bullet_speed=320.0,
                 offsets=(-6.0, 6.0),
                 magazine_size=12,
                 reload_time=1.25,
             ),
-            "light_rifle": WeaponSpec(
-                weapon_id="light_rifle",
-                cooldown=0.18,
+            "apoyo_amigo": WeaponSpec(
+                weapon_id="apoyo_amigo",
+                cooldown=0.16,
                 spread_deg=4.0,
                 bullet_speed=360.0,
                 magazine_size=14,
                 reload_time=1.4,
             ),
-            "arcane_salvo": WeaponSpec(
-                weapon_id="arcane_salvo",
+            "pausa_digital": WeaponSpec(
+                weapon_id="pausa_digital",
                 cooldown=0.68,
-                spread_deg=36.0,
+                spread_deg=32.0,
                 bullet_speed=280.0,
                 offsets=(-12.0, -6.0, 0.0, 6.0, 12.0),
-                projectile_radius=5,
+                projectile_radius=4,
                 magazine_size=8,
                 reload_time=1.85,
             ),
-            "pulse_rifle": WeaponSpec(
-                weapon_id="pulse_rifle",
-                cooldown=0.13,
+            "autoestima": WeaponSpec(
+                weapon_id="autoestima",
+                cooldown=0.12,
                 spread_deg=2.5,
                 bullet_speed=390.0,
                 magazine_size=16,
@@ -330,18 +248,18 @@ class WeaponFactory:
                 special={
                     "heat": {
                         "threshold": 2.0,
-                        "penalty": 0.12,
+                        "penalty": 0.1,
                         "grace": 0.25,
                         "decay": 3.5,
                     }
                 },
             ),
-            "tesla_gloves": WeaponSpec(
-                weapon_id="tesla_gloves",
+            "evidencia": WeaponSpec(
+                weapon_id="evidencia",
                 cooldown=0.24,
                 spread_deg=28.0,
                 bullet_speed=240.0,
-                projectile_radius=6,
+                projectile_radius=5,
                 offsets=(-4.0, 4.0),
                 forward_spawn=4.0,
                 magazine_size=9,
@@ -351,23 +269,23 @@ class WeaponFactory:
                     {
                         "type": "shock",
                         "slow": 0.2,
-                        "duration": 0.8,
+                        "duration": 0.6,
                     },
                 ),
             ),
-            "ember_carbine": WeaponSpec(
-                weapon_id="ember_carbine",
-                cooldown=0.24,
+            "modo_incognito": WeaponSpec(
+                weapon_id="modo_incognito",
+                cooldown=0.22,
                 spread_deg=8.0,
                 bullet_speed=325.0,
                 offsets=(0.0,),
                 forward_spawn=9.0,
-                magazine_size=16,
+                magazine_size=18,
                 reload_time=2.1,
                 special={
                     "recoil_ramp": {
                         "shots": 6,
-                        "extra": 3.0,
+                        "extra": 2.0,
                     }
                 },
             ),

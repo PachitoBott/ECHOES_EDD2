@@ -5,7 +5,7 @@ from typing import Tuple
 
 import pygame
 
-from asset_paths import assets_dir as get_assets_dir
+from core.asset_paths import assets_dir as get_assets_dir
 
 
 class HudPanels:

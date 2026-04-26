@@ -14,8 +14,8 @@ class StartMenuButton:
 class StartMenuConfig:
     """Opciones editables para personalizar el menú de inicio."""
 
-    title: str = "Roguelike"
-    subtitle: Optional[str] = "Genera tu aventura"
+    title: str = "Echoes"
+    subtitle: Optional[str] = "¿Puedes sobrevivir a la tormenta digital?"
     background_image: Optional[str] = None
     logo_image: Optional[str] = None
     buttons: Tuple[StartMenuButton, ...] = (

@@ -4,10 +4,10 @@ import random
 import pygame
 from pathlib import Path
 
-from Entity import Entity
+from core.Entity import Entity
 from Config import CFG
-from Projectile import Projectile
-from enemy_sprites import (
+from core.Projectile import Projectile
+from entities.enemy_sprites import (
     EnemyAnimator,
     load_enemy_animation_set,
     resolve_enemy_variant,
