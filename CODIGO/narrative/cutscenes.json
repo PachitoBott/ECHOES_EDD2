@@ -68,25 +68,5 @@
         "duration": null
       }
     ]
-  },
-  "ending_b": {
-    "id": "ending_b",
-    "paneles": [
-      {
-        "image": "ending_b_01.png",
-        "text": "No diste el golpe final. Lo escuchaste.",
-        "duration": null
-      },
-      {
-        "image": "ending_b_02.png",
-        "text": "No lo perdonaste. Pero entendiste.",
-        "duration": null
-      },
-      {
-        "image": "ending_b_03.png",
-        "text": "El acoso es un ciclo. Romperlo costó más, pero ya no se repite.",
-        "duration": null
-      }
-    ]
   }
 }
