@@ -22,6 +22,7 @@ from ui.PauseMenu import PauseMenu, PauseMenuButton
 from ui.GameOverScreen import GameOverScreen
 from Statistics import StatisticsManager
 from entities.Pickup import Pickup
+from entities.EmpathyFragment import EmpathyFragment
 from core.asset_paths import WEAPON_SPRITE_FILENAMES, assets_dir, weapon_sprite_path
 
 # --- Narrativa (Fase 4-5) ---
@@ -66,6 +67,10 @@ class Game:
         # Usa los métodos set_coin_icon_scale/offset/value_offset para ajustar
         # manualmente la presentación del icono dentro del HUD.
         self._coin_icon = self._scale_coin_icon(self.coin_icon_scale)
+
+        # Sprite para fragmentos de empatía
+        self._empathy_fragment_sprite = self._create_procedural_empathy_fragment()
+
         self._battery_states = self._load_battery_states()
         self._life_battery_highlight = pygame.Color(110, 200, 255)
         # Ajusta este offset para reposicionar las vidas en el HUD.
@@ -140,6 +145,7 @@ class Game:
         # Control de estado narrativo
         self._current_zone: int = 1
         self._intro_played: bool = False
+        self.empathy_fragments: int = 0  # Contador de fragmentos de empatía (afecta ending)
 
         # ---------- Herramientas de desarrollo ----------
         # Consola de debug (F1): siempre creada, solo visible en debug_mode
@@ -325,6 +331,7 @@ class Game:
         # Trigger narrativa: marcar para reproducir intro en el primer frame
         self._intro_played = False
         self._current_zone = 1
+        self.empathy_fragments = 0
 
     def _reset_runtime_state(self) -> None:
         self.projectiles.clear()
@@ -726,6 +733,24 @@ class Game:
             )
             room.pickups.append(pickup)
 
+        # --- Spawn fragmento de empatía con ~15% chance ---
+        if random.random() < 0.15:
+            angle = random.uniform(0.0, math.tau)
+            speed = random.uniform(70.0, 130.0)
+            jitter_x = math.cos(angle) * 4.0
+            jitter_y = math.sin(angle) * 4.0
+            fragment_sprite = self._empathy_fragment_sprite
+            fragment_w = fragment_sprite.get_width()
+            fragment_h = fragment_sprite.get_height()
+            fragment = EmpathyFragment(
+                center_x - fragment_w / 2.0 + jitter_x,
+                center_y - fragment_h / 2.0 + jitter_y,
+                fragment_sprite,
+                angle=angle,
+                speed=speed,
+            )
+            room.pickups.append(fragment)
+
     def _coin_count_for_reward(self, total_value: int) -> tuple[int, int]:
         if total_value <= 5:
             return (1, 2)
@@ -742,19 +767,26 @@ class Game:
 
         player_rect = self.player.rect()
         collected_total = 0
-        survivors: list[Pickup] = []
+        empathy_collected = 0
+        survivors: list = []
         for pickup in pickups:
             pickup.update(dt, room)
             if pickup.collected:
                 continue
             if player_rect.colliderect(pickup.rect()):
                 pickup.collect()
-                collected_total += pickup.value
+                # Manejar monedas normales vs fragmentos de empatía
+                if isinstance(pickup, EmpathyFragment):
+                    empathy_collected += 1
+                else:
+                    collected_total += pickup.value
             else:
                 survivors.append(pickup)
         room.pickups = survivors
         if collected_total:
             self._add_player_gold(collected_total)
+        if empathy_collected:
+            self.empathy_fragments += empathy_collected
 
     def _add_player_gold(self, amount: int) -> None:
         amount = int(amount)
@@ -1295,6 +1327,42 @@ class Game:
 
         pickup = pygame.transform.smoothscale(chip, self.COIN_PICKUP_SIZE)
         return chip, pickup
+
+    def _create_procedural_empathy_fragment(self) -> pygame.Surface:
+        """
+        Crea un sprite procedural para fragmentos de empatía.
+
+        El fragmento tiene una apariencia diferente a las monedas:
+        - Color morado/rosa (representa empatía)
+        - Forma más orgánica/fragmentada
+        - Tamaño similar a las monedas
+        """
+        base_size = 12
+        fragment = pygame.Surface((base_size, base_size), pygame.SRCALPHA)
+        fragment.fill((0, 0, 0, 0))
+
+        # Color morado para empatía
+        empathy_color = pygame.Color(200, 100, 180)
+        empathy_dark = pygame.Color(140, 60, 120)
+        empathy_light = pygame.Color(230, 150, 210)
+
+        # Forma orgánica (no rectangular como las monedas)
+        # Dibuja una forma de gota/corazón
+        points = [
+            (base_size // 2, 1),       # Punta superior
+            (base_size - 2, 4),        # Derecha superior
+            (base_size - 1, base_size // 2),  # Derecha media
+            (base_size // 2, base_size - 1),  # Punta inferior
+            (1, base_size // 2),       # Izquierda media
+            (2, 4),                    # Izquierda superior
+        ]
+        pygame.draw.polygon(fragment, empathy_dark, points)
+        pygame.draw.polygon(fragment, empathy_color, [(p[0], p[1]) for p in points[1:]])
+
+        # Highlight
+        pygame.draw.circle(fragment, empathy_light, (base_size // 3, base_size // 3), 1)
+
+        return fragment
 
     def _load_weapon_icons(self) -> dict[str, pygame.Surface]:
         icons: dict[str, pygame.Surface] = {}
