@@ -4,7 +4,7 @@ import random
 
 import pygame
 
-from asset_paths import assets_dir
+from core.asset_paths import assets_dir
 
 
 @dataclass

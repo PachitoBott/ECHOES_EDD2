@@ -25,7 +25,10 @@ class Dungeon:
                  branch_chance: float = 0.45,
                  branch_min: int = 2,
                  branch_max: int = 4,
-                 seed: int | None = None) -> None:
+                 seed: int | None = None,
+                 corrupted_room_chance: float = 0.08,
+                 corrupted_bonus_mode: str = "upgrade",
+                 corrupted_chip_bonus: float = 0.5) -> None:
         if seed is not None:
             random.seed(seed)
         if seed is None:
@@ -43,6 +46,10 @@ class Dungeon:
         # Grafo académico (Fase 2): representa la red de salas del dungeon.
         # Se construye en _build_grafo_y_depth_map() tras generar todas las salas.
         self.grafo: Grafo = Grafo(dirigido=False)
+
+        # Etiquetado de zonas para la narrativa (Fase 5)
+        # zones[pos] = 1, 2 o 3 según la profundidad BFS desde el inicio
+        self.zones: Dict[Tuple[int, int], int] = {}
 
 
         # 1) Camino principal
@@ -101,6 +108,9 @@ class Dungeon:
         #    bfs_con_distancias() reemplaza el BFS manual de _build_depth_map().
         self._build_grafo_y_depth_map()
 
+        # 4.5) Asignar zonas narrativas (Fase 5) según profundidad BFS
+        self._assign_zones()
+
         # <<< NUEVO: ubicar la tienda cerca del inicio del camino principal
         self._place_shop_room()
 
@@ -136,6 +146,12 @@ class Dungeon:
         if pos is None:
             pos = (self.i, self.j)
         return self.depth_map.get(pos, 0)
+
+    def room_zone(self, pos: Tuple[int, int] | None = None) -> int:
+        """Devuelve la zona narrativa (1, 2 o 3) para la sala dada."""
+        if pos is None:
+            pos = (self.i, self.j)
+        return self.zones.get(pos, 1)
 
     def entry_position(self, came_from: str, pw: int, ph: int) -> tuple[float, float]:
         # reutiliza tu lógica actual (Dungeon no necesita cambiarla)
@@ -315,7 +331,44 @@ class Dungeon:
                         self.grafo.agregar_arista((x, y), vecino, peso=1.0)
 
         # 3) El mapa de profundidades viene directo del BFS del grafo
-        self.depth_map = self.grafo.bfs_con_distancias(self.start)        
+        self.depth_map = self.grafo.bfs_con_distancias(self.start)
+
+    def _assign_zones(self) -> None:
+        """
+        Asigna zonas narrativas a cada sala basándose en su profundidad BFS.
+
+        Zona 1: distancia 0-3   (comentarios iniciales)
+        Zona 2: distancia 4-7   (viralización, incluye sala segura de Mara)
+        Zona 3: distancia 8+    (el origen, confrontación)
+
+        Los umbrales se pueden ajustar modificando las tuplas de rango aquí.
+        """
+        zona_ranges = [
+            (1, 0, 3),    # (zona, dist_min, dist_max)
+            (2, 4, 7),
+            (3, 8, float('inf')),
+        ]
+
+        for pos, distancia in self.depth_map.items():
+            zona = 1  # por defecto
+            for z, d_min, d_max in zona_ranges:
+                if d_min <= distancia <= d_max:
+                    zona = z
+                    break
+            self.zones[pos] = zona
+
+        # Log para debugging: contar salas por zona
+        zona_counts = {1: 0, 2: 0, 3: 0}
+        for zona in self.zones.values():
+            zona_counts[zona] += 1
+
+        import sys
+        from dev.logger import log_game
+        log_game.info(
+            f"Zonas asignadas — Zona 1: {zona_counts[1]} salas, "
+            f"Zona 2: {zona_counts[2]} salas, Zona 3: {zona_counts[3]} salas"
+        )
+
     def _place_shop_room(self) -> None:
         """
         Marca como 'shop' la sala ubicada aproximadamente a mitad del camino principal.

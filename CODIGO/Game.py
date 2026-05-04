@@ -24,6 +24,10 @@ from Statistics import StatisticsManager
 from entities.Pickup import Pickup
 from core.asset_paths import WEAPON_SPRITE_FILENAMES, assets_dir, weapon_sprite_path
 
+# --- Narrativa (Fase 4-5) ---
+from narrative.cinematics import CinematicSystem
+from narrative.dialogue_system import DialogueSystem
+
 # --- Herramientas de desarrollo ---
 from dev.logger import log_game, log_asset, log_room, log_player
 from dev.hot_reload import AssetWatcher
@@ -121,6 +125,15 @@ class Game:
         self._stats_pending_reason: str | None = None
         self._run_gold_spent: int = 0
         self._run_kills: int = 0
+
+        # ---------- Narrativa (cinemáticas y diálogos) ----------
+        self.cinematics = CinematicSystem(cfg.SCREEN_W, cfg.SCREEN_H, font_size=22)
+        self.cinematics.cargar_json("narrative/cutscenes.json")
+        self.dialogue = DialogueSystem(cfg.SCREEN_W, cfg.SCREEN_H, font_size=14)
+
+        # Control de estado narrativo
+        self._current_zone: int = 1
+        self._intro_played: bool = False
 
         # ---------- Herramientas de desarrollo ----------
         # Consola de debug (F1): siempre creada, solo visible en debug_mode
@@ -303,6 +316,10 @@ class Game:
 
         self._run_start_time = perf_counter()
 
+        # Trigger narrativa: marcar para reproducir intro en el primer frame
+        self._intro_played = False
+        self._current_zone = 1
+
     def _reset_runtime_state(self) -> None:
         self.projectiles.clear()
         self.enemy_projectiles.clear()
@@ -482,8 +499,20 @@ class Game:
             )
 
     def _update(self, dt: float, events: list) -> None:
+        # --- Cinematicas ---
+        # Si una cinemática está activa, no actualizar el juego
+        if self.cinematics.activo:
+            self.cinematics.tick(dt)
+            return
+
         # Hot-reload: verificar si algún asset cambió en disco
         self.asset_watcher.tick()
+
+        # --- Trigger intro cinemática en primer frame ---
+        if not self._intro_played:
+            self._intro_played = True
+            self.cinematics.reproducir("intro")
+            return
 
         room = self.dungeon.current_room
         self._update_player(dt, room)
@@ -496,6 +525,9 @@ class Game:
         self._update_pickups(dt, room)
         self._handle_room_transition(room)
         self._update_shop(events)
+
+        # --- Trigger transiciones de zona ---
+        self._check_zone_transitions()
 
     def _update_player(self, dt: float, room) -> None:
         # Modo dios: mantener el timer de invulnerabilidad alto
@@ -931,6 +963,43 @@ class Game:
                 self.cfg.SCREEN_SCALE,
             )
 
+    def _check_zone_transitions(self) -> None:
+        """
+        Verifica si el jugador ha entrado en una nueva zona y dispara la cinemática
+        de transición correspondiente.
+
+        Las zonas se asignan por profundidad BFS en el dungeon:
+        - Zona 1: depth 0-3
+        - Zona 2: depth 4-7
+        - Zona 3: depth 8+
+        """
+        if not hasattr(self.dungeon, "room_zone"):
+            return
+
+        current_pos = (self.dungeon.i, self.dungeon.j)
+        new_zone = self.dungeon.room_zone(current_pos)
+
+        if new_zone is None:
+            return
+
+        # Si la zona cambió, disparar cinemática de transición
+        if new_zone != self._current_zone:
+            old_zone = self._current_zone
+            self._current_zone = new_zone
+
+            # Determinar qué cinemática reproducir según la transición
+            cinematic_id = f"zone_transition_{new_zone}"
+
+            # Algunos encuentros especiales (como mara_encounter en Zona 2)
+            # se pueden disparar aquí también
+            if new_zone == 2 and old_zone == 1:
+                # Primera entrada a Zona 2: mostrar encuentro con Mara
+                # (Este será implementado en Paso 4 cuando creemos la sala segura)
+                self.cinematics.reproducir(cinematic_id)
+            else:
+                # Otras transiciones
+                self.cinematics.reproducir(cinematic_id)
+
     def _render(self) -> None:
         self._render_world()
         self._render_ui()
@@ -970,6 +1039,18 @@ class Game:
              self.cfg.SCREEN_H * self.cfg.SCREEN_SCALE)
         )
         self.screen.blit(scaled, (0, 0))
+
+        # --- Dibujar cinemáticas si están activas ---
+        if self.cinematics.activo:
+            self.cinematics.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)
+            # Dibujar el cursor encima
+            mx, my = pygame.mouse.get_pos()
+            cursor_rect = self._cursor_surface.get_rect(center=(mx, my))
+            self.screen.blit(self._cursor_surface, cursor_rect.topleft)
+            # Consola de debug encima de todo
+            self.debug_console.draw(self.screen)
+            pygame.display.flip()
+            return
 
         inventory_rect = self.hud_panels.blit_inventory_panel(self.screen)
         weapon_rect = self._draw_weapon_hud(inventory_rect)
