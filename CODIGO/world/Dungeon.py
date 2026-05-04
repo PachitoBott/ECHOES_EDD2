@@ -114,6 +114,9 @@ class Dungeon:
         # <<< NUEVO: ubicar la tienda cerca del inicio del camino principal
         self._place_shop_room()
 
+        # <<< NUEVO: sala segura con Mara en Zona 2
+        self._place_mara_safe_room()
+
         # <<< NUEVO: ubicar salas de tesoro en el recorrido
         self._place_treasure_rooms()
 
@@ -407,6 +410,41 @@ class Dungeon:
         # Marca de tipo (no rompe si Room no define 'type')
         setattr(room, "type", "shop")     # <<< etiqueta directa en Room
         self.shop_pos = (sx, sy)          # <<< guarda la coordenada para otras clases
+
+    def _place_mara_safe_room(self) -> None:
+        """
+        Coloca una sala segura con Mara (NPC) en Zona 2.
+
+        La sala segura es un lugar sin combate donde el jugador puede
+        conversar con Mara sobre empatía y aislamiento digital.
+        """
+        if not hasattr(self, "zones"):
+            return
+
+        # Buscar salas en Zona 2
+        zone2_rooms = [pos for pos in self.rooms.keys()
+                       if self.room_zone(pos) == 2]
+
+        # Evitar inicio y tienda
+        forbidden = {self.start}
+        if hasattr(self, "shop_pos"):
+            forbidden.add(self.shop_pos)
+
+        zone2_candidates = [pos for pos in zone2_rooms if pos not in forbidden]
+
+        if not zone2_candidates:
+            return
+
+        # Seleccionar una sala aleatoria de Zona 2
+        mara_pos = random.choice(zone2_candidates)
+        room = self.rooms.get(mara_pos)
+
+        if not room:
+            return
+
+        # Marcar como sala segura con Mara
+        setattr(room, "type", "safe_mara")
+        self.mara_pos = mara_pos
 
     def _place_treasure_rooms(self, max_rooms: int = 1, base_chance: float = 0.12) -> None:
         """Selecciona algunas salas y las convierte en cuartos del tesoro."""

@@ -570,6 +570,14 @@ class Room:
             self.locked = False
             if ShopkeeperCls:
                 self._ensure_shopkeeper(cfg, ShopkeeperCls)
+        elif self.type == "safe_mara":
+            # Sala segura con Mara NPC
+            self.safe = True
+            self.no_spawn = True
+            self.no_combat = True
+            self.locked = False
+            if ShopkeeperCls:
+                self._ensure_shopkeeper(cfg, ShopkeeperCls)
         elif self.type == "treasure":
             self.safe = True
             self.no_spawn = True
@@ -591,10 +599,27 @@ class Room:
     def handle_events(self, events, player, shop_ui, world_surface, ui_font, screen_scale=1):
         """
         Maneja interacción con la tienda dentro de la sala (si es shop).
+        También maneja diálogos en salas seguras (safe_mara).
         No lee pygame.event.get() aquí; recibe la lista de events desde Game.
         """
         if self.type == "treasure":
             self._handle_treasure_events(events, player)
+
+        if self.type == "safe_mara":
+            # Sala segura con Mara: mostrar prompt de diálogo
+            if self.shopkeeper is None:
+                return
+            can_interact = False
+            if hasattr(player, "rect"):
+                can_interact = self.shopkeeper.can_interact(player.rect())
+            else:
+                can_interact = True
+            for ev in events:
+                if ev.type == pygame.KEYDOWN and ev.key == pygame.K_e and can_interact:
+                    # El diálogo será manejado por Game.py
+                    # Por ahora, solo marcamos que se debe iniciar el diálogo
+                    setattr(self, "_mara_dialogue_requested", True)
+            return
 
         if self.type != "shop" or self.shopkeeper is None:
             return
@@ -661,6 +686,12 @@ class Room:
             self.shopkeeper.draw(surface)
             if hasattr(player, "rect") and self.shopkeeper.can_interact(player.rect()) and not shop_ui.active:
                 tip = ui_font.render("E - Abrir tienda", True, (255, 255, 255))
+                surface.blit(tip, (self.shopkeeper.rect.x - 12, self.shopkeeper.rect.y - 22))
+
+        if self.type == "safe_mara" and self.shopkeeper is not None:
+            self.shopkeeper.draw(surface)
+            if hasattr(player, "rect") and self.shopkeeper.can_interact(player.rect()):
+                tip = ui_font.render("E - Hablar con Mara", True, (255, 200, 150))
                 surface.blit(tip, (self.shopkeeper.rect.x - 12, self.shopkeeper.rect.y - 22))
 
             
