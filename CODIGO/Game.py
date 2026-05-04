@@ -131,6 +131,12 @@ class Game:
         self.cinematics.cargar_json("narrative/cutscenes.json")
         self.dialogue = DialogueSystem(cfg.SCREEN_W, cfg.SCREEN_H, font_size=14)
 
+        # Cargar diálogos de Mara
+        try:
+            self.dialogue.cargar_json("narrative/mara_dialogues.json", "mara")
+        except Exception as e:
+            log_game.warning(f"No se pudieron cargar diálogos de Mara: {e}")
+
         # Control de estado narrativo
         self._current_zone: int = 1
         self._intro_played: bool = False
@@ -505,6 +511,14 @@ class Game:
             self.cinematics.tick(dt)
             return
 
+        # --- Diálogos ---
+        # Si un diálogo está activo, procesar eventos y actualizar
+        if self.dialogue.activo:
+            for ev in events:
+                self.dialogue.handle_event(ev)
+            self.dialogue.tick(dt)
+            return
+
         # Hot-reload: verificar si algún asset cambió en disco
         self.asset_watcher.tick()
 
@@ -528,6 +542,9 @@ class Game:
 
         # --- Trigger transiciones de zona ---
         self._check_zone_transitions()
+
+        # --- Trigger diálogos con Mara ---
+        self._check_mara_dialogue_request(room, events)
 
     def _update_player(self, dt: float, room) -> None:
         # Modo dios: mantener el timer de invulnerabilidad alto
@@ -1000,6 +1017,26 @@ class Game:
                 # Otras transiciones
                 self.cinematics.reproducir(cinematic_id)
 
+    def _check_mara_dialogue_request(self, room, events) -> None:
+        """
+        Verifica si el jugador ha solicitado un diálogo con Mara.
+
+        El diálogo se inicia cuando:
+        1. Estamos en la sala de Mara (type='safe_mara')
+        2. El jugador presionó E cerca de ella
+        """
+        if not hasattr(room, "_mara_dialogue_requested"):
+            return
+
+        if not getattr(room, "_mara_dialogue_requested", False):
+            return
+
+        # Limpiar el flag
+        room._mara_dialogue_requested = False
+
+        # Iniciar diálogo con Mara
+        self.dialogue.iniciar("mara")
+
     def _render(self) -> None:
         self._render_world()
         self._render_ui()
@@ -1043,6 +1080,18 @@ class Game:
         # --- Dibujar cinemáticas si están activas ---
         if self.cinematics.activo:
             self.cinematics.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)
+            # Dibujar el cursor encima
+            mx, my = pygame.mouse.get_pos()
+            cursor_rect = self._cursor_surface.get_rect(center=(mx, my))
+            self.screen.blit(self._cursor_surface, cursor_rect.topleft)
+            # Consola de debug encima de todo
+            self.debug_console.draw(self.screen)
+            pygame.display.flip()
+            return
+
+        # --- Dibujar diálogos si están activos ---
+        if self.dialogue.activo:
+            self.dialogue.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)
             # Dibujar el cursor encima
             mx, my = pygame.mouse.get_pos()
             cursor_rect = self._cursor_surface.get_rect(center=(mx, my))

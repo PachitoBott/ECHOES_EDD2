@@ -1,0 +1,39 @@
+{
+  "id": "inicio",
+  "texto": "No te conozco. Pero sé lo que se siente.",
+  "meta": {
+    "personaje": "Mara"
+  },
+  "hijos": [
+    {
+      "id": "explicacion",
+      "texto": "Aquí abajo, solo no se sale. Pero juntos, podemos entender lo que pasó.",
+      "meta": {
+        "personaje": "Mara"
+      },
+      "hijos": [
+        {
+          "id": "fin_empatia",
+          "texto": "Entiendo.",
+          "meta": {},
+          "hijos": []
+        }
+      ]
+    },
+    {
+      "id": "silencio",
+      "texto": "Está bien no hablar. A veces el silencio dice más que las palabras.",
+      "meta": {
+        "personaje": "Mara"
+      },
+      "hijos": [
+        {
+          "id": "fin_silencio",
+          "texto": "...",
+          "meta": {},
+          "hijos": []
+        }
+      ]
+    }
+  ]
+}
