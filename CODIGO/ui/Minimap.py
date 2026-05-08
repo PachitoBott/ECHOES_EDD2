@@ -14,6 +14,7 @@ class Minimap:
         self.shop_col = (255, 215, 0)     # dorado para la tienda
         self.treasure_col = (130, 205, 255)  # azul claro para cofres
         self.boss_col = (255, 130, 60)    # naranja intenso para boss
+        self.mara_col = (255, 200, 100)   # amarillo/dorado para sala de Mara (VISIBLE DESDE INICIO)
 
         # Opcional: mostrar icono $ sobre la tienda
         self.show_shop_icon = True
@@ -61,8 +62,11 @@ class Minimap:
                 room = dungeon.rooms.get((i, j)) if hasattr(dungeon, "rooms") else None
                 room_type = getattr(room, "type", "normal")
 
-                # Exploración / Tienda
-                if (i, j) in explored:
+                # Sala de Mara: SIEMPRE VISIBLE desde el inicio (no requiere exploración)
+                if room_type == "safe_mara":
+                    color = self.mara_col
+                # Otras salas: se colorean solo si fueron exploradas
+                elif (i, j) in explored:
                     if room_type == "shop":
                         color = self.shop_col
                     elif room_type == "treasure":

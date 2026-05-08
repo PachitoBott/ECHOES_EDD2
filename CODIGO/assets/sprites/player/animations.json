@@ -1,0 +1,34 @@
+{
+  "frame_width": 64,
+  "frame_height": 64,
+  "animations": {
+    "idle": {
+      "file": "daniel_idle.png",
+      "total_frames": 4,
+      "frame_indices": [0, 1, 2, 3],
+      "fps": 15,
+      "loop": true
+    },
+    "walk": {
+      "file": "daniel_walk.png",
+      "total_frames": 11,
+      "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      "fps": 24,
+      "loop": true
+    },
+    "attack": {
+      "file": "daniel_attack.png",
+      "total_frames": 5,
+      "frame_indices": [0, 1, 2, 3, 4],
+      "fps": 30,
+      "loop": false
+    },
+    "death": {
+      "file": "daniel_death.png",
+      "total_frames": 32,
+      "frame_indices": [31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
+      "fps": 20,
+      "loop": false
+    }
+  }
+}

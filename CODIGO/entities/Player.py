@@ -8,6 +8,7 @@ import pygame
 from core.Entity import Entity
 from Config import CFG
 from entities.Weapons import WeaponFactory
+from systems.animation import Animation, AnimationManager
 
 
 PLAYER_SPRITE_SIZE = (64, 64)
@@ -16,42 +17,6 @@ PLAYER_HITBOX_OFFSET = (23, 40)
 PLAYER_SPRITE_CENTER_OFFSET_Y = (
     PLAYER_HITBOX_OFFSET[1] + PLAYER_HITBOX_SIZE[1] // 2 - PLAYER_SPRITE_SIZE[1] // 2
 )
-
-
-@dataclass
-class FrameAnimation:
-    frames: list[pygame.Surface]
-    frame_time: float
-    loop: bool
-    index: int = 0
-    timer: float = 0.0
-    finished: bool = False
-
-    def reset(self) -> None:
-        self.index = 0
-        self.timer = 0.0
-        self.finished = False
-
-    def set_frame_duration(self, frame_time: float) -> None:
-        self.frame_time = max(0.01, frame_time)
-
-    def update(self, dt: float) -> None:
-        if self.finished or len(self.frames) <= 1:
-            return
-        self.timer += dt
-        while self.timer >= self.frame_time:
-            self.timer -= self.frame_time
-            self.index += 1
-            if self.index >= len(self.frames):
-                if self.loop:
-                    self.index = 0
-                else:
-                    self.index = len(self.frames) - 1
-                    self.finished = True
-                    break
-
-    def current_frame(self) -> pygame.Surface:
-        return self.frames[self.index]
 
 
 @dataclass
@@ -128,12 +93,28 @@ class Player(Entity):
         self.controls_enabled = True
 
         self.sprite_dir: Path | None = self._resolve_sprite_dir(sprite_dir)
-        self._animations = self._build_animations()
+        self._animations: dict[str, Animation] = {}
         self._current_animation = "idle"
         self._animation_override: str | None = None
-        self._was_reloading = False
-        self._facing_left = False
-        self._reload_key_down = False
+        self._facing = "right"  # "left" o "right" (preparado para futuros up/down)
+
+        # Cargar animaciones
+        try:
+            self._animations = self._build_animations()
+        except Exception as e:
+            # Si falla, crear animaciones vacías para no crashear
+            print(f"[WARNING] No se pudieron cargar animaciones: {e}")
+            self._animations = self._create_empty_animations()
+
+        # --- Sistema de disparo twin-stick (IJKL) ---
+        self._shoot_keys = {
+            pygame.K_i: (0, -1),    # arriba
+            pygame.K_k: (0, 1),     # abajo
+            pygame.K_j: (-1, 0),    # izquierda
+            pygame.K_l: (1, 0),     # derecha
+        }
+        self._last_shoot_key: int | None = None
+        self._shoot_dir_current: tuple[int, int] = (0, 0)
 
         # Sonido de caminata
         self.run_sound = None
@@ -154,7 +135,7 @@ class Player(Entity):
 
         self.reset_loadout()
 
-    def update(self, dt: float, room) -> None:
+    def update(self, dt: float, room, out_projectiles=None) -> None:
         keys = pygame.key.get_pressed() if self.controls_enabled else None
         self.invulnerable_timer = max(0.0, self.invulnerable_timer - dt)
         self._dash_timer = max(0.0, self._dash_timer - dt)
@@ -171,11 +152,6 @@ class Player(Entity):
         if input_mag > 0:
             dx, dy = dx / input_mag, dy / input_mag
             self._last_move_dir = (dx, dy)
-
-        reload_pressed = keys[pygame.K_r] if self.controls_enabled and keys else False
-        if reload_pressed and not self._reload_key_down:
-            self._try_manual_reload()
-        self._reload_key_down = reload_pressed
 
         dash_pressed = keys[pygame.K_SPACE] if self.controls_enabled and keys else False
         dash_just_pressed = dash_pressed and not self._dash_key_down
@@ -239,6 +215,28 @@ class Player(Entity):
         if self._was_dashing and not dash_active and self.dash_core_bonus_iframe > 0.0:
             if self._recent_enemy_shot_timer > 0.0:
                 self.invulnerable_timer = max(0.0, self.invulnerable_timer) + self.dash_core_bonus_iframe
+
+        # --- Detectar y procesar disparo (teclas IJKL) ---
+        if self.controls_enabled and keys:
+            # Actualizar dirección de disparo actual basado en última tecla presionada
+            for key, direction in self._shoot_keys.items():
+                if keys[key]:
+                    self._last_shoot_key = key
+                    self._shoot_dir_current = direction
+                    break  # Priorizar la primera encontrada (última presionada registrada)
+
+            # Si ninguna tecla de disparo está presionada
+            if all(not keys[k] for k in self._shoot_keys):
+                self._last_shoot_key = None
+                self._shoot_dir_current = (0, 0)
+        else:
+            self._last_shoot_key = None
+            self._shoot_dir_current = (0, 0)
+
+        # Disparar cada frame si hay dirección activa
+        if out_projectiles is not None:
+            self.try_shoot(out_projectiles)
+
         self._was_dashing = dash_active
         self._is_sprinting = sprinting_now
 
@@ -246,7 +244,8 @@ class Player(Entity):
         self.controls_enabled = bool(enabled)
         if not enabled:
             self._dash_key_down = False
-            self._reload_key_down = False
+            self._last_shoot_key = None
+            self._shoot_dir_current = (0, 0)
 
     # ------------------------------------------------------------------
     # Estado defensivo
@@ -300,35 +299,35 @@ class Player(Entity):
         self._dash_key_down = False
         self._dash_dir = (0.0, -1.0)
         self._last_move_dir = (0.0, -1.0)
-        self._reload_key_down = False
         self._dash_trail.clear()
         self._dash_trail_timer = 0.0
         self._start_respawn_animation()
 
     def _start_respawn_animation(self) -> None:
+        """Inicia la animación de muerte/respawn (ahora llamada 'death')."""
         self._respawn_animating = True
-        self._animation_override = "respawn"
-        self._set_current_animation("respawn", force_reset=True)
+        self._animation_override = "death"
+        self._set_current_animation("death", force_reset=True)
         # Reproducir sonido de respawn
         if self.respawn_sound:
             self.respawn_sound.play()
 
-    def try_shoot(self, mouse_world_pos, out_projectiles) -> None:
-        """Dispara hacia mouse si se pulsa y cooldown listo."""
+    def try_shoot(self, out_projectiles) -> None:
+        """Dispara proyectiles en la dirección cardinal actual (IJKL) si el cooldown lo permite."""
         if not self.weapon or not self.weapon.can_fire():
             return
-        mouse_pressed = pygame.mouse.get_pressed(3)[0]  # botón izquierdo
-        if not mouse_pressed:
+        if self._shoot_dir_current == (0, 0):
             return
 
-        mx, my = mouse_world_pos
-        self._face_towards_x(mx)
-        # origen: centro del jugador
+        # Origen: centro del jugador
         cx = self.x + self.w / 2
         cy = self.y + self.h / 2
-        created = self.weapon.fire((cx, cy), (mx, my))
+
+        # Disparar con dirección cardinal
+        created = self.weapon.fire((cx, cy), self._shoot_dir_current)
         if not created:
             return
+
         self._start_shoot_animation()
         adder = getattr(out_projectiles, "add", None)
         for bullet in created:
@@ -343,7 +342,12 @@ class Player(Entity):
                 self.on_shoot((bullet.x, bullet.y), (direction.x, direction.y))
 
     def draw(self, surf):
+        """Dibuja al jugador en la pantalla."""
         self._draw_dash_trail(surf)
+
+        if self._current_animation not in self._animations:
+            return  # No hay animación disponible
+
         animation = self._animations[self._current_animation]
         sprite = self._prepare_sprite(animation.current_frame())
         sprite_rect = sprite.get_rect()
@@ -352,46 +356,41 @@ class Player(Entity):
         surf.blit(sprite, sprite_rect)
 
     def _prepare_sprite(self, base_sprite: pygame.Surface) -> pygame.Surface:
+        """Aplica transformaciones al sprite (flip horizontal si mira izquierda)."""
         sprite = base_sprite
-        if self._facing_left:
+        if self._facing == "left":
             sprite = pygame.transform.flip(sprite, True, False)
         return sprite
 
     def _update_facing(self, move_dx: float, dash_active: bool) -> None:
+        """Actualiza la dirección horizontal hacia la que mira el personaje.
+
+        Prioridad: disparo (horizontal) > dash > movimiento > última dirección
+
+        Nota: Solo se modifica la dirección horizontal (left/right).
+        Las direcciones verticales (arriba/abajo) en disparo no cambian la orientación.
+        """
         horizontal = 0.0
-        if dash_active:
+
+        # Prioridad 1: Si hay dirección de disparo activa, usar esa (pero solo si es horizontal)
+        if self._shoot_dir_current != (0, 0):
+            shoot_h = self._shoot_dir_current[0]
+            if shoot_h != 0:  # Solo si es izquierda o derecha
+                horizontal = shoot_h
+        # Prioridad 2: Usar dirección del dash si activo
+        if horizontal == 0 and dash_active:
             horizontal = self._dash_dir[0]
-        elif abs(move_dx) > 1e-3:
+        # Prioridad 3: Usar dirección de movimiento actual
+        if horizontal == 0 and abs(move_dx) > 1e-3:
             horizontal = move_dx
-        elif abs(self._last_move_dir[0]) > 1e-3:
+        # Prioridad 4: Usar última dirección de movimiento conocida
+        if horizontal == 0 and abs(self._last_move_dir[0]) > 1e-3:
             horizontal = self._last_move_dir[0]
 
+        # Actualizar facing solo si hay cambio horizontal
         if abs(horizontal) > 1e-3:
-            self._facing_left = horizontal < 0
-        else:
-            self._update_facing_from_mouse()
+            self._facing = "left" if horizontal < 0 else "right"
 
-    def _face_towards_x(self, target_x: float) -> None:
-        cx = self.x + self.w / 2
-        if abs(target_x - cx) < 0.5:
-            return
-        self._facing_left = target_x < cx
-
-    def _update_facing_from_mouse(self) -> None:
-        try:
-            mx, _ = pygame.mouse.get_pos()
-        except pygame.error:
-            return
-        scale = getattr(CFG, "SCREEN_SCALE", 1)
-        scale = scale if scale else 1
-        mx = mx / scale
-        self._face_towards_x(mx)
-
-    def _try_manual_reload(self) -> None:
-        if not self.weapon:
-            return
-        if self.weapon.start_reload():
-            self._start_reload_animation()
 
     # ------------------------------------------------------------------
     # Animaciones
@@ -478,76 +477,48 @@ class Player(Entity):
             self.damage_sound = None
 
     def set_skin(self, sprite_dir: str | Path | None) -> None:
-        """Actualiza el directorio de sprites y recarga las animaciones."""
+        """Actualiza los sprites y recarga las animaciones (actualmente solo Daniel)."""
+        # Nota: Actualmente el sistema no soporta múltiples skins
+        # Solo carga desde assets/sprites/player
+        try:
+            self._animations = self._build_animations()
+        except Exception as e:
+            print(f"[WARNING] No se pudieron recargar animaciones: {e}")
+            self._animations = self._create_empty_animations()
 
-        self.sprite_dir = self._resolve_sprite_dir(sprite_dir)
-        self._animations = self._build_animations()
         self._current_animation = "idle"
         self._animation_override = None
 
-    def _build_animations(self) -> dict[str, FrameAnimation]:
-        sprite_dir = self.sprite_dir
-        sprite_prefix = getattr(CFG, "PLAYER_SPRITE_PREFIX", "player")
+    def _build_animations(self) -> dict[str, Animation]:
+        """Carga animaciones desde spritesheets + JSON."""
+        json_path = "assets/sprites/player/animations.json"
+        sprite_dir = "assets/sprites/player"
 
-        def load_surface(path: Path) -> pygame.Surface | None:
-            try:
-                image = pygame.image.load(path.as_posix()).convert_alpha()
-            except (FileNotFoundError, pygame.error):
-                return None
-            expected_w, expected_h = PLAYER_SPRITE_SIZE
-            if image.get_size() != PLAYER_SPRITE_SIZE:
-                width, height = image.get_size()
-                raise ValueError(
-                    f"El sprite '{path.as_posix()}' debe medir {expected_w}x{expected_h} píxeles (actual {width}x{height})"
-                )
-            return image
+        try:
+            animations = AnimationManager.load_from_json(json_path, sprite_dir)
+            return animations
+        except (FileNotFoundError, ValueError) as e:
+            raise Exception(f"No se pudieron cargar animaciones: {e}")
 
-        def load_animation(state: str, expected_frames: int) -> list[pygame.Surface]:
-            if not sprite_dir:
-                raise FileNotFoundError(
-                    "Config.PLAYER_SPRITES_PATH no está definido; no se pueden cargar animaciones del jugador"
-                )
-            frames: list[pygame.Surface] = []
-            if expected_frames <= 1:
-                candidates = [
-                    sprite_dir / f"{sprite_prefix}_{state}.png",
-                    sprite_dir / f"{sprite_prefix}_{state}_0.png",
-                ]
-                for candidate in candidates:
-                    surface = load_surface(candidate)
-                    if surface is not None:
-                        frames.append(surface)
-                        return frames
-                missing = " o ".join(candidate.as_posix() for candidate in candidates)
-                raise FileNotFoundError(
-                    f"No se encontró el sprite '{missing}' para la animación '{state}'"
-                )
-            for i in range(expected_frames):
-                candidate = sprite_dir / f"{sprite_prefix}_{state}_{i}.png"
-                surface = load_surface(candidate)
-                if surface is None:
-                    raise FileNotFoundError(
-                        f"No se encontró el sprite '{candidate.as_posix()}' para la animación '{state}'"
-                    )
-                frames.append(surface)
-            return frames
+    def _create_empty_animations(self) -> dict[str, Animation]:
+        """Crea animaciones vacías para fallback (no crashea pero no renderiza nada)."""
+        # Crear una superficie vacía de fallback
+        empty_surface = pygame.Surface((64, 64))
+        empty_surface.fill((0, 0, 0))
+        empty_frames = [empty_surface]
 
-        idle_frames = load_animation("idle", 1)
-        run_frames = load_animation("run", 4)
-        reload_frames = load_animation("reload", 5)
-        shoot_frames = load_animation("shoot", 4)
-        respawn_frames = load_animation("respawn", 7)
-
-        animations = {
-            "idle": FrameAnimation(idle_frames, frame_time=0.2, loop=False),
-            "run": FrameAnimation(run_frames, frame_time=0.09, loop=True),
-            "reload": FrameAnimation(reload_frames, frame_time=0.12, loop=False),
-            "shoot": FrameAnimation(shoot_frames, frame_time=0.06, loop=False),
-            "respawn": FrameAnimation(respawn_frames, frame_time=0.1, loop=False),
+        return {
+            "idle": Animation(empty_frames, [0], fps=1, loop=False),
+            "walk": Animation(empty_frames, [0], fps=1, loop=True),
+            "attack": Animation(empty_frames, [0], fps=1, loop=False),
+            "death": Animation(empty_frames, [0], fps=1, loop=False),
         }
-        return animations
 
     def _set_current_animation(self, name: str, *, force_reset: bool = False) -> None:
+        """Cambia la animación actual."""
+        if name not in self._animations:
+            return  # Animación no existe, ignorar
+
         if self._current_animation != name:
             self._current_animation = name
             self._animations[name].reset()
@@ -557,43 +528,44 @@ class Player(Entity):
     def _start_shoot_animation(self) -> None:
         if self._respawn_animating:
             return
-        if self.weapon and self.weapon.is_reloading():
-            return
         self._animation_override = "shoot"
         self._set_current_animation("shoot", force_reset=True)
 
-    def _start_reload_animation(self) -> None:
-        if self._respawn_animating:
-            return
-        if not self.weapon:
-            return
-        anim = self._animations["reload"]
-        anim.set_frame_duration(self.weapon.reload_time / max(1, len(anim.frames)))
-        self._animation_override = "reload"
-        self._set_current_animation("reload", force_reset=True)
-
     def _update_animation(self, dt: float, moving: bool) -> None:
-        reloading = self.weapon.is_reloading() if self.weapon else False
-        if reloading and not self._was_reloading:
-            self._start_reload_animation()
-        self._was_reloading = reloading
+        """Determina qué animación reproducir según estado del jugador.
 
-        active_name = self._animation_override
-        if active_name is None:
-            active_name = "run" if moving else "idle"
+        Prioridad:
+        1. death (si está muriendo)
+        2. attack (si está disparando) - se repite mientras se mantiene el botón
+        3. walk (si se está moviendo)
+        4. idle (si está quieto)
+        """
+        is_shooting = self._shoot_dir_current != (0, 0)
+
+        # Lógica de prioridad
+        if self._respawn_animating:
+            active_name = "death"
+        elif is_shooting:
+            active_name = "attack"
+        elif moving:
+            active_name = "walk"
+        else:
+            active_name = "idle"
+
         self._set_current_animation(active_name)
 
-        animation = self._animations[active_name]
-        animation.update(dt)
+        if active_name in self._animations:
+            animation = self._animations[active_name]
+            animation.update(dt)
 
-        if self._animation_override == "shoot" and animation.finished:
-            self._animation_override = None
-        elif self._animation_override == "reload":
-            if not reloading and animation.finished:
-                self._animation_override = None
-        elif self._animation_override == "respawn" and animation.finished:
-            self._animation_override = None
-            self._respawn_animating = False
+            # Attack se repite mientras se mantenga presionado
+            if active_name == "attack" and animation.is_finished():
+                # Reiniciar attack si aún está disparando
+                if is_shooting:
+                    animation.reset()
+            # Death termina la animación sin repetir
+            elif self._respawn_animating and animation.is_finished():
+                self._respawn_animating = False
 
     def _update_dash_trail(self, dt: float, dash_active: bool) -> None:
         # Reducir vida de los rastros existentes

@@ -48,7 +48,7 @@ class Dungeon:
         self.grafo: Grafo = Grafo(dirigido=False)
 
         # Etiquetado de zonas para la narrativa (Fase 5)
-        # zones[pos] = 1, 2 o 3 según la profundidad BFS desde el inicio
+        # zones[pos] = 1 o 2 según la profundidad BFS desde el inicio
         self.zones: Dict[Tuple[int, int], int] = {}
 
 
@@ -341,15 +341,13 @@ class Dungeon:
         Asigna zonas narrativas a cada sala basándose en su profundidad BFS.
 
         Zona 1: distancia 0-3   (comentarios iniciales)
-        Zona 2: distancia 4-7   (viralización, incluye sala segura de Mara)
-        Zona 3: distancia 8+    (el origen, confrontación)
+        Zona 2: distancia 4+    (viralización, incluye sala segura de Mara, el origen y confrontación)
 
         Los umbrales se pueden ajustar modificando las tuplas de rango aquí.
         """
         zona_ranges = [
             (1, 0, 3),    # (zona, dist_min, dist_max)
-            (2, 4, 7),
-            (3, 8, float('inf')),
+            (2, 4, float('inf')),  # Zona 2 llega hasta el final
         ]
 
         for pos, distancia in self.depth_map.items():
@@ -361,7 +359,7 @@ class Dungeon:
             self.zones[pos] = zona
 
         # Log para debugging: contar salas por zona
-        zona_counts = {1: 0, 2: 0, 3: 0}
+        zona_counts = {1: 0, 2: 0}
         for zona in self.zones.values():
             zona_counts[zona] += 1
 
@@ -369,7 +367,7 @@ class Dungeon:
         from dev.logger import log_game
         log_game.info(
             f"Zonas asignadas — Zona 1: {zona_counts[1]} salas, "
-            f"Zona 2: {zona_counts[2]} salas, Zona 3: {zona_counts[3]} salas"
+            f"Zona 2: {zona_counts[2]} salas"
         )
 
     def _place_shop_room(self) -> None:

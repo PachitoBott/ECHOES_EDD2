@@ -77,9 +77,6 @@ class Game:
         self.weapon_icon_offset = pygame.Vector2(60, 50)
         self.weapon_icon_scale = 1.0
         self.weapon_text_margin = 18
-        self.weapon_ammo_offset = pygame.Vector2(-35, -110)
-        self.weapon_ammo_color = pygame.Color(235, 235, 235)
-        self.weapon_ammo_align_center = True
         self._weapon_icons = self._load_weapon_icons()
         self._weapon_icon_cache: dict[tuple[str, float], pygame.Surface] = {}
         self.current_seed: int | None = None
@@ -128,7 +125,12 @@ class Game:
 
         # ---------- Narrativa (cinemáticas y diálogos) ----------
         self.cinematics = CinematicSystem(cfg.SCREEN_W, cfg.SCREEN_H, font_size=22)
-        self.cinematics.cargar_json("narrative/cutscenes.json")
+        try:
+            self.cinematics.cargar_json("narrative/cutscenes.json")
+            log_game.info(f"[OK] Cinematicas cargadas: {self.cinematics.ids_disponibles()}")
+        except Exception as e:
+            log_game.error(f"Error cargando cinematicas: {e}")
+
         self.dialogue = DialogueSystem(cfg.SCREEN_W, cfg.SCREEN_H, font_size=14)
 
         # Cargar diálogos de Mara
@@ -140,6 +142,7 @@ class Game:
         # Control de estado narrativo
         self._current_zone: int = 1
         self._intro_played: bool = False
+        self._mara_cutscene_played: bool = False  # Cinemática de Mara: se dispara solo una vez
 
         # ---------- Herramientas de desarrollo ----------
         # Consola de debug (F1): siempre creada, solo visible en debug_mode
@@ -506,8 +509,19 @@ class Game:
 
     def _update(self, dt: float, events: list) -> None:
         # --- Cinematicas ---
-        # Si una cinemática está activa, no actualizar el juego
+        # Si una cinemática está activa, procesar input y no actualizar el juego
         if self.cinematics.activo:
+            for event in events:
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        # ESC: salta la cinemática completa
+                        self.cinematics.saltar()
+                    elif event.key == pygame.K_RETURN:
+                        # Enter: salta la cinemática completa
+                        self.cinematics.saltar()
+                    elif event.key == pygame.K_SPACE:
+                        # Espacio: avanza panel / completa texto
+                        self.cinematics.siguiente_panel()
             self.cinematics.tick(dt)
             return
 
@@ -540,6 +554,9 @@ class Game:
         self._handle_room_transition(room)
         self._update_shop(events)
 
+        # --- Trigger entrada a sala de Mara (cinemática única) ---
+        self._check_mara_room_entry(room)
+
         # --- Trigger transiciones de zona ---
         self._check_zone_transitions()
 
@@ -551,15 +568,16 @@ class Game:
         if getattr(self.player, "_debug_god_mode", False):
             self.player.invulnerable_timer = 9999.0
 
-        self.player.update(dt, room)
-        mx, my = pygame.mouse.get_pos()
-        mx //= self.cfg.SCREEN_SCALE
-        my //= self.cfg.SCREEN_SCALE
-        self.player.try_shoot((mx, my), self.projectiles)
+        self.player.update(dt, room, self.projectiles)
 
     def _spawn_room_enemies(self, room) -> None:
         if getattr(room, "no_spawn", False):
             return
+
+        # Salas especiales sin enemigos
+        if getattr(room, "type", "normal") == "safe_mara":
+            return  # Sala de Mara siempre está vacía
+
         cx, cy = self.dungeon.grid_w // 2, self.dungeon.grid_h // 2
         is_start = (self.dungeon.i, self.dungeon.j) == getattr(self.dungeon, "start", (cx, cy))
         if is_start:
@@ -980,6 +998,42 @@ class Game:
                 self.cfg.SCREEN_SCALE,
             )
 
+    def _check_mara_room_entry(self, room) -> None:
+        """
+        Verifica si el jugador entró a la sala segura de Mara (type='safe_mara').
+
+        Si es la primera vez que entra, dispara la cinemática 'mara_encounter' una sola vez.
+        Las entradas posteriores no disparan cinemática.
+        """
+        # Verificar que ya se marcó la sala de Mara en el dungeon
+        if not hasattr(self.dungeon, "mara_pos"):
+            return
+
+        current_pos = (self.dungeon.i, self.dungeon.j)
+
+        # ¿Estamos en la sala de Mara?
+        if current_pos != self.dungeon.mara_pos:
+            return
+
+        # ¿Ya se disparó la cinemática en esta partida?
+        if self._mara_cutscene_played:
+            log_game.debug(f"Mara room entrada ignorada (ya se reprodujo cinemática)")
+            return
+
+        # ¿La cinemática ya está en reproducción? (evitar restart múltiples)
+        if self.cinematics.activo:
+            log_game.debug(f"Mara cinematic already playing, skipping restart")
+            return
+
+        # Primera entrada: disparar cinemática y marcar como reproducida
+        log_game.info(f"[CINEMATIC] Primera entrada a sala de Mara - reproduciendo cinematica mara_encounter")
+        result = self.cinematics.reproducir("mara_encounter")
+        if result:
+            self._mara_cutscene_played = True
+            log_game.debug(f"Flag _mara_cutscene_played = {self._mara_cutscene_played}")
+        else:
+            log_game.warning(f"Failed to play mara_encounter cinematic")
+
     def _check_zone_transitions(self) -> None:
         """
         Verifica si el jugador ha entrado en una nueva zona y dispara la cinemática
@@ -987,8 +1041,10 @@ class Game:
 
         Las zonas se asignan por profundidad BFS en el dungeon:
         - Zona 1: depth 0-3
-        - Zona 2: depth 4-7
-        - Zona 3: depth 8+
+        - Zona 2: depth 4+ (incluye el final del juego)
+
+        NOTA: La cinemática de Mara (mara_encounter) se dispara en _check_mara_room_entry(),
+        no aquí. Solo las transiciones de zona general se disparan aquí.
         """
         if not hasattr(self.dungeon, "room_zone"):
             return
@@ -999,23 +1055,15 @@ class Game:
         if new_zone is None:
             return
 
-        # Si la zona cambió, disparar cinemática de transición
+        # Si la zona cambió, disparar cinemática de transición (excepto si es Zona 2 con Mara especial)
         if new_zone != self._current_zone:
             old_zone = self._current_zone
             self._current_zone = new_zone
 
             # Determinar qué cinemática reproducir según la transición
+            # Nota: Zona 2 Ya no dispara cinemática aquí - se maneja en _check_mara_room_entry()
             cinematic_id = f"zone_transition_{new_zone}"
-
-            # Algunos encuentros especiales (como mara_encounter en Zona 2)
-            # se pueden disparar aquí también
-            if new_zone == 2 and old_zone == 1:
-                # Primera entrada a Zona 2: mostrar encuentro con Mara
-                # (Este será implementado en Paso 4 cuando creemos la sala segura)
-                self.cinematics.reproducir(cinematic_id)
-            else:
-                # Otras transiciones
-                self.cinematics.reproducir(cinematic_id)
+            self.cinematics.reproducir(cinematic_id)
 
     def _check_mara_dialogue_request(self, room, events) -> None:
         """
@@ -1079,6 +1127,9 @@ class Game:
 
         # --- Dibujar cinemáticas si están activas ---
         if self.cinematics.activo:
+            # Llenar pantalla de negro para ocultar el juego de fondo
+            self.screen.fill((0, 0, 0))
+
             self.cinematics.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)
             # Dibujar el cursor encima
             mx, my = pygame.mouse.get_pos()
@@ -1365,28 +1416,8 @@ class Game:
         icon_rect = icon_surface.get_rect(topleft=(base_x, base_y))
         self.screen.blit(icon_surface, icon_rect.topleft)
 
-        shots_remaining = getattr(weapon, "shots_in_mag", 0)
-        magazine_size = getattr(weapon, "magazine_size", 0)
-        ammo_text = f"Balas: {shots_remaining}/{magazine_size}"
-        if hasattr(weapon, "is_reloading") and weapon.is_reloading():
-            ammo_text = f"Recargando ({shots_remaining}/{magazine_size})"
-
-        ammo_surface = self.ui_font.render(ammo_text, True, self.weapon_ammo_color)
-        if self.weapon_ammo_align_center:
-            ammo_rect = ammo_surface.get_rect()
-            ammo_rect.midtop = (
-                icon_rect.left + icon_rect.width // 2 + int(self.weapon_ammo_offset.x),
-                icon_rect.bottom + int(self.weapon_ammo_offset.y),
-            )
-        else:
-            ammo_rect = ammo_surface.get_rect()
-            ammo_rect.topleft = (
-                icon_rect.left + int(self.weapon_ammo_offset.x),
-                icon_rect.bottom + int(self.weapon_ammo_offset.y),
-            )
-
-        self.screen.blit(ammo_surface, ammo_rect.topleft)
-        return icon_rect.union(ammo_rect)
+        # Munición eliminada: el jugador dispara infinitamente con cadencia fija
+        return icon_rect
 
     def _create_cursor_surface(self) -> pygame.Surface:
         cursor_path = Path(__file__).resolve().parent.parent / "assets/ui/cursor2.png"

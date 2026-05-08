@@ -18,8 +18,6 @@ class WeaponSpec:
     projectile_radius: int = 3
     offsets: Sequence[float] = field(default_factory=lambda: (0.0,))
     forward_spawn: float = 8.0
-    magazine_size: int = 10
-    reload_time: float = 1.0
     projectile_color: tuple[int, int, int] | None = None
     on_hit_effects: Sequence[dict[str, Any]] = field(default_factory=tuple)
     special: dict[str, Any] = field(default_factory=dict)
@@ -32,104 +30,53 @@ class Weapon:
         self.spec = spec
         self._cooldown = 0.0
         self._cooldown_scale = max(0.05, cooldown_scale)
-        self._shots_in_mag = max(1, spec.magazine_size)
-        self._reload_timer = 0.0
-        self._shots_since_reload = 0
         self._time_since_last_shot = 999.0
         self._continuous_fire_time = 0.0
 
     # ------------------------- Temporización -------------------------
     def tick(self, dt: float) -> None:
+        """Avanza el tiempo del arma: decremente cooldown (cadencia de disparo)."""
         self._cooldown = max(0.0, self._cooldown - dt)
         self._time_since_last_shot = min(10.0, self._time_since_last_shot + dt)
-        if self._reload_timer > 0.0:
-            self._reload_timer = max(0.0, self._reload_timer - dt)
-            if self._reload_timer <= 0.0:
-                self._shots_in_mag = max(1, self.spec.magazine_size)
-                self._shots_since_reload = 0
         self._update_heat(dt)
 
     def can_fire(self) -> bool:
-        if self._cooldown > 0.0:
-            return False
-        if self._reload_timer > 0.0:
-            return False
-        return self._shots_in_mag > 0
+        """Verifica si el arma puede disparar (cadencia lista)."""
+        return self._cooldown <= 0.0
 
-    # ----------------------------- Estado -----------------------------
-    def is_reloading(self) -> bool:
-        return self._reload_timer > 0.0
-
-    @property
-    def reload_time(self) -> float:
-        return self.spec.reload_time
-
-    @property
-    def shots_in_mag(self) -> int:
-        """Número de balas restantes en el cargador actual."""
-
-        return max(0, int(self._shots_in_mag))
-
-    @property
-    def magazine_size(self) -> int:
-        """Capacidad máxima del cargador del arma."""
-
-        return max(1, int(self.spec.magazine_size))
-
-    def reload_progress(self) -> float:
-        if self.spec.reload_time <= 0.0:
-            return 1.0
-        remaining = max(0.0, min(self.spec.reload_time, self._reload_timer))
-        return 1.0 - remaining / self.spec.reload_time
-
-    def start_reload(self) -> bool:
-        """Inicia una recarga manual si es posible."""
-        if self.spec.reload_time <= 0.0:
-            return False
-        if self._reload_timer > 0.0:
-            return False
-        if self._shots_in_mag >= self.spec.magazine_size:
-            return False
-        self._reload_timer = self.spec.reload_time
-        self._shots_in_mag = 0
-        self._shots_since_reload = 0
-        return True
+    # ----------------------------- Estado (Munición eliminada) ---------
 
     # ------------------------ Generación balas -----------------------
-    def fire(self, origin: tuple[float, float], target: tuple[float, float]) -> List[Projectile]:
+    def fire(self, origin: tuple[float, float], direction: tuple[int, int]) -> List[Projectile]:
+        """Dispara proyectiles en una dirección cardinal.
+
+        Args:
+            origin: (ox, oy) - posición de origen del disparo
+            direction: (dir_x, dir_y) - dirección cardinal (0,-1) arriba, (0,1) abajo,
+                                       (-1,0) izquierda, (1,0) derecha
+        """
         if not self.can_fire():
             return []
 
         ox, oy = origin
-        tx, ty = target
-        dir_x = tx - ox
-        dir_y = ty - oy
-        mag = math.hypot(dir_x, dir_y)
-        if mag <= 0.0001:
-            return []
-        dir_x /= mag
-        dir_y /= mag
+        dir_x, dir_y = direction  # Ya está normalizado como cardinal
 
-        angle = math.atan2(dir_y, dir_x)
         bullets: List[Projectile] = []
-        effective_spread = self._effective_spread_deg()
         for offset in self.spec.offsets:
-            # desplazamiento perpendicular para soportar múltiples cañones
+            # Desplazamiento perpendicular para soportar múltiples cañones
+            # Si dispara arriba/abajo (dir_y != 0), offsets van a los lados (±dir_x, 0)
+            # Si dispara izquierda/derecha (dir_x != 0), offsets van arriba/abajo (0, ±dir_y)
             perp_x, perp_y = -dir_y, dir_x
             spawn_x = ox + dir_x * self.spec.forward_spawn + perp_x * offset
             spawn_y = oy + dir_y * self.spec.forward_spawn + perp_y * offset
 
-            spread_rad = math.radians(random.uniform(-effective_spread, effective_spread))
-            shot_angle = angle + spread_rad
-            vx = math.cos(shot_angle)
-            vy = math.sin(shot_angle)
-
+            # En sistema cardinal, sin spread angular
             bullets.append(
                 Projectile(
                     spawn_x,
                     spawn_y,
-                    vx,
-                    vy,
+                    float(dir_x),  # Dirección cardinal pura, sin desviación
+                    float(dir_y),
                     speed=self.spec.bullet_speed,
                     radius=self.spec.projectile_radius,
                     color=self.spec.projectile_color,
@@ -140,11 +87,6 @@ class Weapon:
         self._apply_special_on_fire()
         heat_multiplier = self._heat_penalty_multiplier()
         self._cooldown = self.spec.cooldown * self._cooldown_scale * heat_multiplier
-        self._shots_in_mag -= 1
-        if self._shots_in_mag <= 0:
-            self._shots_in_mag = 0
-            self._reload_timer = self.spec.reload_time
-        self._shots_since_reload += 1
         self._time_since_last_shot = 0.0
         return bullets
 
@@ -155,12 +97,16 @@ class Weapon:
 
     # -------------------------- Especiales --------------------------
     def _effective_spread_deg(self) -> float:
+        """Calcula el spread efectivo del arma con especiales como recoil_ramp."""
         base = self.spec.spread_deg
         recoil_cfg = self.spec.special.get("recoil_ramp")
         if recoil_cfg:
-            threshold = int(recoil_cfg.get("shots", 6))
-            extra = float(recoil_cfg.get("extra", 0.0))
-            if self._shots_since_reload + 1 >= threshold:
+            # El spread aumenta durante disparo continuo
+            # Se resetea si pasa tiempo sin disparar (basado en gracia del sistema)
+            grace = float(recoil_cfg.get("grace", 0.5))  # Tiempo para resetear recoil
+            if self._time_since_last_shot <= grace:
+                # En disparo continuo: aplicar recoil progresivo
+                extra = float(recoil_cfg.get("extra", 0.0))
                 base += extra
         return base
 
@@ -205,46 +151,36 @@ class WeaponFactory:
         self._registry: Dict[str, WeaponSpec] = {
             "bloqueo": WeaponSpec(
                 weapon_id="bloqueo",
-                cooldown=0.25,
+                cooldown=0.25,  # Reducida de 0.125 (8 disparos/seg a 4 disparos/seg)
                 spread_deg=10.0,
                 bullet_speed=340.0,
-                magazine_size=10,
-                reload_time=1.1,
             ),
             "reportar": WeaponSpec(
                 weapon_id="reportar",
-                cooldown=0.36,
+                cooldown=0.30,  # Reducida de 0.15
                 spread_deg=16.0,
                 bullet_speed=320.0,
                 offsets=(-6.0, 6.0),
-                magazine_size=12,
-                reload_time=1.25,
             ),
             "apoyo_amigo": WeaponSpec(
                 weapon_id="apoyo_amigo",
-                cooldown=0.16,
+                cooldown=0.28,  # Reducida de 0.14
                 spread_deg=4.0,
                 bullet_speed=360.0,
-                magazine_size=14,
-                reload_time=1.4,
             ),
             "pausa_digital": WeaponSpec(
                 weapon_id="pausa_digital",
-                cooldown=0.68,
+                cooldown=0.70,  # Reducida de 0.35
                 spread_deg=32.0,
                 bullet_speed=280.0,
                 offsets=(-12.0, -6.0, 0.0, 6.0, 12.0),
                 projectile_radius=4,
-                magazine_size=8,
-                reload_time=1.85,
             ),
             "autoestima": WeaponSpec(
                 weapon_id="autoestima",
-                cooldown=0.12,
+                cooldown=0.24,  # Reducida de 0.12
                 spread_deg=2.5,
                 bullet_speed=390.0,
-                magazine_size=16,
-                reload_time=1.6,
                 special={
                     "heat": {
                         "threshold": 2.0,
@@ -256,14 +192,12 @@ class WeaponFactory:
             ),
             "evidencia": WeaponSpec(
                 weapon_id="evidencia",
-                cooldown=0.24,
+                cooldown=0.36,  # Reducida de 0.18
                 spread_deg=28.0,
                 bullet_speed=240.0,
                 projectile_radius=5,
                 offsets=(-4.0, 4.0),
                 forward_spawn=4.0,
-                magazine_size=9,
-                reload_time=2.0,
                 projectile_color=(140, 220, 255),
                 on_hit_effects=(
                     {
@@ -275,13 +209,11 @@ class WeaponFactory:
             ),
             "modo_incognito": WeaponSpec(
                 weapon_id="modo_incognito",
-                cooldown=0.22,
+                cooldown=0.22,  # Reducida de 0.11
                 spread_deg=8.0,
                 bullet_speed=325.0,
                 offsets=(0.0,),
                 forward_spawn=9.0,
-                magazine_size=18,
-                reload_time=2.1,
                 special={
                     "recoil_ramp": {
                         "shots": 6,

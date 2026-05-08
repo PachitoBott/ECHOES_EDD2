@@ -1,71 +1,81 @@
 {
   "intro": {
     "id": "intro",
+    "etapa": 0,
     "paneles": [
       {
         "image": "intro_01.png",
-        "text": "Una foto. Un instante. Sacado de contexto.",
-        "duration": null
+        "texto": "Una foto. Un instante. Sacado de contexto.",
+        "duracion": 3.0,
+        "fade_in": 1.0,
+        "fade_out": 0.8
       },
       {
         "image": "intro_02.png",
-        "text": "En horas, todos hablaban de ti. Ninguno contigo.",
-        "duration": null
+        "texto": "En horas, todos hablaban de ti. Ninguno contigo.",
+        "duracion": 3.0,
+        "fade_in": 1.0,
+        "fade_out": 0.8
       },
       {
         "image": "intro_03.png",
-        "text": "Hasta que el feed vino por ti.",
-        "duration": null
+        "texto": "Hasta que el feed vino por ti.",
+        "duracion": 3.0,
+        "fade_in": 1.0,
+        "fade_out": 0.8
       }
     ]
   },
   "mara_encounter": {
     "id": "mara_encounter",
+    "etapa": 1,
     "paneles": [
       {
         "image": "mara_01.png",
-        "text": "No te conozco. Pero sé lo que se siente.",
-        "duration": null
+        "texto": "No te conozco. Pero sé lo que se siente.",
+        "duracion": 3.0,
+        "fade_in": 1.0,
+        "fade_out": 0.8
       },
       {
         "image": "mara_02.png",
-        "text": "Aquí abajo, solo no se sale.",
-        "duration": null
+        "texto": "Aquí abajo, solo no se sale.",
+        "duracion": 3.0,
+        "fade_in": 1.0,
+        "fade_out": 0.8
       }
     ]
   },
   "zone_transition_2": {
     "id": "zone_transition_2",
+    "etapa": 1,
     "paneles": [
       {
         "image": "zone_transition_2_01.png",
-        "text": "Las cosas se complican. Más voces se suman al ataque.",
-        "duration": 2.5
-      }
-    ]
-  },
-  "zone_transition_3": {
-    "id": "zone_transition_3",
-    "paneles": [
-      {
-        "image": "zone_transition_3_01.png",
-        "text": "Has llegado al origen. El Eco te espera.",
-        "duration": 3.0
+        "texto": "Las cosas se complican. Más voces se suman al ataque.",
+        "duracion": 2.5,
+        "fade_in": 1.0,
+        "fade_out": 0.8
       }
     ]
   },
   "ending_a": {
     "id": "ending_a",
+    "etapa": 3,
     "paneles": [
       {
         "image": "ending_a_01.png",
-        "text": "Lo denunciaste. Saliste de la Red.",
-        "duration": null
+        "texto": "Lo denunciaste. Saliste de la Red.",
+        "duracion": 3.0,
+        "fade_in": 1.0,
+        "fade_out": 0.8
       },
       {
         "image": "ending_a_02.png",
-        "text": "La historia se aclaró. Pero algo quedó pendiente.",
-        "duration": null
+        "texto": "La historia se aclaró. Pero algo quedó pendiente.",
+        "duracion": 3.0,
+        "fade_in": 1.0,
+        "fade_out": 0.8
       }
     ]
   }
