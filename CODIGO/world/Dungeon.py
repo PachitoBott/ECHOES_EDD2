@@ -120,6 +120,9 @@ class Dungeon:
         # <<< NUEVO: ubicar salas de tesoro en el recorrido
         self._place_treasure_rooms()
 
+        # <<< NUEVO: sala del Profesor Ibarra (una en Zona 1, una en Zona 2)
+        self._place_profesor_ibarra_rooms()
+
         # Obstáculos en salas hostiles
         self._populate_hostile_obstacles()
 
@@ -492,7 +495,7 @@ class Dungeon:
             return
 
         salt = 0xC0BB1E
-        safe_types = {"shop", "treasure"}
+        safe_types = {"shop", "treasure", "profesor_ibarra"}
 
         for pos, room in sorted(self.rooms.items()):
             if pos == self.start:
@@ -512,6 +515,54 @@ class Dungeon:
             room_rng = random.Random(seed_value & 0xFFFFFFFF)
             room.generate_obstacles(rng=room_rng)
     # Dungeon.py (añade estos métodos)
+
+    def _place_profesor_ibarra_rooms(self) -> None:
+        """
+        Coloca al Profesor Ibarra en hasta dos salas: una en Zona 1 y una en Zona 2.
+
+        Para cambiar en qué sala aparece el profesor, puedes ajustar el índice
+        `quarter_idx` (Zona 1) o `mid_idx` (Zona 2) más abajo, o bien filtrar
+        por profundidad BFS con self.depth_map.
+
+        Las posiciones se guardan en self.ibarra_pos_z1 e self.ibarra_pos_z2.
+        """
+        if not hasattr(self, "zones"):
+            return
+
+        forbidden: set[tuple[int, int]] = {self.start}
+        for attr in ("shop_pos", "mara_pos"):
+            if hasattr(self, attr):
+                forbidden.add(getattr(self, attr))
+
+        def _pick_room(zone_id: int, index_fraction: float) -> tuple[int, int] | None:
+            candidates = [
+                pos for pos in self.rooms
+                if self.room_zone(pos) == zone_id and pos not in forbidden
+            ]
+            if not candidates:
+                return None
+            candidates.sort(key=lambda p: self.depth_map.get(p, 0))
+            idx = max(0, min(len(candidates) - 1, int(len(candidates) * index_fraction)))
+            return candidates[idx]
+
+        # Zona 1: sala con profundidad moderada-alta dentro de la zona
+        pos1 = _pick_room(zone_id=1, index_fraction=0.75)
+        if pos1:
+            room1 = self.rooms.get(pos1)
+            if room1:
+                setattr(room1, "type", "profesor_ibarra")
+                setattr(room1, "_ibarra_zona", 1)
+                self.ibarra_pos_z1 = pos1
+                forbidden.add(pos1)
+
+        # Zona 2: sala moderada (no la última, que suele ser boss/final)
+        pos2 = _pick_room(zone_id=2, index_fraction=0.35)
+        if pos2:
+            room2 = self.rooms.get(pos2)
+            if room2:
+                setattr(room2, "type", "profesor_ibarra")
+                setattr(room2, "_ibarra_zona", 2)
+                self.ibarra_pos_z2 = pos2
 
     def move_and_enter(self, direction: str, player, cfg, ShopkeeperCls=None) -> bool:
         """

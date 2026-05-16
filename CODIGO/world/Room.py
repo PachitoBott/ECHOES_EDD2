@@ -319,6 +319,7 @@ class Room:
         self.no_combat = False
         self._populated_once = False
         self.shopkeeper = None
+        self.profesor_ibarra = None
         self.treasure: dict | None = None
         self.treasure_message: str = ""
         self.treasure_message_until: int = 0
@@ -578,6 +579,22 @@ class Room:
             self.locked = False
             if ShopkeeperCls:
                 self._ensure_shopkeeper(cfg, ShopkeeperCls)
+        elif self.type == "profesor_ibarra":
+            self.safe = True
+            self.no_spawn = True
+            self.no_combat = True
+            self.locked = False
+            if self.profesor_ibarra is None:
+                try:
+                    from ui.ProfesorIbarra import ProfesorIbarra
+                    rx, ry, rw, rh = self.bounds
+                    ts = cfg.TILE_SIZE
+                    cx = (rx + rw // 2) * ts
+                    cy = (ry + rh // 2) * ts
+                    zona = getattr(self, "_ibarra_zona", 1)
+                    self.profesor_ibarra = ProfesorIbarra((cx, cy), zona=zona)
+                except Exception:
+                    pass
         elif self.type == "treasure":
             self.safe = True
             self.no_spawn = True
@@ -604,6 +621,10 @@ class Room:
         """
         if self.type == "treasure":
             self._handle_treasure_events(events, player)
+
+        if self.type == "profesor_ibarra":
+            self._handle_profesor_ibarra_events(events, player, shop_ui, world_surface, screen_scale)
+            return
 
         if self.type == "safe_mara":
             # Sala segura con Mara: mostrar prompt de diálogo
@@ -675,6 +696,62 @@ class Room:
                     bought, msg = shop_ui.handle_click((mx, my), player)
                     # TODO: usar msg en HUD si se desea
 
+    def _handle_profesor_ibarra_events(self, events, player, shop_ui, world_surface, screen_scale=1):
+        """Gestiona todos los estados del Profesor Ibarra dentro de la sala."""
+        prof = self.profesor_ibarra
+        if prof is None:
+            return
+
+        can_interact = False
+        if hasattr(player, "rect"):
+            can_interact = prof.can_interact(player.rect())
+        else:
+            can_interact = True
+
+        for ev in events:
+            if ev.type == pygame.KEYDOWN:
+                # Activar interacción inicial
+                if ev.key == pygame.K_e and can_interact and prof.estado == prof.IDLE:
+                    prof.iniciar_interaccion()
+                    continue
+
+                # Abrir tienda directamente si la pregunta ya fue respondida
+                if ev.key == pygame.K_e and can_interact and prof.estado == prof.LISTO:
+                    shop_ui.open(world_surface.get_width() // 2, world_surface.get_height() // 2)
+                    continue
+
+                # Delegar teclas al profesor durante pregunta/feedback
+                if prof.estado in (prof.PREGUNTA, prof.FEEDBACK):
+                    prof.handle_event(ev, player)
+                    continue
+
+                # Controles de la tienda si está abierta
+                if shop_ui.active:
+                    if ev.key == pygame.K_ESCAPE:
+                        shop_ui.close()
+                    elif ev.key == pygame.K_UP:
+                        shop_ui.move_selection(-1)
+                    elif ev.key == pygame.K_DOWN:
+                        shop_ui.move_selection(+1)
+                    elif ev.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        shop_ui.try_buy(player)
+
+            # Mouse en la tienda
+            if shop_ui.active and ev.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN):
+                if hasattr(ev, "pos"):
+                    mx = ev.pos[0] // max(1, screen_scale)
+                    my = ev.pos[1] // max(1, screen_scale)
+                    if ev.type == pygame.MOUSEMOTION:
+                        shop_ui.update_hover((mx, my))
+                    elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                        shop_ui.handle_click((mx, my), player)
+
+        # Transición automática: cuando el profesor marca ABRIR_TIENDA, abrir tienda
+        if prof.estado == prof.ABRIR_TIENDA:
+            shop_ui.ensure_inventory()
+            shop_ui.open(world_surface.get_width() // 2, world_surface.get_height() // 2)
+            prof.estado = prof.LISTO
+
     def draw_overlay(self, surface, ui_font, player, shop_ui):
         """
         Dibuja elementos propios de la sala por encima del piso (p.ej. el mercader y tooltip).
@@ -693,6 +770,24 @@ class Room:
             if hasattr(player, "rect") and self.shopkeeper.can_interact(player.rect()):
                 tip = ui_font.render("E - Hablar con Mara", True, (255, 200, 150))
                 surface.blit(tip, (self.shopkeeper.rect.x - 12, self.shopkeeper.rect.y - 22))
+
+        if self.type == "profesor_ibarra" and self.profesor_ibarra is not None:
+            prof = self.profesor_ibarra
+            prof.draw(surface, ui_font)
+            # Hint de interacción cuando el jugador está cerca y la tienda no está abierta
+            if (hasattr(player, "rect")
+                    and prof.can_interact(player.rect())
+                    and prof.estado == prof.IDLE
+                    and not shop_ui.active):
+                prof.draw_idle_hint(surface, ui_font)
+            # Hint cuando la pregunta ya fue respondida
+            if (hasattr(player, "rect")
+                    and prof.can_interact(player.rect())
+                    and prof.estado == prof.LISTO
+                    and not shop_ui.active):
+                tip = ui_font.render("E - Abrir tienda", True, (140, 210, 255))
+                cx, cy = prof.pos
+                surface.blit(tip, (cx - tip.get_width() // 2, cy - 58))
 
             
             
