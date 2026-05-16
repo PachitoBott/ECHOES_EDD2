@@ -630,6 +630,17 @@ class Game:
             return
 
         room = self.dungeon.current_room
+
+        # --- Profesor Ibarra: bloquear gameplay durante la pregunta ---
+        if getattr(room, "type", "") == "profesor_ibarra":
+            prof = getattr(room, "profesor_ibarra", None)
+            if prof is not None and prof.estado in (prof.PREGUNTA, prof.FEEDBACK):
+                room.handle_events(
+                    events, self.player, self.shop,
+                    self.world, self.ui_font, self.cfg.SCREEN_SCALE,
+                )
+                return
+
         self._update_player(dt, room)
         self._spawn_room_enemies(room)
         self._update_enemies(dt, room)
@@ -662,8 +673,8 @@ class Game:
             return
 
         # Salas especiales sin enemigos
-        if getattr(room, "type", "normal") == "safe_mara":
-            return  # Sala de Mara siempre está vacía
+        if getattr(room, "type", "normal") in ("safe_mara", "profesor_ibarra"):
+            return  # Salas especiales sin combate
 
         cx, cy = self.dungeon.grid_w // 2, self.dungeon.grid_h // 2
         is_start = (self.dungeon.i, self.dungeon.j) == getattr(self.dungeon, "start", (cx, cy))
