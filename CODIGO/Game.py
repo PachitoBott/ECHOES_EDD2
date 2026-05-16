@@ -28,6 +28,10 @@ from core.asset_paths import WEAPON_SPRITE_FILENAMES, assets_dir, weapon_sprite_
 from narrative.cinematics import CinematicSystem
 from narrative.dialogue_system import DialogueSystem
 
+# --- Networking (Fase 3) ---
+from network import NetworkManager, EventoRed
+from dev.logger import log_net
+
 # --- Herramientas de desarrollo ---
 from dev.logger import log_game, log_asset, log_room, log_player
 from dev.hot_reload import AssetWatcher
@@ -39,10 +43,23 @@ class Game:
     COIN_ICON_DEFAULT_SCALE = 1.5
     COIN_PICKUP_SIZE = (12, 12)
 
-    def __init__(self, cfg: Config, *, debug_mode: bool = False) -> None:
+    def __init__(
+        self,
+        cfg: Config,
+        *,
+        debug_mode: bool = False,
+        mode: str = "offline",
+        port: int = 5555,
+        host: str = "127.0.0.1",
+        role: str = "victim",
+    ) -> None:
         pygame.init()
         self.cfg = cfg
         self._debug_mode = debug_mode
+        self._net_mode = mode
+        self._net_port = port
+        self._net_host = host
+        self._net_role = role
 
         # ---------- Ventana ----------
         self.screen = pygame.display.set_mode(
@@ -143,6 +160,27 @@ class Game:
         self._current_zone: int = 1
         self._intro_played: bool = False
         self._mara_cutscene_played: bool = False  # Cinemática de Mara: se dispara solo una vez
+
+        # ---------- Networking (Fase 3) ----------
+        self.net: NetworkManager | None = None
+        if self._net_mode == "server":
+            self.net = NetworkManager.como_servidor(port=self._net_port, seed=None)
+            if not self.net.iniciar():
+                log_game.error("❌ No se pudo iniciar servidor de red")
+                self.running = False
+            else:
+                log_game.info(f"✅ Servidor escuchando en puerto {self._net_port}")
+        elif self._net_mode == "client":
+            self.net = NetworkManager.como_cliente(
+                host=self._net_host,
+                port=self._net_port,
+                rol=self._net_role,
+            )
+            if not self.net.iniciar():
+                log_game.error(f"❌ No se pudo conectar a {self._net_host}:{self._net_port}")
+                self.running = False
+            else:
+                log_game.info(f"✅ Conectado al servidor como {self._net_role}")
 
         # ---------- Herramientas de desarrollo ----------
         # Consola de debug (F1): siempre creada, solo visible en debug_mode
@@ -270,6 +308,8 @@ class Game:
 
         pygame.mouse.set_visible(True)
         self._finalize_run_statistics("shutdown")
+        if self.net:
+            self.net.detener()
         pygame.quit()
         sys.exit(0)
 
@@ -382,6 +422,8 @@ class Game:
     def run(self) -> None:
         if not self._open_start_menu():
             pygame.mouse.set_visible(True)
+            if self.net:
+                self.net.detener()
             pygame.quit()
             sys.exit(0)
 
@@ -400,6 +442,8 @@ class Game:
 
         pygame.mouse.set_visible(True)
         self._finalize_run_statistics("shutdown")
+        if self.net:
+            self.net.detener()
         pygame.quit()
         sys.exit(0)
 
@@ -453,6 +497,43 @@ class Game:
         self.start_new_run(seed=menu_result.seed)
         self._skip_frame = True
         return True
+
+    def _procesar_evento_red(self, ev: EventoRed) -> None:
+        """
+        Procesa eventos de red que llegan del NetworkManager.
+
+        Por ahora solo loguea eventos (el gameplay no cambia).
+        Después se agregará sincronización de jugadores, enemigos, etc.
+        """
+        log_net.info(f"[NET] Evento: {ev.tipo} desde {ev.origen}")
+
+        if ev.tipo == "jugador_unido":
+            rol = ev.datos.get("rol")
+            log_net.info(f"✅ Jugador {rol} se unió a la sesión")
+
+        elif ev.tipo == "jugador_desconectado":
+            rol = ev.datos.get("rol")
+            motivo = ev.datos.get("motivo", "desconocido")
+            log_net.info(f"❌ Jugador {rol} desconectado ({motivo})")
+
+        elif ev.tipo == "estado":
+            # Estado remoto del otro jugador (sincronización de posición, HP, etc.)
+            # Por ahora se ignora. Después se renderizará el otro jugador aquí.
+            pass
+
+        elif ev.tipo == "apoyo_recibido":
+            # Aliado envió un apoyo (curación, monedas, escudo, etc.)
+            tipo_apoyo = ev.datos.get("apoyo")
+            valor = ev.datos.get("valor")
+            log_net.info(f"🔵 Apoyo recibido: {tipo_apoyo} ({valor})")
+            # Aquí se aplicaría el efecto sobre el jugador (después)
+
+        elif ev.tipo == "error_red":
+            descripcion = ev.datos.get("descripcion", "error desconocido")
+            log_game.warning(f"⚠️ Error de red: {descripcion}")
+
+        else:
+            log_net.debug(f"Evento de red no manejado: {ev.tipo}")
 
     def add_pause_menu_button(
         self,
@@ -508,6 +589,12 @@ class Game:
             )
 
     def _update(self, dt: float, events: list) -> None:
+        # --- Networking: procesar eventos de red cada frame (sin bloqueo) ---
+        if self.net:
+            net_eventos = self.net.tick()
+            for ev in net_eventos:
+                self._procesar_evento_red(ev)
+
         # --- Cinematicas ---
         # Si una cinemática está activa, procesar input y no actualizar el juego
         if self.cinematics.activo:

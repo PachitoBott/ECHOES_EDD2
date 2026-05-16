@@ -42,6 +42,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "  python Main.py --skip-menu            # seed aleatoria, sin menú\n"
             "  python Main.py --seed 1234 --room 5,3 # seed + sala específica\n"
             "  python Main.py --debug                # activa consola F1\n"
+            "\n"
+            "Multijugador (Cliente-Servidor):\n"
+            "  python Main.py --server --port 5555 --skip-menu\n"
+            "  python Main.py --client --host 127.0.0.1 --port 5555 --role victim --skip-menu\n"
+            "  python Main.py --client --host 127.0.0.1 --port 5555 --role ally --skip-menu\n"
         ),
     )
     parser.add_argument(
@@ -68,6 +73,39 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="skip_menu",
         action="store_true",
         help="Salta el menú principal e inicia directamente con seed aleatoria",
+    )
+    # --- Networking ---
+    parser.add_argument(
+        "--server",
+        action="store_true",
+        help="Modo servidor: hospeda la sesión multijugador",
+    )
+    parser.add_argument(
+        "--client",
+        action="store_true",
+        help="Modo cliente: se conecta a un servidor",
+    )
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        metavar="ADDR",
+        help="IP/hostname del servidor (solo con --client, default 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=5555,
+        metavar="PORT",
+        help="Puerto TCP para servidor o cliente (default 5555)",
+    )
+    parser.add_argument(
+        "--role",
+        type=str,
+        default="victima",
+        choices=["victim", "ally", "victima", "aliado"],
+        metavar="ROLE",
+        help="Rol del cliente: 'victim'/'victima' (controla) o 'ally'/'aliado' (soporte)",
     )
     return parser
 
@@ -101,15 +139,31 @@ if __name__ == "__main__":
     args       = _build_parser().parse_args()
     start_room = _parse_room(args.room)
 
-    # Crear instancia del juego con el modo debug si se solicitó
-    game = Game(CFG, debug_mode=args.debug)
+    # Traducir roles: "victim"/"ally" (inglés) → "victima"/"aliado" (español)
+    role_map = {"victim": "victima", "ally": "aliado"}
+    role_normalizado = role_map.get(args.role, args.role)
+
+    # Determinar modo de red
+    net_mode = "offline"
+    net_params = {}
+    if args.server:
+        net_mode = "server"
+        net_params = {"port": args.port}
+        log_game.info(f"Modo servidor: puerto {args.port}")
+    elif args.client:
+        net_mode = "client"
+        net_params = {"host": args.host, "port": args.port, "role": role_normalizado}
+        log_game.info(f"Modo cliente: {role_normalizado} @ {args.host}:{args.port}")
+
+    # Crear instancia del juego con el modo de red
+    game = Game(CFG, debug_mode=args.debug, mode=net_mode, **net_params)
 
     # Decidir si saltar el menú
-    skip_menu = args.skip_menu or (start_room is not None) or (args.seed is not None)
+    skip_menu = args.skip_menu or (start_room is not None) or (args.seed is not None) or args.server or args.client
 
     if skip_menu:
         log_game.info(
-            f"Inicio rápido — seed={args.seed}  sala={start_room}  debug={args.debug}"
+            f"Inicio rápido — seed={args.seed}  sala={start_room}  debug={args.debug}  modo={net_mode}"
         )
         game.quick_start(seed=args.seed, start_room=start_room)
     else:
