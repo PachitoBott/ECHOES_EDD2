@@ -16,27 +16,27 @@ class Shop:
 
     def __init__(self, font=None, on_gold_spent: Callable[[int], None] | None = None):
         # Catálogo completo de habilidades y mejoras disponibles en Echoes.
-        # Cada entrada tiene: nombre (visible), precio, tipo, id, peso de aparición.
+        # Cada entrada tiene: nombre (visible), precio, tipo, id, peso de aparición, descripción.
         self.catalog = [
             # --- Habilidades (ocupan el slot de arma activa) ---
-            {"name": "Bloqueo",          "price": 58,  "type": "weapon",     "id": "bloqueo",        "weight": 1.0},
-            {"name": "Reportar",         "price": 82,  "type": "weapon",     "id": "reportar",       "weight": 0.8},
-            {"name": "Apoyo de un amigo","price": 95,  "type": "weapon",     "id": "apoyo_amigo",    "weight": 0.6},
-            {"name": "Pausa digital",    "price": 108, "type": "weapon",     "id": "pausa_digital",  "weight": 0.6},
-            {"name": "Autoestima",       "price": 78,  "type": "weapon",     "id": "autoestima",     "weight": 0.6},
-            {"name": "Evidencia",        "price": 104, "type": "weapon",     "id": "evidencia",      "weight": 0.5},
+            {"name": "Bloqueo",          "price": 58,  "type": "weapon",     "id": "bloqueo",        "weight": 1.0, "desc": "Paras los ataques entrantes.\nReduce daño recibido."},
+            {"name": "Reportar",         "price": 82,  "type": "weapon",     "id": "reportar",       "weight": 0.8, "desc": "Marca enemigos para eliminarlos.\nMayor velocidad de ataque."},
+            {"name": "Apoyo de un amigo","price": 95,  "type": "weapon",     "id": "apoyo_amigo",    "weight": 0.6, "desc": "Ataque que heala aliados.\nFortalece a compañeros cercanos."},
+            {"name": "Pausa digital",    "price": 108, "type": "weapon",     "id": "pausa_digital",  "weight": 0.6, "desc": "Congela enemigos brevemente.\nDa tiempo para reagruparse."},
+            {"name": "Autoestima",       "price": 78,  "type": "weapon",     "id": "autoestima",     "weight": 0.6, "desc": "Aumenta defensa personal.\nReduce miedo y estrés."},
+            {"name": "Evidencia",        "price": 104, "type": "weapon",     "id": "evidencia",      "weight": 0.5, "desc": "Recopila pruebas contra acosadores.\nDaño crítico a enemigos especiales."},
             # --- Mejoras permanentes ---
-            {"name": "Vida extra (+1)",            "price": 45, "type": "upgrade",    "id": "hp_up",       "weight": 4},
-            {"name": "Mayor resistencia (+5%)",    "price": 30, "type": "upgrade",    "id": "spd_up",      "weight": 3},
-            {"name": "Escudo reforzado (+1 golpe)","price": 60, "type": "upgrade",    "id": "armor_up",    "weight": 2},
-            {"name": "Enfriamiento rápido (-10%)", "price": 54, "type": "upgrade",    "id": "cdr_charm",   "weight": 3},
-            {"name": "Concentración (-12% cd)",    "price": 72, "type": "upgrade",    "id": "cdr_core",    "weight": 2},
-            {"name": "Reflejos (+10% sprint)",     "price": 48, "type": "upgrade",    "id": "sprint_core", "weight": 3},
-            {"name": "Evasión (-15% cooldown)",    "price": 66, "type": "upgrade",    "id": "dash_core",   "weight": 2},
-            {"name": "Impulso (+duración evasión)","price": 56, "type": "upgrade",    "id": "dash_drive",  "weight": 2},
+            {"name": "Vida extra (+1)",            "price": 45, "type": "upgrade",    "id": "hp_up",       "weight": 4, "desc": "Aumenta tu resistencia física.\n+1 máximo HP."},
+            {"name": "Mayor resistencia (+5%)",    "price": 30, "type": "upgrade",    "id": "spd_up",      "weight": 3, "desc": "Mejora tu velocidad de movimiento.\n+5% velocidad."},
+            {"name": "Escudo reforzado (+1 golpe)","price": 60, "type": "upgrade",    "id": "armor_up",    "weight": 2, "desc": "Fortalece tu defensa.\n+1 al blindaje."},
+            {"name": "Enfriamiento rápido (-10%)", "price": 54, "type": "upgrade",    "id": "cdr_charm",   "weight": 3, "desc": "Reduce tiempo entre ataques.\n-10% cooldown de armas."},
+            {"name": "Concentración (-12% cd)",    "price": 72, "type": "upgrade",    "id": "cdr_core",    "weight": 2, "desc": "Mejora precisión y enfoque.\n-12% cooldown de habilidades."},
+            {"name": "Reflejos (+10% sprint)",     "price": 48, "type": "upgrade",    "id": "sprint_core", "weight": 3, "desc": "Aumenta tu agilidad.\n+10% velocidad de sprint."},
+            {"name": "Evasión (-15% cooldown)",    "price": 66, "type": "upgrade",    "id": "dash_core",   "weight": 2, "desc": "Mejora tus esquivas.\n-15% cooldown de dash."},
+            {"name": "Impulso (+duración evasión)","price": 56, "type": "upgrade",    "id": "dash_drive",  "weight": 2, "desc": "Prolonga tu invulnerabilidad.\n+0.08s duración de dash."},
             # --- Consumibles ---
-            {"name": "Apoyo emocional (+2 HP)",    "price": 28, "type": "consumable", "id": "heal_medium", "amount": 2, "weight": 4},
-            {"name": "Descanso completo (HP full)", "price": 90, "type": "consumable", "id": "heal_full",   "weight": 1},
+            {"name": "Apoyo emocional (+2 HP)",    "price": 28, "type": "consumable", "id": "heal_medium", "amount": 2, "weight": 4, "desc": "Restaura 2 puntos de vida.\nUsable una vez."},
+            {"name": "Descanso completo (HP full)", "price": 90, "type": "consumable", "id": "heal_full",   "weight": 1, "desc": "Restaura toda tu vida.\nUsable una vez."},
             # --- Paquetes ---
             {
                 "name": "Kit de supervivencia",
@@ -48,6 +48,7 @@ class Shop:
                     {"type": "upgrade",     "id": "spd_up"},
                 ],
                 "weight": 2,
+                "desc": "Pack para empezar fuerte.\nOro + curacion + velocidad.",
             },
             {
                 "name": "Paquete de apoyo",
@@ -59,6 +60,7 @@ class Shop:
                     {"type": "upgrade",     "id": "cdr_charm"},
                 ],
                 "weight": 2,
+                "desc": "Pack para combate sostenido.\nOro + curacion + recarga rápida.",
             },
         ]
         self.items: list[dict] = []
@@ -379,6 +381,58 @@ class Shop:
         return new_hp != hp
 
     # ------------------------------------------------------------------ #
+    # Tooltip con descripción
+    # ------------------------------------------------------------------ #
+
+    def _draw_tooltip(self, surface, desc: str, max_width: int = 180) -> None:
+        """Dibuja un tooltip con la descripción del item debajo de la tienda."""
+        # Dividir descripción en líneas
+        lines = desc.split("\n")
+
+        # Usar una fuente un poco más pequeña para el tooltip
+        tooltip_font = pygame.font.SysFont(None, 14)
+
+        # Renderizar líneas
+        rendered_lines = [tooltip_font.render(line, True, (220, 220, 200)) for line in lines]
+
+        # Calcular dimensiones del tooltip
+        line_height = 16
+        padding = 8
+        tooltip_height = len(rendered_lines) * line_height + padding * 2
+        tooltip_width = max(r.get_width() for r in rendered_lines) + padding * 2 if rendered_lines else 100
+        tooltip_width = min(tooltip_width, max_width)
+
+        # Posicionar debajo de la tienda
+        tooltip_x = self.rect.x + self.rect.width + 12
+        tooltip_y = self.rect.y + 36
+
+        # Ajustar si se sale de pantalla
+        screen_width = surface.get_width()
+        screen_height = surface.get_height()
+
+        if tooltip_x + tooltip_width > screen_width:
+            tooltip_x = self.rect.x - tooltip_width - 12
+
+        if tooltip_y + tooltip_height > screen_height:
+            tooltip_y = self.rect.y + self.rect.height - tooltip_height
+
+        # Dibujar fondo del tooltip (semitransparente)
+        tooltip_rect = pygame.Rect(tooltip_x, tooltip_y, tooltip_width, tooltip_height)
+
+        # Crear surface temporal para el fondo semitransparente
+        tooltip_surface = pygame.Surface((tooltip_width, tooltip_height), pygame.SRCALPHA)
+        pygame.draw.rect(tooltip_surface, (30, 25, 50, 200), tooltip_surface.get_rect())
+        pygame.draw.rect(tooltip_surface, (180, 160, 220), tooltip_surface.get_rect(), 1)
+
+        surface.blit(tooltip_surface, (tooltip_x, tooltip_y))
+
+        # Dibujar texto
+        y_offset = tooltip_y + padding
+        for line_surf in rendered_lines:
+            surface.blit(line_surf, (tooltip_x + padding, y_offset))
+            y_offset += line_height
+
+    # ------------------------------------------------------------------ #
     # Renderizado
     # ------------------------------------------------------------------ #
 
@@ -409,3 +463,10 @@ class Shop:
             color = (255, 240, 180) if is_selected else ((255, 255, 255) if is_hover else (235, 235, 235))
             surface.blit(self.font.render(line, True, color), (self.rect.x + 18, y))
             y += 24
+
+        # --- Tooltip con descripción del item seleccionado ---
+        if self.selected < len(self.items):
+            item = self.items[self.selected]
+            desc = item.get("desc", "")
+            if desc:
+                self._draw_tooltip(surface, desc)

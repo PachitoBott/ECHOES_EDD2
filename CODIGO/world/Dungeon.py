@@ -111,8 +111,8 @@ class Dungeon:
         # 4.5) Asignar zonas narrativas (Fase 5) según profundidad BFS
         self._assign_zones()
 
-        # <<< NUEVO: ubicar la tienda cerca del inicio del camino principal
-        self._place_shop_room()
+        # <<< COMENTADO: la tienda antigua se reemplaza por Profesor Ibarra como único NPC de compra
+        # self._place_shop_room()
 
         # <<< NUEVO: sala segura con Mara en Zona 2
         self._place_mara_safe_room()
