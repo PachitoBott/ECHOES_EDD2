@@ -1,36 +1,66 @@
 {
   "id": "inicio",
-  "texto": "No te conozco. Pero sé lo que se siente.",
+  "texto": "El acoso digital destruye vidas. Yo casi no sobrevivo.",
   "meta": {
-    "personaje": "Mara"
+    "personaje": "Mara",
+    "contexto": "Mara comparte su dolor y espera reacción del jugador"
   },
   "hijos": [
     {
-      "id": "explicacion",
-      "texto": "Aquí abajo, solo no se sale. Pero juntos, podemos entender lo que pasó.",
+      "id": "opcion_sin_empatia",
+      "texto": "Bueno, tenías que ser más fuerte",
       "meta": {
-        "personaje": "Mara"
+        "es_empatia": false,
+        "tipo": "cruel"
       },
       "hijos": [
         {
-          "id": "fin_empatia",
-          "texto": "Entiendo.",
-          "meta": {},
+          "id": "respuesta_cruel",
+          "texto": "...(Mara se aleja, decepcionada)",
+          "meta": {
+            "personaje": "Mara",
+            "fragmento": false
+          },
           "hijos": []
         }
       ]
     },
     {
-      "id": "silencio",
-      "texto": "Está bien no hablar. A veces el silencio dice más que las palabras.",
+      "id": "opcion_empatia",
+      "texto": "Entiendo tu dolor. Estoy contigo",
       "meta": {
-        "personaje": "Mara"
+        "es_empatia": true,
+        "tipo": "compasiva",
+        "otorga_fragmento": "empatia_mara"
       },
       "hijos": [
         {
-          "id": "fin_silencio",
-          "texto": "...",
-          "meta": {},
+          "id": "respuesta_empatia",
+          "texto": "Por fin alguien que entiende... No estás solo(a). Juntos podemos romper este ciclo.",
+          "meta": {
+            "personaje": "Mara",
+            "fragmento": true,
+            "fragmento_id": "empatia_mara"
+          },
+          "hijos": []
+        }
+      ]
+    },
+    {
+      "id": "opcion_pragmatica",
+      "texto": "¿Cómo puedo ayudar?",
+      "meta": {
+        "es_empatia": false,
+        "tipo": "pragmatica"
+      },
+      "hijos": [
+        {
+          "id": "respuesta_pragmatica",
+          "texto": "Primero, escuchando. Eso ya es algo.",
+          "meta": {
+            "personaje": "Mara",
+            "fragmento": false
+          },
           "hijos": []
         }
       ]

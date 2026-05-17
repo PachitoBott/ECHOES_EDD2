@@ -1163,6 +1163,25 @@ class Game:
             cinematic_id = f"zone_transition_{new_zone}"
             self.cinematics.reproducir(cinematic_id)
 
+    def _on_mara_dialogue_finished(self) -> None:
+        """
+        Callback ejecutado cuando termina el diálogo con Mara.
+        Detecta si el jugador eligió una opción compasiva y otorga fragmento de empatía.
+        """
+        # Obtener el nodo actual (la opción elegida por el jugador)
+        nodo = self.dialogue.obtener_nodo_actual()
+        if nodo is None:
+            return
+
+        # Verificar si la opción fue compasiva (meta tiene es_empatia=true)
+        meta = nodo.meta or {}
+        es_empatia = meta.get("es_empatia", False)
+
+        if es_empatia:
+            # Otorgar fragmento de empatía
+            self.player.empathy_fragments += 1
+            log_game.info(f"✨ +1 Fragmento de Empatía - Total: {self.player.empathy_fragments}")
+
     def _check_mara_dialogue_request(self, room, events) -> None:
         """
         Verifica si el jugador ha solicitado un diálogo con Mara.
@@ -1180,8 +1199,8 @@ class Game:
         # Limpiar el flag
         room._mara_dialogue_requested = False
 
-        # Iniciar diálogo con Mara
-        self.dialogue.iniciar("mara")
+        # Iniciar diálogo con Mara con callback para detectar opción compasiva
+        self.dialogue.iniciar("mara", callback_fin=self._on_mara_dialogue_finished)
 
     def _render(self) -> None:
         self._render_world()

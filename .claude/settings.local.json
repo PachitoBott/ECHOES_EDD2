@@ -3,7 +3,13 @@
     "allow": [
       "Bash(git add *)",
       "Bash(git commit -m 'fix: eliminate duplicate shops and add item descriptions with hover tooltips *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(python -c ' *)",
+      "Bash(git commit -m 'fix: ensure Mara placement and zone transitions work correctly *)",
+      "Bash(git commit -m 'fix: remove scan lines distortion from zone 2 - too visually noisy *)",
+      "Bash(git reset *)",
+      "Bash(git commit -m 'feat: implement empathy fragments from compassionate dialogue with Mara *)"
     ]
   }
 }
