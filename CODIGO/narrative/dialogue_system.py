@@ -364,6 +364,19 @@ class DialogueSystem:
         self._nodo_actual = None
         self._opciones = []
 
+    def obtener_nodo_actual(self) -> Optional[NodoArbol]:
+        """Retorna el nodo actual del diálogo (útil para detectar opciones seleccionadas)."""
+        if self._arbol_actual is None or self._nodo_actual is None:
+            return None
+        return self._arbol_actual.buscar(self._nodo_actual)
+
+    def obtener_meta_nodo_actual(self) -> Dict[str, Any]:
+        """Retorna la metadata del nodo actual."""
+        nodo = self.obtener_nodo_actual()
+        if nodo is None:
+            return {}
+        return nodo.meta or {}
+
     @property
     def activo(self) -> bool:
         return self._activo

@@ -31,6 +31,7 @@ class Player(Entity):
     def __init__(self, x: float, y: float, *, sprite_dir: str | Path | None = None) -> None:
         super().__init__(x, y, w=PLAYER_HITBOX_SIZE[0], h=PLAYER_HITBOX_SIZE[1], speed=120.0)
         self.gold = 0
+        self.empathy_fragments = 0  # Contador de fragmentos de empatía para final alternativo
         self.cooldown_scale = 1.0
         self._weapon_factory = WeaponFactory()
         self._owned_weapons: set[str] = set()
