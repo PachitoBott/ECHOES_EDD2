@@ -580,7 +580,9 @@ class Game:
         Busca el enemigo en la sala actual por posición y tipo, y lo elimina.
         """
         datos = ev.datos
-        sala_remota = datos.get("sala")
+        sala_remota_raw = datos.get("sala")
+        # Convert to tuple (JSON deserializes tuples as lists)
+        sala_remota = tuple(sala_remota_raw) if isinstance(sala_remota_raw, (list, tuple)) else (0, 0)
         pos_x = datos.get("pos_x")
         pos_y = datos.get("pos_y")
         enemy_type = datos.get("enemy_type")
@@ -614,7 +616,9 @@ class Game:
         Recibe un proyectil disparado por otro jugador y lo crea localmente.
         """
         datos = ev.datos
-        sala_remota = datos.get("sala")
+        sala_remota_raw = datos.get("sala")
+        # Convert to tuple (JSON deserializes tuples as lists)
+        sala_remota = tuple(sala_remota_raw) if isinstance(sala_remota_raw, (list, tuple)) else (0, 0)
 
         # Solo procesar si está en sala actual
         sala_actual = (self.dungeon.i, self.dungeon.j)
@@ -644,7 +648,9 @@ class Game:
         Aplica daño a un enemigo reportado por otro jugador.
         """
         datos = ev.datos
-        sala_remota = datos.get("sala")
+        sala_remota_raw = datos.get("sala")
+        # Convert to tuple (JSON deserializes tuples as lists)
+        sala_remota = tuple(sala_remota_raw) if isinstance(sala_remota_raw, (list, tuple)) else (0, 0)
 
         sala_actual = (self.dungeon.i, self.dungeon.j)
         if sala_remota != sala_actual:
@@ -676,16 +682,18 @@ class Game:
         from network.protocol import msg_proyectil_disparado
 
         weapon_id = getattr(self.player.weapon, "weapon_id", "default") if self.player.weapon else "default"
+        sala_actual = (self.dungeon.i, self.dungeon.j)
+
         evento = msg_proyectil_disparado(
             pos_x=pos[0],
             pos_y=pos[1],
             dir_x=direction[0],
             dir_y=direction[1],
             weapon_id=weapon_id,
-            sala=(self.dungeon.i, self.dungeon.j),
+            sala=sala_actual,
         )
+
         self.net.enviar(evento)
-        log_net.debug(f"Proyectil enviado: {weapon_id} desde ({pos[0]:.0f}, {pos[1]:.0f})")
 
     def add_pause_menu_button(
         self,
