@@ -665,7 +665,7 @@ class Game:
 
         sala_actual = (self.dungeon.i, self.dungeon.j)
         if sala_remota != sala_actual:
-            return
+            return 
 
         pos_x = datos.get("pos_x")
         pos_y = datos.get("pos_y")
@@ -2026,4 +2026,4 @@ class Game:
         width = width_columns * icon_w + max(0, width_columns - 1) * spacing_x
         height = rows * icon_h + max(0, rows - 1) * spacing_y
 
-        return pygame.Rect(ox, oy, width, height)
+        return pygame.Rect(ox, oy, width, height) 
