@@ -596,25 +596,31 @@ class Game:
         # Validate that room exists (dungeon may have different sizes between clients)
         try:
             room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
-        except (KeyError, IndexError):
-            log_net.warning(f"Sala {sala_remota} no existe en este dungeon")
+        except (KeyError, IndexError, TypeError) as e:
+            log_net.warning(f"Sala {sala_remota} no existe en este dungeon: {e}")
+            return
+        except Exception as e:
+            log_net.error(f"ERROR accediendo a rooms[{sala_remota}]: {e}", exc_info=True)
             return
 
-        # Buscar enemigo que coincida con posición y tipo
-        # Usar tolerancia para diferencias por interpolación cliente
-        tolerance = 5.0  # píxeles
+        try:
+            # Buscar enemigo que coincida con posición y tipo
+            # Usar tolerancia para diferencias por interpolación cliente
+            tolerance = 5.0  # píxeles
 
-        for i, enemy in enumerate(room.enemies):
-            dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
-            if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
-                # Encontrado enemigo que coincide — removerlo
-                log_net.info(f"🗑️ Removiendo {enemy_type} en posición ({pos_x}, {pos_y})")
-                room.enemies.pop(i)
-                break
-        else:
-            log_net.warning(
-                f"No encontré {enemy_type} en ({pos_x}, {pos_y}) sala {sala_remota}"
-            )
+            for i, enemy in enumerate(room.enemies):
+                dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
+                if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
+                    # Encontrado enemigo que coincide — removerlo
+                    log_net.info(f"🗑️ Removiendo {enemy_type} en posición ({pos_x}, {pos_y})")
+                    room.enemies.pop(i)
+                    break
+            else:
+                log_net.debug(
+                    f"No encontré {enemy_type} en ({pos_x}, {pos_y}) sala {sala_remota}"
+                )
+        except Exception as e:
+            log_net.error(f"ERROR buscando/removiendo enemigo: {e}", exc_info=True)
 
     def _handle_remote_projectile(self, ev: EventoRed) -> None:
         """
@@ -669,20 +675,27 @@ class Game:
         # Validate that room exists
         try:
             room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
-        except (KeyError, IndexError):
-            log_net.warning(f"Sala {sala_remota} no existe en este dungeon")
+        except (KeyError, IndexError, TypeError) as e:
+            log_net.warning(f"Sala {sala_remota} no existe en este dungeon: {e}")
             return
-        tolerance = 5.0
+        except Exception as e:
+            log_net.error(f"ERROR accediendo a rooms[{sala_remota}]: {e}", exc_info=True)
+            return
 
-        for enemy in room.enemies:
-            dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
-            if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
-                # Aplica el daño PERO sin enviar otro evento (para evitar loops infinitos)
-                if hasattr(enemy, "take_damage"):
-                    enemy.take_damage(damage, None)
-                else:
-                    enemy.hp -= damage
-                break
+        try:
+            tolerance = 5.0
+
+            for enemy in room.enemies:
+                dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
+                if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
+                    # Aplica el daño PERO sin enviar otro evento (para evitar loops infinitos)
+                    if hasattr(enemy, "take_damage"):
+                        enemy.take_damage(damage, None)
+                    else:
+                        enemy.hp -= damage
+                    break
+        except Exception as e:
+            log_net.error(f"ERROR aplicando daño remoto: {e}", exc_info=True)
 
     def _on_player_shoot(self, pos: tuple[float, float], direction: tuple[float, float]) -> None:
         """Callback when player fires - send network event."""
