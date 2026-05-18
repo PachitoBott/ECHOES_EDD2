@@ -17,6 +17,7 @@ class Projectile:
         damage: float = 1.0,
         is_boss_projectile: bool = False,
         on_impact: Callable[["Projectile", tuple[float, float], tuple[float, float]], None] | None = None,
+        owner_id: str | None = None,
     ):
         self.x, self.y = x, y
         self.dx, self.dy = dx, dy
@@ -31,6 +32,7 @@ class Projectile:
         self.damage: float = damage
         self.is_boss_projectile = is_boss_projectile
         self.on_impact = on_impact
+        self.owner_id = owner_id  # Track who fired this projectile
 
     def rect(self) -> pygame.Rect:
         r = self.radius

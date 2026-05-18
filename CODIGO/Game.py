@@ -2,6 +2,7 @@
 import math
 import random
 import sys
+import time
 from collections.abc import Callable
 from time import perf_counter
 from pathlib import Path
@@ -120,6 +121,7 @@ class Game:
         # ---------- Estado runtime ----------
         self.projectiles = ProjectileGroup()          # balas del jugador
         self.enemy_projectiles = ProjectileGroup()    # balas de enemigos
+        self.remote_projectiles = []                  # balas disparadas por otros jugadores
         self.door_cooldown = 0.0
         self.running = True
         self.debug_draw_doors = cfg.DEBUG_DRAW_DOOR_TRIGGERS
@@ -170,6 +172,9 @@ class Game:
 
         # ---------- Networking (Fase 3) ----------
         self.net: NetworkManager | None = None
+        self.remote_players: dict = {}  # Almacena estado de jugadores remotos
+        self._send_state_interval = 0.1  # Enviar estado cada 100ms (~10 Hz)
+        self._last_state_send = 0.0
         if self._net_mode == "server":
             self.net = NetworkManager.como_servidor(port=self._net_port, seed=None)
             if not self.net.iniciar():
@@ -341,6 +346,11 @@ class Game:
         pygame.display.set_caption(f"Echoes — Seed {self.current_seed}")
         log_game.info(f"Nueva partida — seed={self.current_seed}  salas={len(self.dungeon.rooms)}")
 
+        # Actualizar seed del servidor (para que la comunique a los clientes)
+        if self.net and self.net.es_servidor and hasattr(self.net, '_servidor'):
+            self.net._servidor.seed = self.current_seed
+            log_game.info(f"✅ Seed compartida con clientes: {self.current_seed}")
+
         # preparar inventario de la tienda para esta seed
         if hasattr(self, "shop"):
             self.shop.close()
@@ -362,6 +372,10 @@ class Game:
         if hasattr(self.player, "reset_loadout"):
             self.player.reset_loadout()
         setattr(self.player, "gold", 0)
+
+        # Set up shooting callback for network synchronization
+        if self.net:
+            self.player.on_shoot = self._on_player_shoot
 
         # Reset de runtime
         self._reset_runtime_state()
@@ -523,18 +537,34 @@ class Game:
             rol = ev.datos.get("rol")
             motivo = ev.datos.get("motivo", "desconocido")
             log_net.info(f"❌ Jugador {rol} desconectado ({motivo})")
+            # Limpiar datos del jugador desconectado
+            if rol in self.remote_players:
+                del self.remote_players[rol]
 
         elif ev.tipo == "estado":
-            # Estado remoto del otro jugador (sincronización de posición, HP, etc.)
-            # Por ahora se ignora. Después se renderizará el otro jugador aquí.
-            pass
+            # Estado remoto del otro jugador — guardar para renderizar
+            origen = ev.origen
+            if origen and origen != self.net.rol:  # No guardar nuestro propio estado
+                self.remote_players[origen] = ev.datos
+                # No loguear estado (demasiados logs por segundo)
+
+        elif ev.tipo == "enemigo_muerto":
+            # Enemigo fue eliminado por otro jugador
+            self._handle_remote_enemy_death(ev)
+
+        elif ev.tipo == "proyectil_disparado":
+            # Otro jugador disparó un proyectil
+            self._handle_remote_projectile(ev)
+
+        elif ev.tipo == "enemigo_danado":
+            # Enemigo recibió daño de otro jugador
+            self._handle_remote_damage(ev)
 
         elif ev.tipo == "apoyo_recibido":
             # Aliado envió un apoyo (curación, monedas, escudo, etc.)
             tipo_apoyo = ev.datos.get("apoyo")
             valor = ev.datos.get("valor")
             log_net.info(f"🔵 Apoyo recibido: {tipo_apoyo} ({valor})")
-            # Aquí se aplicaría el efecto sobre el jugador (después)
 
         elif ev.tipo == "error_red":
             descripcion = ev.datos.get("descripcion", "error desconocido")
@@ -542,6 +572,120 @@ class Game:
 
         else:
             log_net.debug(f"Evento de red no manejado: {ev.tipo}")
+
+    def _handle_remote_enemy_death(self, ev: EventoRed) -> None:
+        """
+        Procesa la muerte de un enemigo reportada por otro jugador.
+
+        Busca el enemigo en la sala actual por posición y tipo, y lo elimina.
+        """
+        datos = ev.datos
+        sala_remota = datos.get("sala")
+        pos_x = datos.get("pos_x")
+        pos_y = datos.get("pos_y")
+        enemy_type = datos.get("enemy_type")
+
+        # Solo procesar si el enemigo murió en la sala actual
+        sala_actual = (self.dungeon.i, self.dungeon.j)
+        if sala_remota != sala_actual:
+            log_net.debug(f"Enemigo muerto en otra sala {sala_remota}, ignorando")
+            return
+
+        room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
+
+        # Buscar enemigo que coincida con posición y tipo
+        # Usar tolerancia para diferencias por interpolación cliente
+        tolerance = 5.0  # píxeles
+
+        for i, enemy in enumerate(room.enemies):
+            dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
+            if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
+                # Encontrado enemigo que coincide — removerlo
+                log_net.info(f"🗑️ Removiendo {enemy_type} en posición ({pos_x}, {pos_y})")
+                room.enemies.pop(i)
+                break
+        else:
+            log_net.warning(
+                f"No encontré {enemy_type} en ({pos_x}, {pos_y}) sala {sala_remota}"
+            )
+
+    def _handle_remote_projectile(self, ev: EventoRed) -> None:
+        """
+        Recibe un proyectil disparado por otro jugador y lo crea localmente.
+        """
+        datos = ev.datos
+        sala_remota = datos.get("sala")
+
+        # Solo procesar si está en sala actual
+        sala_actual = (self.dungeon.i, self.dungeon.j)
+        if sala_remota != sala_actual:
+            return
+
+        # Crear proyectil local
+        from core.Projectile import Projectile
+
+        proj = Projectile(
+            x=datos.get("pos_x", 0),
+            y=datos.get("pos_y", 0),
+            dx=datos.get("dir_x", 0),
+            dy=datos.get("dir_y", 0),
+            speed=320.0,
+            radius=4,
+            color=(255, 230, 140),
+            owner_id=ev.origen,
+        )
+
+        # Agregar a proyectiles remotos
+        self.remote_projectiles.append(proj)
+        log_net.debug(f"Proyectil remoto de {ev.origen}")
+
+    def _handle_remote_damage(self, ev: EventoRed) -> None:
+        """
+        Aplica daño a un enemigo reportado por otro jugador.
+        """
+        datos = ev.datos
+        sala_remota = datos.get("sala")
+
+        sala_actual = (self.dungeon.i, self.dungeon.j)
+        if sala_remota != sala_actual:
+            return
+
+        pos_x = datos.get("pos_x")
+        pos_y = datos.get("pos_y")
+        damage = datos.get("damage", 1)
+        enemy_type = datos.get("enemy_type")
+
+        room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
+        tolerance = 5.0
+
+        for enemy in room.enemies:
+            dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
+            if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
+                # Aplica el daño PERO sin enviar otro evento (para evitar loops infinitos)
+                if hasattr(enemy, "take_damage"):
+                    enemy.take_damage(damage, None)
+                else:
+                    enemy.hp -= damage
+                break
+
+    def _on_player_shoot(self, pos: tuple[float, float], direction: tuple[float, float]) -> None:
+        """Callback when player fires - send network event."""
+        if not self.net:
+            return
+
+        from network.protocol import msg_proyectil_disparado
+
+        weapon_id = getattr(self.player.weapon, "weapon_id", "default") if self.player.weapon else "default"
+        evento = msg_proyectil_disparado(
+            pos_x=pos[0],
+            pos_y=pos[1],
+            dir_x=direction[0],
+            dir_y=direction[1],
+            weapon_id=weapon_id,
+            sala=(self.dungeon.i, self.dungeon.j),
+        )
+        self.net.enviar(evento)
+        log_net.debug(f"Proyectil enviado: {weapon_id} desde ({pos[0]:.0f}, {pos[1]:.0f})")
 
     def add_pause_menu_button(
         self,
@@ -597,9 +741,24 @@ class Game:
             )
 
     def _update(self, dt: float, events: list) -> None:
-        # --- Networking: procesar eventos de red cada frame (sin bloqueo) ---
+        # --- Networking: procesar eventos de red y enviar estado ---
         if self.net:
-            net_eventos = self.net.tick()
+            # Preparar estado local (ambos roles envían para sincronización)
+            estado_local = None
+            ahora = time.time()
+            if ahora - self._last_state_send >= self._send_state_interval:
+                estado_local = {
+                    "pos_x": self.player.x,
+                    "pos_y": self.player.y,
+                    "sala": (self.dungeon.i, self.dungeon.j),
+                    "hp": int(self.player.hp),
+                    "vidas": int(getattr(self.player, "lives", 0)),
+                    "apoyo": int(getattr(self.player, "gold", 0)),
+                }
+                self._last_state_send = ahora
+
+            # Procesar red y enviar estado
+            net_eventos = self.net.tick(estado_local=estado_local)
             for ev in net_eventos:
                 self._procesar_evento_red(ev)
 
@@ -703,20 +862,85 @@ class Game:
             difficulty = 1 + depth + branch_factor + (depth // 3) + on_main_path
             room.ensure_spawn(difficulty=difficulty)
 
+    def _get_closest_player_for_enemy(self, enemy) -> object:
+        """
+        Retorna el jugador (local o remoto) más cercano al enemigo.
+
+        Esto permite que los enemigos ataquen al jugador más cercano
+        en modo multijugador cooperativo.
+        """
+        import math
+
+        ex, ey = enemy._center()
+
+        # Distancia al jugador local
+        local_x = self.player.x + self.player.w / 2
+        local_y = self.player.y + self.player.h / 2
+        local_dist = math.hypot(local_x - ex, local_y - ey)
+
+        # Distancia al jugador remoto (si existe)
+        remote_dist = float('inf')
+        remote_pos = None
+
+        if self.remote_players:
+            for rol, datos in self.remote_players.items():
+                sala_list = datos.get("sala", [0, 0])
+                sala_remota = (
+                    (sala_list[0], sala_list[1])
+                    if isinstance(sala_list, (list, tuple))
+                    else (0, 0)
+                )
+
+                # Solo considerar si está en la misma sala
+                if sala_remota == (self.dungeon.i, self.dungeon.j):
+                    remote_x = datos.get("pos_x", 0)
+                    remote_y = datos.get("pos_y", 0)
+                    remote_dist = math.hypot(
+                        (remote_x + 9) - ex,
+                        (remote_y + 12) - ey
+                    )
+                    remote_pos = (remote_x, remote_y)
+                    break
+
+        # Retornar el jugador más cercano
+        if remote_dist < local_dist and remote_pos:
+            # Crear un objeto "jugador fantasma" con posición remota
+            class RemotePlayer:
+                def __init__(self, x, y):
+                    self.x = x
+                    self.y = y
+                    self.w = 18
+                    self.h = 24
+
+            return RemotePlayer(remote_pos[0], remote_pos[1])
+        else:
+            return self.player
+
     def _update_enemies(self, dt: float, room) -> None:
         if not hasattr(room, "enemies"):
             return
         for enemy in room.enemies:
-            enemy.update(dt, self.player, room)
+            # Obtener el jugador más cercano (local o remoto)
+            closest_player = self._get_closest_player_for_enemy(enemy)
+            enemy.update(dt, closest_player, room)
         notify = getattr(self.player, "notify_enemy_shot", None)
         for enemy in room.enemies:
-            fired = enemy.maybe_shoot(dt, self.player, room, self.enemy_projectiles)
+            # Obtener el jugador más cercano para disparo también
+            closest_player = self._get_closest_player_for_enemy(enemy)
+            fired = enemy.maybe_shoot(dt, closest_player, room, self.enemy_projectiles)
             if fired and callable(notify):
                 notify()
 
     def _update_projectiles(self, dt: float, room) -> None:
         self.projectiles.update(dt, room)
         self.enemy_projectiles.update(dt, room)
+
+        # NEW: Update remote projectiles
+        if self.remote_projectiles:
+            for proj in self.remote_projectiles[:]:
+                proj.update(dt, room)
+                if not proj.alive:
+                    self.remote_projectiles.remove(proj)
 
     def _handle_collisions(self, room) -> bool:
         if not hasattr(room, "enemies"):
@@ -735,6 +959,22 @@ class Game:
                     self._apply_projectile_effects(projectile, enemy)
                     projectile.alive = False
                     break
+
+        # Remote projectiles from other players also hit enemies
+        for projectile in self.remote_projectiles[:]:
+            if not projectile.alive:
+                continue
+            r_proj = projectile.rect()
+            for enemy in room.enemies:
+                if r_proj.colliderect(enemy.rect()):
+                    if hasattr(enemy, "take_damage"):
+                        enemy.take_damage(1, (projectile.dx, projectile.dy))
+                    else:
+                        enemy.hp -= 1
+                    self._apply_projectile_effects(projectile, enemy)
+                    projectile.alive = False
+                    break
+
         player_rect = self.player.rect()
         player_invulnerable = getattr(self.player, "is_invulnerable", lambda: False)()
         phase_active = getattr(self.player, "is_phase_active", None)
@@ -788,6 +1028,20 @@ class Game:
             dying_fn = getattr(enemy, "is_dying", None)
             if callable(ready_fn) and ready_fn():
                 self._drop_enemy_coins(enemy, room)
+
+                # Notify other players that this enemy died
+                if self.net:
+                    from network.protocol import msg_enemigo_muerto
+                    enemy_type = enemy.__class__.__name__
+                    sala = (self.dungeon.i, self.dungeon.j)
+                    event_msg = msg_enemigo_muerto(
+                        pos_x=enemy.x,
+                        pos_y=enemy.y,
+                        tipo=enemy_type,
+                        sala=sala
+                    )
+                    self.net.enviar(event_msg)
+
                 continue
             if callable(dying_fn) and dying_fn():
                 survivors.append(enemy)
@@ -1247,8 +1501,36 @@ class Game:
             pickup.draw(self.world)
 
         self.player.draw(self.world)
+
+        # --- Dibujar jugadores remotos (cubo negro) ---
+        for rol, datos in self.remote_players.items():
+            # Extraer posición: el protocolo usa "pos": [x, y]
+            pos = datos.get("pos")
+            if isinstance(pos, (list, tuple)) and len(pos) >= 2:
+                x, y = float(pos[0]), float(pos[1])
+            else:
+                x = float(datos.get("pos_x", 0))
+                y = float(datos.get("pos_y", 0))
+
+            # Extraer sala: el protocolo usa "sala": [i, j]
+            sala_list = datos.get("sala")
+            if isinstance(sala_list, (list, tuple)) and len(sala_list) >= 2:
+                sala_remota = (int(sala_list[0]), int(sala_list[1]))
+            else:
+                sala_remota = (0, 0)
+
+            sala_actual = (self.dungeon.i, self.dungeon.j)
+            if sala_remota == sala_actual:
+                # Cubo negro 32x32 (tamaño del sprite)
+                pygame.draw.rect(self.world, (0, 0, 0), (int(x), int(y), 32, 32), 2)
+
         self.projectiles.draw(self.world)
         self.enemy_projectiles.draw(self.world)
+
+        # Draw remote projectiles from other players
+        for proj in self.remote_projectiles:
+            proj.draw(self.world)
+
         self._draw_debug_door_triggers(room)
 
         if hasattr(room, "draw_overlay"):

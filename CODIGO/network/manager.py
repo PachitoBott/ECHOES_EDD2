@@ -232,15 +232,49 @@ class NetworkManager:
             if self._modo == "servidor":
                 self._reenviar_a_clientes(msg)
 
-        # Enviar estado propio al servidor (si somos cliente Víctima)
+        # Cliente envía su estado al servidor (VICTIMA o ALIADO)
         if (
             self._modo == "cliente"
-            and self._rol == Rol.VICTIMA
             and estado_local is not None
         ):
             ahora = time.time()
             if ahora - self._ultimo_estado >= self.INTERVALO_ESTADO:
-                self._enviar_estado_victima(estado_local)
+                # Usar msg_estado para cualquier rol
+                msg_st = msg_estado(
+                    pos_x=float(estado_local.get("pos_x", 0)),
+                    pos_y=float(estado_local.get("pos_y", 0)),
+                    sala=tuple(estado_local.get("sala", (0, 0))),
+                    vidas=int(estado_local.get("vidas", 0)),
+                    hp=int(estado_local.get("hp", 0)),
+                    apoyo=int(estado_local.get("apoyo", 0)),
+                    arma_id=estado_local.get("arma_id"),
+                    enemigos_vivos=int(estado_local.get("enemigos_vivos", 0)),
+                    sala_tipo=str(estado_local.get("sala_tipo", "normal")),
+                )
+                self._cliente.enviar(msg_st)
+                self._ultimo_estado = ahora
+
+        # Servidor (VICTIMA) envía su estado a todos los clientes
+        if (
+            self._modo == "servidor"
+            and self._rol == Rol.VICTIMA
+            and estado_local is not None
+            and self._servidor is not None
+        ):
+            ahora = time.time()
+            if ahora - self._ultimo_estado >= self.INTERVALO_ESTADO:
+                msg_estado_servidor = msg_estado(
+                    pos_x=float(estado_local.get("pos_x", 0)),
+                    pos_y=float(estado_local.get("pos_y", 0)),
+                    sala=tuple(estado_local.get("sala", (0, 0))),
+                    vidas=int(estado_local.get("vidas", 0)),
+                    hp=int(estado_local.get("hp", 0)),
+                    apoyo=int(estado_local.get("apoyo", 0)),
+                    arma_id=estado_local.get("arma_id"),
+                    enemigos_vivos=int(estado_local.get("enemigos_vivos", 0)),
+                    sala_tipo=str(estado_local.get("sala_tipo", "normal")),
+                )
+                self._servidor.broadcast(msg_estado_servidor)
                 self._ultimo_estado = ahora
 
         return eventos
@@ -276,6 +310,21 @@ class NetworkManager:
         """
         if self._modo == "servidor" and self._servidor:
             self._servidor.broadcast(msg_evento(nombre, **kwargs))
+
+    def enviar(self, mensaje: Mensaje) -> bool:
+        """
+        Envía un mensaje Mensaje a través de la red.
+
+        - Si es servidor: broadcast a todos los clientes
+        - Si es cliente: envía al servidor
+
+        Args:
+            mensaje: Objeto Mensaje a enviar
+
+        Returns:
+            True si se envió exitosamente, False si fallo
+        """
+        return self._enviar(mensaje)
 
     # ------------------------------------------------------------------ #
     # Propiedades de estado

@@ -246,6 +246,100 @@ def msg_error(descripcion: str) -> Mensaje:
                    origen=Rol.SERVIDOR)
 
 
+def msg_enemigo_muerto(pos_x: float, pos_y: float, tipo: str, sala: tuple[int, int]) -> Mensaje:
+    """
+    Evento: Un enemigo fue eliminado.
+
+    Se envía cuando un jugador mata a un enemigo. El servidor lo broadcast
+    a todos los clientes para que actualicen su estado local.
+
+    Args:
+        pos_x, pos_y: Posición del enemigo (para encontrarlo en la otra computadora)
+        tipo: Nombre de clase del enemigo (e.g., "BasicEnemy", "TankEnemy")
+        sala: Tuple (i, j) indicando en qué sala murió
+
+    Returns:
+        Mensaje EVENTO con evento='enemigo_muerto' + datos de ubicación y tipo
+    """
+    return Mensaje(
+        TipoMensaje.EVENTO,
+        {
+            "evento": "enemigo_muerto",
+            "pos_x": pos_x,
+            "pos_y": pos_y,
+            "enemy_type": tipo,
+            "sala": sala,
+        },
+        origen=Rol.SERVIDOR,
+    )
+
+
+def msg_proyectil_disparado(
+    pos_x: float,
+    pos_y: float,
+    dir_x: float,
+    dir_y: float,
+    weapon_id: str,
+    sala: tuple[int, int],
+) -> Mensaje:
+    """
+    Evento: Un jugador disparó un proyectil.
+
+    Enviado cuando un jugador dispara, para que otros jugadores vean la bala.
+
+    Args:
+        pos_x, pos_y: Posición inicial de la bala
+        dir_x, dir_y: Dirección normalizada (vector unitario)
+        weapon_id: ID del arma (para identificar tipo de bala)
+        sala: (i, j) en qué sala se dispara
+    """
+    return Mensaje(
+        TipoMensaje.EVENTO,
+        {
+            "evento": "proyectil_disparado",
+            "pos_x": pos_x,
+            "pos_y": pos_y,
+            "dir_x": dir_x,
+            "dir_y": dir_y,
+            "weapon_id": weapon_id,
+            "sala": sala,
+        },
+        origen=Rol.SERVIDOR,
+    )
+
+
+def msg_enemigo_danado(
+    pos_x: float,
+    pos_y: float,
+    enemy_type: str,
+    damage: int,
+    sala: tuple[int, int],
+) -> Mensaje:
+    """
+    Evento: Un enemigo recibió daño.
+
+    Enviado cuando un proyectil golpea un enemigo, para sincronizar HP.
+
+    Args:
+        pos_x, pos_y: Posición del enemigo
+        enemy_type: Nombre de clase del enemigo
+        damage: Cantidad de daño
+        sala: (i, j) ubicación
+    """
+    return Mensaje(
+        TipoMensaje.EVENTO,
+        {
+            "tipo": "enemigo_danado",
+            "pos_x": pos_x,
+            "pos_y": pos_y,
+            "enemy_type": enemy_type,
+            "damage": damage,
+            "sala": sala,
+        },
+        origen=Rol.SERVIDOR,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Validación básica (usada por servidor para sanear mensajes entrantes)
 # ---------------------------------------------------------------------------

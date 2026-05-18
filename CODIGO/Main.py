@@ -162,9 +162,25 @@ if __name__ == "__main__":
     skip_menu = args.skip_menu or (start_room is not None) or (args.seed is not None) or args.server or args.client
 
     if skip_menu:
+        # Si es cliente, esperar a que obtenga la seed del servidor
+        seed_a_usar = args.seed
+        if args.client and game.net and hasattr(game.net, '_cliente'):
+            # Esperar a que el cliente se conecte y obtenga la seed del servidor
+            import time as time_module
+            max_wait = 10.0  # 10 segundos máximo
+            start = time_module.time()
+            log_game.info("Esperando seed del servidor...")
+            while game.net._cliente.seed is None and (time_module.time() - start) < max_wait:
+                time_module.sleep(0.2)
+            if game.net._cliente.seed is not None:
+                seed_a_usar = game.net._cliente.seed
+                log_game.info(f"✅ Usando seed del servidor: {seed_a_usar}")
+            else:
+                log_game.warning(f"⚠️ No se recibió seed del servidor, usando seed aleatoria")
+
         log_game.info(
-            f"Inicio rápido — seed={args.seed}  sala={start_room}  debug={args.debug}  modo={net_mode}"
+            f"Inicio rápido — seed={seed_a_usar}  sala={start_room}  debug={args.debug}  modo={net_mode}"
         )
-        game.quick_start(seed=args.seed, start_room=start_room)
+        game.quick_start(seed=seed_a_usar, start_room=start_room)
     else:
         game.run()
