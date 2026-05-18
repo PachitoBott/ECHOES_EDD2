@@ -1397,15 +1397,14 @@ class Game:
 
     def _draw_empathy_counter(self) -> None:
         apoyo = self._estado_juego.get("apoyo", 0)
-        color = pygame.Color(100, 220, 255)  # cian, igual que el tipo "apoyo" en subtítulos
-        label = f"♦ {apoyo}"
+        color = pygame.Color(100, 220, 255)
+        label = f"[Empatia: {apoyo}]"
         surf = self.ui_font.render(label, True, color)
-        # Esquina superior derecha, debajo del minimapa aproximadamente
-        margin = 8
-        x = self.screen.get_width() - surf.get_width() - margin
-        y = margin
+        # Debajo del seed text (seed esta en y=100), garantizado visible
+        x = 20
+        y = 120
         bg = pygame.Surface((surf.get_width() + 6, surf.get_height() + 4), pygame.SRCALPHA)
-        bg.fill((0, 0, 0, 120))
+        bg.fill((0, 0, 0, 140))
         self.screen.blit(bg, (x - 3, y - 2))
         self.screen.blit(surf, (x, y))
 
