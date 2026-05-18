@@ -350,7 +350,7 @@ class DialogueSystem:
         self._arbol_actual  = arbol
         self._nodo_actual   = arbol.raiz.id
         self._nombre_npc    = nombre_npc
-        self._estado_juego  = dict(estado_juego or {})
+        self._estado_juego  = estado_juego if estado_juego is not None else {}
         self._callback_fin  = callback_fin
         self._historial     = [arbol.raiz.id]
         self._activo        = True
@@ -492,6 +492,11 @@ class DialogueSystem:
             self._historial.append(hijo.id)
             self._nodo_actual = hijo.id
             self._refrescar_opciones()
+            # Aplicar efecto si el nodo al que avanzamos es hoja con efecto
+            if hijo.es_hoja():
+                efecto = hijo.meta.get("efecto")
+                if efecto:
+                    self._arbol_actual.ejecutar_efecto(hijo.id, self._estado_juego)
         else:
             self._terminar()
 

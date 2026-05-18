@@ -27,6 +27,7 @@ from core.asset_paths import WEAPON_SPRITE_FILENAMES, assets_dir, weapon_sprite_
 # --- Narrativa (Fase 4-5) ---
 from narrative.cinematics import CinematicSystem
 from narrative.dialogue_system import DialogueSystem
+from accessibility.subtitles import SubtitleSystem
 
 # --- Networking (Fase 3) ---
 from network import NetworkManager, EventoRed
@@ -155,6 +156,12 @@ class Game:
             self.dialogue.cargar_json("narrative/mara_dialogues.json", "mara")
         except Exception as e:
             log_game.warning(f"No se pudieron cargar diálogos de Mara: {e}")
+
+        # Estado del juego compartido con el sistema de diálogos
+        self._estado_juego: dict = {"apoyo": 0}
+
+        # Sistema de notificaciones en pantalla
+        self.subtitulos = SubtitleSystem(cfg.SCREEN_W, cfg.SCREEN_H, font_size=20)
 
         # Control de estado narrativo
         self._current_zone: int = 1
@@ -377,6 +384,7 @@ class Game:
         self.cleared = False
         self._run_gold_spent = 0
         self._run_kills = 0
+        self._estado_juego["apoyo"] = 0
 
     def _register_gold_spent(self, amount: int) -> None:
         if amount <= 0:
@@ -594,6 +602,9 @@ class Game:
             net_eventos = self.net.tick()
             for ev in net_eventos:
                 self._procesar_evento_red(ev)
+
+        # Subtítulos: expirar entradas en cada frame independientemente del estado
+        self.subtitulos.tick(dt)
 
         # --- Cinematicas ---
         # Si una cinemática está activa, procesar input y no actualizar el juego
@@ -1199,8 +1210,25 @@ class Game:
         # Limpiar el flag
         room._mara_dialogue_requested = False
 
-        # Iniciar diálogo con Mara con callback para detectar opción compasiva
-        self.dialogue.iniciar("mara", callback_fin=self._on_mara_dialogue_finished)
+        # Snapshot del apoyo antes del diálogo para calcular la ganancia al terminar
+        apoyo_antes = self._estado_juego.get("apoyo", 0)
+
+        def _on_fin_mara():
+            ganado = self._estado_juego.get("apoyo", 0) - apoyo_antes
+            if ganado > 0:
+                self.subtitulos.agregar(
+                    f"[FRAGMENTO DE EMPATÍA +{ganado}]",
+                    duracion=3.5,
+                    tipo="apoyo",
+                )
+                log_game.info("Fragmento de empatía ganado al hablar con Mara: +%d", ganado)
+
+        # Iniciar diálogo con Mara, conectado al estado del juego
+        self.dialogue.iniciar(
+            "mara",
+            estado_juego=self._estado_juego,
+            callback_fin=_on_fin_mara,
+        )
 
     def _render(self) -> None:
         self._render_world()
@@ -1313,6 +1341,12 @@ class Game:
 
         self.hud_panels.blit_corner_panel(self.screen)
 
+        # Contador de fragmentos de empatía
+        self._draw_empathy_counter()
+
+        # Notificaciones de subtítulos (fragmentos ganados, apoyos, etc.)
+        self.subtitulos.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)
+
         mx, my = pygame.mouse.get_pos()
         cursor_rect = self._cursor_surface.get_rect(center=(mx, my))
         self.screen.blit(self._cursor_surface, cursor_rect.topleft)
@@ -1379,6 +1413,19 @@ class Game:
         self.screen.blit(value_surface, value_rect.topleft)
 
         return icon_rect.union(value_rect)
+
+    def _draw_empathy_counter(self) -> None:
+        apoyo = self._estado_juego.get("apoyo", 0)
+        color = pygame.Color(100, 220, 255)
+        label = f"[Empatia: {apoyo}]"
+        surf = self.ui_font.render(label, True, color)
+        # Debajo del seed text (seed esta en y=100), garantizado visible
+        x = 20
+        y = 120
+        bg = pygame.Surface((surf.get_width() + 6, surf.get_height() + 4), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 140))
+        self.screen.blit(bg, (x - 3, y - 2))
+        self.screen.blit(surf, (x, y))
 
     def _scale_coin_icon(self, scale: float) -> pygame.Surface:
         source = getattr(self, "_coin_icon_source", None)

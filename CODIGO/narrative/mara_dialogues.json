@@ -15,6 +15,10 @@
       },
       "hijos": [
         {
+          "id": "fin_empatia",
+          "texto": "Entiendo.",
+          "meta": {
+            "efecto": {"tipo": "apoyo", "valor": 1}
           "id": "respuesta_cruel",
           "texto": "...(Mara se aleja, decepcionada)",
           "meta": {
