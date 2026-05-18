@@ -15,7 +15,9 @@
         {
           "id": "fin_empatia",
           "texto": "Entiendo.",
-          "meta": {},
+          "meta": {
+            "efecto": {"tipo": "apoyo", "valor": 1}
+          },
           "hijos": []
         }
       ]
