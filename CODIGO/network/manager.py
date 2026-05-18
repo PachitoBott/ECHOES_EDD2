@@ -239,7 +239,7 @@ class NetworkManager:
         ):
             ahora = time.time()
             if ahora - self._ultimo_estado >= self.INTERVALO_ESTADO:
-                # Usar msg_estado para cualquier rol
+                # Usar msg_estado con el rol del cliente como origen
                 msg_st = msg_estado(
                     pos_x=float(estado_local.get("pos_x", 0)),
                     pos_y=float(estado_local.get("pos_y", 0)),
@@ -250,6 +250,7 @@ class NetworkManager:
                     arma_id=estado_local.get("arma_id"),
                     enemigos_vivos=int(estado_local.get("enemigos_vivos", 0)),
                     sala_tipo=str(estado_local.get("sala_tipo", "normal")),
+                    origen=self._rol,  # Enviar con el rol del cliente
                 )
                 self._cliente.enviar(msg_st)
                 self._ultimo_estado = ahora
@@ -273,6 +274,7 @@ class NetworkManager:
                     arma_id=estado_local.get("arma_id"),
                     enemigos_vivos=int(estado_local.get("enemigos_vivos", 0)),
                     sala_tipo=str(estado_local.get("sala_tipo", "normal")),
+                    origen=Rol.VICTIMA,  # Servidor envía como VICTIMA
                 )
                 self._servidor.broadcast(msg_estado_servidor)
                 self._ultimo_estado = ahora

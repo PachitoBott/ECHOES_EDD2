@@ -167,12 +167,16 @@ def msg_estado(
     arma_id: str | None = None,
     enemigos_vivos: int = 0,
     sala_tipo: str = "normal",
+    origen: str | None = None,
 ) -> Mensaje:
     """
     Snapshot completo del estado del juego.
 
     Lo envía el servidor a ambos clientes en cada tick de red
     (~10-20 veces por segundo).
+
+    Args:
+        origen: Rol que envía el estado. Si es None, se usa "servidor"
     """
     return Mensaje(
         TipoMensaje.ESTADO,
@@ -186,7 +190,7 @@ def msg_estado(
             "enemigos_vivos": enemigos_vivos,
             "sala_tipo":      sala_tipo,
         },
-        origen=Rol.SERVIDOR,
+        origen=origen or Rol.SERVIDOR,
     )
 
 
