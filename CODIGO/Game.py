@@ -593,7 +593,12 @@ class Game:
             log_net.debug(f"Enemigo muerto en otra sala {sala_remota}, ignorando")
             return
 
-        room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
+        # Validate that room exists (dungeon may have different sizes between clients)
+        try:
+            room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
+        except (KeyError, IndexError):
+            log_net.warning(f"Sala {sala_remota} no existe en este dungeon")
+            return
 
         # Buscar enemigo que coincida con posición y tipo
         # Usar tolerancia para diferencias por interpolación cliente
@@ -661,7 +666,12 @@ class Game:
         damage = datos.get("damage", 1)
         enemy_type = datos.get("enemy_type")
 
-        room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
+        # Validate that room exists
+        try:
+            room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
+        except (KeyError, IndexError):
+            log_net.warning(f"Sala {sala_remota} no existe en este dungeon")
+            return
         tolerance = 5.0
 
         for enemy in room.enemies:
