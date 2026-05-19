@@ -49,7 +49,8 @@ class StartMenu:
         self.clock = pygame.time.Clock()
 
         # --- GESTIÓN DE RUTAS ---
-        self.base_dir = Path(__file__).parent.resolve()
+        # __file__ es CODIGO/ui/StartMenu.py → .parent.parent = CODIGO/
+        self.base_dir = Path(__file__).parent.parent.resolve()
         self.ui_assets_dir = self.base_dir / "assets" / "ui"
         self.audio_assets_dir = self.base_dir / "assets" / "audio"
 

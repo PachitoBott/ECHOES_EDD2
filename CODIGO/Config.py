@@ -27,18 +27,7 @@ class StartMenuConfig:
     sections: Mapping[str, Tuple[str, ...]] = field(
         default_factory=lambda: {
             "credits": (
-                "Créditos",
-                "",
-                "Desarrollado por Blue Wire Studios",
-                "",
-                "Juan Contreras - UI/UX Director",
-                "Santiago Gutiérrez - Project Manager",
-                "Jairo Molina - Test Director",
-                "Santiago Flórez - Design Director",
-                "Santiago Molina - Documentation Director",
-                "",
-                "Universidad del Norte",
-                "Barranquilla, Colombia",
+                ""
             ),
             "controls": (
                 "Controles",
