@@ -97,7 +97,7 @@ class StartMenu:
         self.seed_rect = pygame.Rect(0, 0, self.INPUT_WIDTH, self.INPUT_HEIGHT)
 
         # --- Carga de Fondo ---
-        self.background = self._load_image("fondoMenu.png")
+        self.background = self._load_image("FondoMenuPrincipal.png")
         
         if not self.background and self.menu_cfg.background_image:
              path_cfg = Path(self.menu_cfg.background_image)
