@@ -14,13 +14,12 @@ class StartMenuButton:
 class StartMenuConfig:
     """Opciones editables para personalizar el menú de inicio."""
 
-    title: str = "Echoes"
-    subtitle: Optional[str] = "¿Puedes sobrevivir a la tormenta digital?"
+    title: str = "ECHOES"
+    subtitle: Optional[str] = "Una historia sobre ciberacoso"
     background_image: Optional[str] = None
     logo_image: Optional[str] = None
     buttons: Tuple[StartMenuButton, ...] = (
         StartMenuButton("play", "Jugar"),
-        StartMenuButton("skins", "Skins"),
         StartMenuButton("statistics", "Estadísticas"),
         StartMenuButton("credits", "Créditos"),
         StartMenuButton("controls", "Controles"),
@@ -44,11 +43,14 @@ class StartMenuConfig:
             "controls": (
                 "Controles",
                 "",
-                "WASD o Flechas — Moverse",
-                "Mouse — Apuntar y disparar",
-                "Espacio — Rodar / Acción",
-                "M — Reiniciar con la misma seed",
-                "N — Generar una nueva seed aleatoria",
+                "WASD / Flechas  —  Moverse",
+                "Mouse           —  Apuntar",
+                "Click izq.      —  Disparar",
+                "E               —  Interactuar con NPCs",
+                "Espacio         —  Accion / Avanzar dialogo",
+                "ESC             —  Pausa",
+                "M               —  Reiniciar (misma seed)",
+                "N               —  Nueva seed aleatoria",
             ),
         }
     )

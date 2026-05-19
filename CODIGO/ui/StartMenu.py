@@ -502,7 +502,7 @@ class StartMenu:
             overlay.fill((0, 0, 0, 160))
             self.screen.blit(overlay, (0, 0))
 
-        title_text = "REDLINE PROTOCOL"
+        title_text = self.menu_cfg.title.upper()
         
         shadow_surf = self.title_font.render(title_text, True, self.COLOR_NEON_PINK)
         shadow_rect = shadow_surf.get_rect(center=(width // 2 + 4, height // 4 + 4))
