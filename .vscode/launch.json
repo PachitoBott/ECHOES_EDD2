@@ -2,22 +2,22 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "ECHOES - Debug (Skip Menu)",
+            "name": "ECHOES - Jugar (Menu + Cinematica)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/CODIGO/Main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}/CODIGO"
+        },
+        {
+            "name": "ECHOES - Debug (Sin Menu)",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/CODIGO/Main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": ["--skip-menu", "--debug"],
-            "cwd": "${workspaceFolder}/CODIGO"
-        },
-        {
-            "name": "ECHOES - Normal",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/CODIGO/Main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
             "cwd": "${workspaceFolder}/CODIGO"
         }
     ]

@@ -2,9 +2,12 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "ECHOES - Run Debug (Skip Menu)",
+            "label": "ECHOES - Jugar (Menu + Cinematica)",
             "type": "shell",
-            "command": "cd CODIGO && python Main.py --skip-menu --debug",
+            "command": "python Main.py",
+            "options": {
+                "cwd": "${workspaceFolder}/CODIGO"
+            },
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -17,9 +20,12 @@
             }
         },
         {
-            "label": "ECHOES - Run Normal",
+            "label": "ECHOES - Debug (Sin Menu)",
             "type": "shell",
-            "command": "cd CODIGO && python Main.py",
+            "command": "python Main.py --skip-menu --debug",
+            "options": {
+                "cwd": "${workspaceFolder}/CODIGO"
+            },
             "presentation": {
                 "echo": true,
                 "reveal": "always",
