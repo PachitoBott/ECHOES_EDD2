@@ -61,6 +61,8 @@ class Tileset:
                     self.surface = img
             except Exception as e:
                 # Fallback: no tileset, usar colores sólidos
+                import sys
+                print(f"[WARNING] Error cargando tileset {CFG.TILESET_PATH}: {e}", file=sys.stderr)
                 self.surface = None
                 self.rects = {}
 
