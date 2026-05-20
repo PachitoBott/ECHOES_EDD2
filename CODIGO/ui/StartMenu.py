@@ -23,16 +23,26 @@ class StartMenu:
 
     BUTTON_PADDING_X = 32
     BUTTON_PADDING_Y = 14
-    BUTTON_GAP = 16
-    INPUT_WIDTH = 320
+    BUTTON_GAP = 8
+    INPUT_WIDTH  = 380
     INPUT_HEIGHT = 48
 
-    # Colores Cyberpunk
-    COLOR_NEON_BLUE = (0, 255, 255)
-    COLOR_NEON_PINK = (255, 0, 128)
-    COLOR_DARK_BG = (10, 10, 20)
-    COLOR_GRID = (30, 30, 60)
-    COLOR_TEXT_WHITE = (240, 240, 255)
+    # Botones con tamaño fijo respetando el ratio del sprite (1080×335 ≈ 3.22:1)
+    BUTTON_FIXED_W = 340
+    BUTTON_FIXED_H = 106   # 340 / 3.22 ≈ 106
+
+    # Paleta GHOSTED — crimson / rojo
+    COLOR_CRIMSON     = (210, 35, 55)      # rojo carmesí principal
+    COLOR_EMBER       = (255, 110, 50)     # naranja-rojo ember (hover/activo)
+    COLOR_DARK_BG     = (8, 3, 6)         # fondo casi negro rojizo
+    COLOR_GRID        = (28, 8, 12)        # grilla oscura carmesí
+    COLOR_TEXT_WHITE  = (230, 218, 218)    # blanco cálido
+
+    # Aliases para compatibilidad con código existente (overlays, slider, etc.)
+    COLOR_TEAL        = COLOR_CRIMSON
+    COLOR_HOVER_TEXT  = COLOR_EMBER
+    COLOR_NEON_BLUE   = COLOR_CRIMSON
+    COLOR_NEON_PINK   = COLOR_EMBER
 
     def __init__(
         self,
@@ -45,7 +55,7 @@ class StartMenu:
         self.cfg = cfg
         self.menu_cfg = cfg.START_MENU
         
-        pygame.display.set_caption("CyberQuest")
+        pygame.display.set_caption("GHOSTED")
         self.clock = pygame.time.Clock()
 
         # --- GESTIÓN DE RUTAS ---
@@ -98,7 +108,9 @@ class StartMenu:
         self.seed_rect = pygame.Rect(0, 0, self.INPUT_WIDTH, self.INPUT_HEIGHT)
 
         # --- Carga de Fondo ---
-        self.background = self._load_image("FondoMenuPrincipal.png")
+        self.background    = self._load_image("FondoMenuPrincipal.png")
+        self.btn_normal    = self._load_image("Boton_normal.png")
+        self.btn_hover     = self._load_image("Boton_hover.png")
         
         if not self.background and self.menu_cfg.background_image:
              path_cfg = Path(self.menu_cfg.background_image)
@@ -203,12 +215,8 @@ class StartMenu:
             self.seed_rect.center = (center_x, height // 2)
             layout_bottom = self.seed_rect.bottom
         else:
-            max_label_width = max(
-                self.button_font.size(button.label)[0]
-                for button in self.menu_cfg.buttons
-            )
-            button_width = max(max_label_width + self.BUTTON_PADDING_X * 2, 280)
-            button_height = self.button_font.get_height() + self.BUTTON_PADDING_Y * 2
+            button_width  = self.BUTTON_FIXED_W
+            button_height = self.BUTTON_FIXED_H
 
             total_height = len(self.menu_cfg.buttons) * button_height + (
                 (len(self.menu_cfg.buttons) - 1) * self.BUTTON_GAP
@@ -225,7 +233,7 @@ class StartMenu:
 
             self.seed_rect.size = (self.INPUT_WIDTH, self.INPUT_HEIGHT)
             self.seed_rect.centerx = center_x
-            self.seed_rect.y = start_y + 24
+            self.seed_rect.y = start_y + 20
             layout_bottom = self.seed_rect.bottom
 
         self._position_volume_slider(center_x, layout_bottom)
@@ -480,14 +488,22 @@ class StartMenu:
             return None
 
     def _draw_cyber_grid(self) -> None:
-        """Dibuja una cuadrícula estilo synthwave si no hay imagen de fondo."""
+        """Dibuja una cuadrícula oscura con tinte rojo si no hay imagen de fondo."""
         self.screen.fill(self.COLOR_DARK_BG)
         width, height = self.screen.get_size()
-        
-        for x in range(0, width, 40):
+
+        for x in range(0, width, 48):
             pygame.draw.line(self.screen, self.COLOR_GRID, (x, 0), (x, height), 1)
-        for y in range(0, height, 40):
+        for y in range(0, height, 48):
             pygame.draw.line(self.screen, self.COLOR_GRID, (0, y), (width, y), 1)
+
+        # Viñeta: oscurecer bordes
+        vignette = pygame.Surface((width, height), pygame.SRCALPHA)
+        for i, alpha in enumerate([80, 50, 25, 10]):
+            margin = i * 40
+            pygame.draw.rect(vignette, (0, 0, 0, alpha),
+                             pygame.Rect(margin, margin, width - margin * 2, height - margin * 2), 30)
+        self.screen.blit(vignette, (0, 0))
 
     def _draw_menu(self, *, dim_background: bool = False) -> None:
         width, height = self.screen.get_size()
@@ -504,18 +520,25 @@ class StartMenu:
             self.screen.blit(overlay, (0, 0))
 
         title_text = self.menu_cfg.title.upper()
-        
-        shadow_surf = self.title_font.render(title_text, True, self.COLOR_NEON_PINK)
-        shadow_rect = shadow_surf.get_rect(center=(width // 2 + 4, height // 4 + 4))
+
+        # Sombra exterior oscura
+        shadow_surf = self.title_font.render(title_text, True, (60, 4, 8))
+        shadow_rect = shadow_surf.get_rect(center=(width // 2 + 5, height // 4 + 5))
         self.screen.blit(shadow_surf, shadow_rect)
 
-        title_surf = self.title_font.render(title_text, True, self.COLOR_NEON_BLUE)
+        # Segunda sombra más cerca
+        shadow2_surf = self.title_font.render(title_text, True, (120, 14, 20))
+        shadow2_rect = shadow2_surf.get_rect(center=(width // 2 + 2, height // 4 + 2))
+        self.screen.blit(shadow2_surf, shadow2_rect)
+
+        # Título principal en crimson
+        title_surf = self.title_font.render(title_text, True, self.COLOR_CRIMSON)
         title_rect = title_surf.get_rect(center=(width // 2, height // 4))
         self.screen.blit(title_surf, title_rect)
 
         if self.menu_cfg.subtitle:
             subtitle_surf = self.subtitle_font.render(
-                self.menu_cfg.subtitle, True, (200, 200, 200)
+                self.menu_cfg.subtitle, True, (185, 130, 130)
             )
             subtitle_rect = subtitle_surf.get_rect(
                 center=(width // 2, title_rect.bottom + 10)
@@ -531,50 +554,53 @@ class StartMenu:
 
         for button, rect in self.button_rects:
             hovered = rect.collidepoint(mouse_pos)
-            
-            bg_color = (0, 0, 0, 180) if not hovered else (40, 40, 60, 200)
-            border_color = self.COLOR_NEON_BLUE if not hovered else self.COLOR_NEON_PINK
-            
-            btn_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-            pygame.draw.rect(btn_surf, bg_color, btn_surf.get_rect(), border_radius=4)
-            pygame.draw.rect(btn_surf, border_color, btn_surf.get_rect(), 2, border_radius=4)
-            self.screen.blit(btn_surf, rect)
 
+            # ── SPRITE DEL BOTÓN ──
+            sprite = self.btn_hover if hovered else self.btn_normal
+            if sprite:
+                scaled = pygame.transform.smoothscale(sprite, (rect.width, rect.height))
+                self.screen.blit(scaled, rect.topleft)
+            else:
+                # Fallback si no carga la imagen
+                pygame.draw.rect(self.screen, (22, 4, 4), rect)
+                pygame.draw.rect(self.screen, self.COLOR_CRIMSON, rect, 1)
+
+            # ── TEXTO centrado sobre el sprite ──
             label = next(
                 (b.label for b in self.menu_cfg.buttons if b.action == button),
                 button,
             ).upper()
 
-            text_color = self.COLOR_TEXT_WHITE if not hovered else self.COLOR_NEON_BLUE
-            label_surf = self.button_font.render(label, True, text_color)
-            label_rect = label_surf.get_rect(center=rect.center)
-            self.screen.blit(label_surf, label_rect)
+            # Sombra del texto
+            sh = self.button_font.render(label, True, (40, 4, 4))
+            self.screen.blit(sh, sh.get_rect(center=(rect.centerx + 2, rect.centery + 2)))
+
+            # Texto principal
+            text_color = self.COLOR_HOVER_TEXT if hovered else self.COLOR_TEXT_WHITE
+            ls = self.button_font.render(label, True, text_color)
+            self.screen.blit(ls, ls.get_rect(center=rect.center))
 
         self._draw_seed_input()
         self._draw_volume_slider()
 
     def _draw_seed_input(self) -> None:
-        border_color = self.COLOR_NEON_PINK if self.input_active else (80, 80, 80)
-        
-        pygame.draw.rect(self.screen, (10, 10, 15), self.seed_rect, border_radius=2)
-        pygame.draw.rect(self.screen, border_color, self.seed_rect, 2, border_radius=2)
+        border_color = self.COLOR_EMBER if self.input_active else (70, 25, 25)
 
-        seed_display = self.seed_text or "SEED (VACIO = RANDOM)"
-        text_color = self.COLOR_NEON_BLUE if self.seed_text else (100, 100, 100)
-        
+        pygame.draw.rect(self.screen, (14, 6, 6), self.seed_rect)
+        pygame.draw.rect(self.screen, border_color, self.seed_rect, 2)
+
+        seed_display = self.seed_text or "SEED  (VACIO = ALEATORIO)"
+        text_color = self.COLOR_CRIMSON if self.seed_text else (90, 55, 55)
+
         text_surf = self.small_font.render(seed_display, True, text_color)
         text_rect = text_surf.get_rect(midleft=(self.seed_rect.left + 12, self.seed_rect.centery))
         self.screen.blit(text_surf, text_rect)
 
-        hint_lines = [
-            "ENTER para Jugar",
-        ]
-        for i, line in enumerate(hint_lines):
-            hint_surf = self.small_font.render(line, True, (150, 150, 150))
-            hint_rect = hint_surf.get_rect(
-                center=(self.screen.get_width() // 2, self.seed_rect.bottom + 20 + i * 20)
-            )
-            self.screen.blit(hint_surf, hint_rect)
+        hint_surf = self.small_font.render("ENTER PARA JUGAR", True, (110, 60, 60))
+        hint_rect = hint_surf.get_rect(
+            center=(self.screen.get_width() // 2, self.seed_rect.bottom + 22)
+        )
+        self.screen.blit(hint_surf, hint_rect)
 
     def _statistics_lines(self) -> tuple[str, ...]:
         if self.stats_manager is None:
@@ -589,11 +615,11 @@ class StartMenu:
         self.screen.blit(label_surf, label_rect)
 
         track_rect = self.volume_bar_rect
-        pygame.draw.rect(self.screen, (30, 30, 50), track_rect, border_radius=4)
+        pygame.draw.rect(self.screen, (30, 10, 10), track_rect, border_radius=4)
         fill_width = int(track_rect.width * max(0.0, min(1.0, self.volume)))
         if fill_width > 0:
             fill_rect = pygame.Rect(track_rect.left, track_rect.top, fill_width, track_rect.height)
-            pygame.draw.rect(self.screen, self.COLOR_NEON_BLUE, fill_rect, border_radius=4)
+            pygame.draw.rect(self.screen, self.COLOR_CRIMSON, fill_rect, border_radius=4)
 
         handle_rect = self.volume_handle_rect
         handle_surface = pygame.Surface(handle_rect.size, pygame.SRCALPHA)
