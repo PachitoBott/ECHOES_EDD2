@@ -9,6 +9,33 @@ class Tileset:
         if CFG.TILESET_PATH:
             try:
                 img = pygame.image.load(CFG.TILESET_PATH).convert_alpha()
+
+                # Detectar tamaño original del tileset
+                # Asumir tileset en fila horizontal: altura = tamaño de un tile
+                tileset_height = img.get_height()
+                tileset_width = img.get_width()
+                tile_size_original = tileset_height
+                num_tiles = 9  # piso, pared_superior, pared_inferior, etc.
+
+                # Validar formato: 9 tiles en fila horizontal
+                expected_width = tile_size_original * num_tiles
+                if tileset_width == expected_width:
+                    # Nuevo tileset detectado (128x128 o similar en fila)
+                    # Necesita escalado
+                    tile_size_logico = CFG.TILE_SIZE  # 32px
+
+                    # Si el tamaño es diferente, escalar la imagen
+                    if tile_size_original != tile_size_logico:
+                        scale_factor = tile_size_logico / tile_size_original
+                        new_width = int(tileset_width * scale_factor)
+                        new_height = int(tileset_height * scale_factor)
+                        img = pygame.transform.scale(img, (new_width, new_height))
+                        tile_size_original = tile_size_logico
+                else:
+                    # Tileset antiguo o formato desconocido
+                    tile_size_original = CFG.TILE_SIZE
+
+                # Mapeo de tile ID -> (col, row) en el spritesheet
                 tile_defs: dict[int, tuple[int, int]] = {
                     CFG.FLOOR: (0, 0),
                     CFG.WALL: (1, 0),
@@ -22,17 +49,20 @@ class Tileset:
                     CFG.WALL_CORNER_SE: (8, 0),
                 }
 
-                tile_size = CFG.TILE_SIZE
+                # Construir rects para cada tile basado en el tileset cargado
                 width, height = img.get_width(), img.get_height()
                 for tile_id, (col, row) in tile_defs.items():
-                    x = col * tile_size
-                    y = row * tile_size
-                    if x + tile_size <= width and y + tile_size <= height:
-                        self.rects[tile_id] = pygame.Rect(x, y, tile_size, tile_size)
+                    x = col * tile_size_original
+                    y = row * tile_size_original
+                    if x + tile_size_original <= width and y + tile_size_original <= height:
+                        self.rects[tile_id] = pygame.Rect(x, y, tile_size_original, tile_size_original)
+
                 if self.rects:
                     self.surface = img
-            except Exception:
+            except Exception as e:
+                # Fallback: no tileset, usar colores sólidos
                 self.surface = None
+                self.rects = {}
 
     def draw_tile(
         self,
