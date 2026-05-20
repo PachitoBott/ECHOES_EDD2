@@ -1,15 +1,23 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add *)",
-      "Bash(git commit -m 'fix: eliminate duplicate shops and add item descriptions with hover tooltips *)",
-      "Bash(git push *)",
+      "Bash(git *)",
+      "Bash(python main.py *)",
+      "Bash(python -c *)",
+      "Bash(cd *)",
+      "Bash(grep *)",
+      "Bash(timeout *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(head *)",
+      "Bash(tail *)",
       "WebFetch(domain:api.github.com)",
-      "Bash(python -c ' *)",
-      "Bash(git commit -m 'fix: ensure Mara placement and zone transitions work correctly *)",
-      "Bash(git commit -m 'fix: remove scan lines distortion from zone 2 - too visually noisy *)",
-      "Bash(git reset *)",
-      "Bash(git commit -m 'feat: implement empathy fragments from compassionate dialogue with Mara *)"
+      "WebFetch(domain:github.com)",
+      "Edit(*)",
+      "Read(*)",
+      "Write(*)",
+      "Bash(echo *)",
+      "TaskOutput(*)"
     ]
   }
 }
