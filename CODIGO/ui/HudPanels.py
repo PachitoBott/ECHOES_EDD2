@@ -260,8 +260,8 @@ class HUDPanel:
     """
 
     # Tamaños predeterminados (se ajustan cuando lleguen los PNGs reales)
-    DEFAULT_WIDTH = 240
-    DEFAULT_HEIGHT = 80
+    DEFAULT_WIDTH = 360
+    DEFAULT_HEIGHT = 140
     MARGIN = 16
 
     # Colores para placeholders
