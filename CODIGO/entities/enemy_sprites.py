@@ -482,12 +482,12 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
         # Cargar animación "run" (walk) desde camera_chaser.png - 4 columnas, 15 frames
         run_frames = cargar_spritesheet_cuadricula(
             ruta="assets/camera_chaser.png",
-            frame_w=64,
-            frame_h=64,
+            frame_w=32,
+            frame_h=32,
             cols=4,
             frames_a_usar=15,
             flip_horizontal=False,
-            tamaño_logico=64  # Mantener tamaño original, no escalar
+            tamaño_logico=32  # Mantener tamaño original (32x32)
         )
         if run_frames:
             frames["run"] = run_frames
@@ -497,12 +497,12 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
         # Cargar animación "idle" desde camera_chaser_idle.png - 3 columnas, 8 frames
         idle_frames = cargar_spritesheet_cuadricula(
             ruta="assets/camera_chaser_idle.png",
-            frame_w=64,
-            frame_h=64,
+            frame_w=32,
+            frame_h=32,
             cols=3,
             frames_a_usar=8,
             flip_horizontal=False,
-            tamaño_logico=64  # Mantener tamaño original, no escalar
+            tamaño_logico=32  # Mantener tamaño original (32x32)
         )
         if idle_frames:
             frames["idle"] = idle_frames
@@ -512,12 +512,12 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
         # Cargar animación "attack" desde camera_chaser_attack.png - 3 columnas, 5 frames
         attack_frames = cargar_spritesheet_cuadricula(
             ruta="assets/camera_chaser_attack.png",
-            frame_w=64,
-            frame_h=64,
+            frame_w=32,
+            frame_h=32,
             cols=3,
             frames_a_usar=5,
             flip_horizontal=False,
-            tamaño_logico=64  # Mantener tamaño original, no escalar
+            tamaño_logico=32  # Mantener tamaño original (32x32)
         )
         if attack_frames:
             frames["attack"] = attack_frames
