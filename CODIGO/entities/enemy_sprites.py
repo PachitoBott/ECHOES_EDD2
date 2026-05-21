@@ -519,6 +519,51 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             frames["attack"] = attack_frames
         else:
             frames["attack"] = _load_state_frames(base_dir, "attack", 4, color)
+
+    # --- Caso especial: tank usa spritesheets para las animaciones ---
+    elif variant_slug == "tank":
+        # Cargar animación "idle" desde tank_idle.png - 4 columnas, 11 frames
+        idle_frames = cargar_spritesheet_cuadricula(
+            ruta="assets/tank_idle.png",
+            frame_w=96,
+            frame_h=96,
+            cols=4,
+            frames_a_usar=11,
+            flip_horizontal=False
+        )
+        if idle_frames:
+            frames["idle"] = idle_frames
+        else:
+            frames["idle"] = _load_state_frames(base_dir, "idle", 4, color)
+
+        # Cargar animación "run" (walk) desde tank_walk.png - 5 columnas, 18 frames
+        run_frames = cargar_spritesheet_cuadricula(
+            ruta="assets/tank_walk.png",
+            frame_w=96,
+            frame_h=96,
+            cols=5,
+            frames_a_usar=18,
+            flip_horizontal=False
+        )
+        if run_frames:
+            frames["run"] = run_frames
+        else:
+            frames["run"] = _load_state_frames(base_dir, "run", 4, color)
+
+        # Cargar animación "shoot" desde tank_attack.png - 5 columnas, 22 frames
+        # (El tank usa "shoot" como estado, no "attack")
+        shoot_frames = cargar_spritesheet_cuadricula(
+            ruta="assets/tank_attack.png",
+            frame_w=96,
+            frame_h=96,
+            cols=5,
+            frames_a_usar=22,
+            flip_horizontal=False
+        )
+        if shoot_frames:
+            frames["shoot"] = shoot_frames
+        else:
+            frames["shoot"] = _load_state_frames(base_dir, "shoot", 4, color)
     else:
         # Para otros enemigos, cargar normalmente
         pass
