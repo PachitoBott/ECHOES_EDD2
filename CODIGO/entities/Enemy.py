@@ -21,6 +21,7 @@ class Enemy(Entity):
     """Base con FSM + LoS. Subclases cambian stats/comportamientos."""
 
     SPRITE_VARIANT = "default"
+    DEATH_PARTICLE_COLOR = (255, 100, 100)  # Color RGB para partículas de muerte (rojo por defecto)
     _death_effect_manager_global = None  # Asignado por Game al inicializar
 
     def __init__(self, x: float, y: float, hp: int = 3, gold_reward: int = 5) -> None:
@@ -227,7 +228,7 @@ class Enemy(Entity):
                 sprite_height=self.h,
                 lifetime=0.5,
                 num_particles=25,
-                particle_color=(255, 100, 100)  # Rojo
+                particle_color=self.DEATH_PARTICLE_COLOR
             )
 
         # Marcar como listo para remover (sin esperar animación de muerte)
@@ -369,6 +370,7 @@ class Enemy(Entity):
 class FastChaserEnemy(Enemy):
     """Rápido, poca vida."""
     SPRITE_VARIANT = "green_chaser"
+    DEATH_PARTICLE_COLOR = (100, 255, 100)  # Verde
     def __init__(self, x, y):
         super().__init__(x, y, hp=2, gold_reward=7)
         self.chase_speed  = 100.0
@@ -527,6 +529,7 @@ class BasicEnemy(Enemy):
     """Enemigo común que dispara lentamente mientras avanza."""
 
     SPRITE_VARIANT = "yellow_shooter"
+    DEATH_PARTICLE_COLOR = (255, 255, 100)  # Amarillo
 
     def __init__(self, x, y):
         super().__init__(x, y, hp=3, gold_reward=5)
@@ -609,6 +612,7 @@ class TankEnemy(Enemy):
     """Lento, mucha vida y dispara ráfagas estilo escopeta."""
 
     SPRITE_VARIANT = ("tank", "blue_shooter")
+    DEATH_PARTICLE_COLOR = (100, 150, 200)  # Azul-gris
 
     def __init__(self, x, y):
         super().__init__(x, y, hp=9, gold_reward=12)
