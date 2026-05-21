@@ -100,10 +100,8 @@ class Enemy(Entity):
     # ---------- loop ----------
     def update(self, dt: float, player, room) -> None:
         if self._is_dying:
-            self.animator.set_base_state("death")
-            self.animator.update(dt)
-            if self.animator.is_death_finished():
-                self._ready_to_remove = True
+            # El efecto de muerte se spawnea inmediatamente en _begin_death()
+            # El enemigo ya está marcado como _ready_to_remove
             return
         self.hit_flash_timer = max(0.0, self.hit_flash_timer - dt)
         self.alert_timer = max(0.0, self.alert_timer - dt)
