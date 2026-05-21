@@ -127,15 +127,15 @@ class Game:
             custom_width=497,
             custom_height=221
         )
-        # P2: bottom-right (450x200) - positioned on right side at same height
-        # custom_x = screen_width - panel_width - margin = 960 - 450 - 16 = 494
+        # P2: bottom-right (450x200) - positioned far right
+        # custom_x = 494 + 700 = 1194
         self.hud_panel_p2 = HUDPanel(
             player_id=2,
             anchor="top_left",
             panel_image_path="assets/ui/panel_jugador2.png",
             screen_width=cfg.SCREEN_W,
             screen_height=cfg.SCREEN_H,
-            custom_x=494,  # Right side
+            custom_x=1194,  # 700px further right
             custom_y=895   # Same height as P1
         )
 
