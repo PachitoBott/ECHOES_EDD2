@@ -195,7 +195,7 @@ class StartMenu:
         if not filename: return None
         clean_name = Path(filename).name
         image_path = self._get_path(clean_name)
-        
+
         if not image_path.exists():
             return None
 
@@ -204,6 +204,18 @@ class StartMenu:
             return image
         except Exception:
             return None
+
+    def _load_logo_title(self) -> Optional[pygame.Surface]:
+        """Carga el logo GHOSTED desde assets/ui/logo_ghosted.png"""
+        if not hasattr(self, "_logo_title_cache"):
+            self._logo_title_cache = None
+            image_path = Path(__file__).parent.parent / "assets" / "ui" / "logo_ghosted.png"
+            if image_path.exists():
+                try:
+                    self._logo_title_cache = pygame.image.load(str(image_path)).convert_alpha()
+                except Exception:
+                    pass
+        return self._logo_title_cache
 
     def _compute_layout(self) -> None:
         width, height = self.screen.get_size()
@@ -519,35 +531,42 @@ class StartMenu:
             overlay.fill((0, 0, 0, 160))
             self.screen.blit(overlay, (0, 0))
 
-        title_text = self.menu_cfg.title.upper()
-
-        # Sombra exterior oscura
-        shadow_surf = self.title_font.render(title_text, True, (60, 4, 8))
-        shadow_rect = shadow_surf.get_rect(center=(width // 2 + 5, height // 4 + 5))
-        self.screen.blit(shadow_surf, shadow_rect)
-
-        # Segunda sombra más cerca
-        shadow2_surf = self.title_font.render(title_text, True, (120, 14, 20))
-        shadow2_rect = shadow2_surf.get_rect(center=(width // 2 + 2, height // 4 + 2))
-        self.screen.blit(shadow2_surf, shadow2_rect)
-
-        # Título principal en crimson
-        title_surf = self.title_font.render(title_text, True, self.COLOR_CRIMSON)
-        title_rect = title_surf.get_rect(center=(width // 2, height // 4))
-        self.screen.blit(title_surf, title_rect)
+        # Cargar y mostrar logo PNG en lugar del texto
+        logo_title = self._load_logo_title()
+        if logo_title:
+            # Escalar a 1/3 del tamaño original
+            scaled_size = (logo_title.get_width() // 3, logo_title.get_height() // 3)
+            logo_title_scaled = pygame.transform.smoothscale(logo_title, scaled_size)
+            logo_title_rect = logo_title_scaled.get_rect(center=(width // 2, height // 5))
+            self.screen.blit(logo_title_scaled, logo_title_rect)
+        else:
+            # Fallback a texto si no carga la imagen
+            title_text = self.menu_cfg.title.upper()
+            # Sombra exterior oscura
+            shadow_surf = self.title_font.render(title_text, True, (60, 4, 8))
+            shadow_rect = shadow_surf.get_rect(center=(width // 2 + 5, height // 4 + 5))
+            self.screen.blit(shadow_surf, shadow_rect)
+            # Segunda sombra más cerca
+            shadow2_surf = self.title_font.render(title_text, True, (120, 14, 20))
+            shadow2_rect = shadow2_surf.get_rect(center=(width // 2 + 2, height // 4 + 2))
+            self.screen.blit(shadow2_surf, shadow2_rect)
+            # Título principal en crimson
+            title_surf = self.title_font.render(title_text, True, self.COLOR_CRIMSON)
+            logo_title_rect = title_surf.get_rect(center=(width // 2, height // 4))
+            self.screen.blit(title_surf, logo_title_rect)
 
         if self.menu_cfg.subtitle:
             subtitle_surf = self.subtitle_font.render(
                 self.menu_cfg.subtitle, True, (185, 130, 130)
             )
             subtitle_rect = subtitle_surf.get_rect(
-                center=(width // 2, title_rect.bottom + 10)
+                center=(width // 2, logo_title_rect.bottom + 10)
             )
             self.screen.blit(subtitle_surf, subtitle_rect)
 
         if self.logo:
             logo_rect = self.logo.get_rect()
-            logo_rect.center = (width // 2, title_rect.bottom + 80)
+            logo_rect.center = (width // 2, logo_title_rect.bottom + 80)
             self.screen.blit(self.logo, logo_rect)
 
         mouse_pos = pygame.mouse.get_pos()
