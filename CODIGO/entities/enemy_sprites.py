@@ -486,7 +486,8 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             frame_h=64,
             cols=4,
             frames_a_usar=15,
-            flip_horizontal=False
+            flip_horizontal=False,
+            tamaño_logico=64  # Mantener tamaño original, no escalar
         )
         if run_frames:
             frames["run"] = run_frames
@@ -500,7 +501,8 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             frame_h=64,
             cols=3,
             frames_a_usar=8,
-            flip_horizontal=False
+            flip_horizontal=False,
+            tamaño_logico=64  # Mantener tamaño original, no escalar
         )
         if idle_frames:
             frames["idle"] = idle_frames
@@ -514,7 +516,8 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             frame_h=64,
             cols=3,
             frames_a_usar=5,
-            flip_horizontal=False
+            flip_horizontal=False,
+            tamaño_logico=64  # Mantener tamaño original, no escalar
         )
         if attack_frames:
             frames["attack"] = attack_frames
