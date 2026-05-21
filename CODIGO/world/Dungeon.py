@@ -114,9 +114,6 @@ class Dungeon:
         # <<< COMENTADO: la tienda antigua se reemplaza por Profesor Ibarra como único NPC de compra
         # self._place_shop_room()
 
-        # <<< NUEVO: sala del boss en el extremo más lejano de Zona 2
-        self._place_boss_room()
-
         # <<< NUEVO: sala segura con Mara en Zona 2
         self._place_mara_safe_room()
 
@@ -415,54 +412,6 @@ class Dungeon:
         setattr(room, "type", "shop")     # <<< etiqueta directa en Room
         self.shop_pos = (sx, sy)          # <<< guarda la coordenada para otras clases
 
-    def _place_boss_room(self) -> None:
-        """
-        Coloca la sala del boss en el extremo más lejano de Zona 2.
-
-        Criterios de selección (en orden de prioridad):
-        1. Debe estar en Zona 2 (profundidad BFS >= 4).
-        2. Se elige la sala con MAYOR profundidad (más lejos del inicio).
-        3. Desempate: prefiere el último paso único del camino principal.
-        4. No puede ser el inicio.
-        """
-        if not hasattr(self, "zones"):
-            return
-
-        forbidden = {self.start}
-
-        # Candidatas: salas de Zona 2, nunca el inicio
-        zone2 = [
-            pos for pos in self.rooms
-            if self.zones.get(pos, 1) == 2 and pos not in forbidden
-        ]
-
-        if not zone2:
-            return
-
-        # Ordenar por profundidad descendente; usar la posición del main_path como desempate
-        main_set = set(self.main_path)
-        zone2.sort(
-            key=lambda p: (
-                -self.depth_map.get(p, 0),   # mayor profundidad primero
-                0 if p in main_set else 1,    # preferir camino principal
-            )
-        )
-
-        boss_pos = zone2[0]
-        room = self.rooms.get(boss_pos)
-        if room is None:
-            return
-
-        room.setup_boss_room()
-        self.boss_pos = boss_pos
-
-        import sys
-        from dev.logger import log_game
-        log_game.info(
-            f"Boss room colocada en {boss_pos} "
-            f"(profundidad {self.depth_map.get(boss_pos, 0)}, zona {self.zones.get(boss_pos, '?')})"
-        )
-
     def _place_mara_safe_room(self) -> None:
         """
         Coloca una sala segura con Mara (NPC) en Zona 2.
@@ -477,11 +426,10 @@ class Dungeon:
         zone2_rooms = [pos for pos in self.rooms.keys()
                        if self.room_zone(pos) == 2]
 
-        # Evitar inicio, tienda y boss
+        # Evitar inicio y tienda
         forbidden = {self.start}
-        for attr in ("shop_pos", "boss_pos"):
-            if hasattr(self, attr):
-                forbidden.add(getattr(self, attr))
+        if hasattr(self, "shop_pos"):
+            forbidden.add(self.shop_pos)
 
         zone2_candidates = [pos for pos in zone2_rooms if pos not in forbidden]
 
@@ -505,9 +453,8 @@ class Dungeon:
             return
 
         forbidden = {self.start}
-        for attr in ("shop_pos", "boss_pos"):
-            if hasattr(self, attr):
-                forbidden.add(getattr(self, attr))
+        if hasattr(self, "shop_pos"):
+            forbidden.add(getattr(self, "shop_pos"))
 
         # Prioriza el camino principal para que aparezcan "entre" salas de combate
         main_candidates = [pos for pos in self.main_path if pos not in forbidden]
@@ -548,7 +495,7 @@ class Dungeon:
             return
 
         salt = 0xC0BB1E
-        safe_types = {"shop", "treasure", "profesor_ibarra", "boss"}
+        safe_types = {"shop", "treasure", "profesor_ibarra"}
 
         for pos, room in sorted(self.rooms.items()):
             if pos == self.start:
@@ -580,7 +527,7 @@ class Dungeon:
             return
 
         forbidden: set[tuple[int, int]] = {self.start}
-        for attr in ("shop_pos", "mara_pos", "boss_pos"):
+        for attr in ("shop_pos", "mara_pos"):
             if hasattr(self, attr):
                 forbidden.add(getattr(self, attr))
 

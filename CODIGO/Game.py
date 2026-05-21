@@ -356,10 +356,6 @@ class Game:
             self.shop.close()
             self.shop.configure_for_seed(self.current_seed)
 
-        # Debug: saltar directamente a la boss room al iniciar
-        if self.cfg.DEBUG_START_IN_BOSS_ROOM and hasattr(self.dungeon, "boss_pos"):
-            self.dungeon.i, self.dungeon.j = self.dungeon.boss_pos
-
         # marcar room inicial como explorado
         self.dungeon.explored = set()
         self.dungeon.explored.add((self.dungeon.i, self.dungeon.j))
