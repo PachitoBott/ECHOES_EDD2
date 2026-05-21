@@ -295,13 +295,15 @@ class HUDPanel:
         self._actualizar_posicion()
 
     def _cargar_panel(self, path: str) -> None:
-        """Carga el PNG del panel. Si no existe, panel_image queda en None."""
+        """Carga el PNG del panel y lo redimensiona al tamaño estándar."""
         if path and os.path.exists(path):
             try:
                 self.panel_image = pygame.image.load(path).convert_alpha()
-                # Actualizar tamaño del rect según el PNG
-                self.rect.width = self.panel_image.get_width()
-                self.rect.height = self.panel_image.get_height()
+                # Redimensionar imagen al tamaño estándar (240x80)
+                self.panel_image = pygame.transform.smoothscale(
+                    self.panel_image,
+                    (self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
+                )
             except pygame.error:
                 self.panel_image = None
 
