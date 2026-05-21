@@ -531,8 +531,12 @@ class Player(Entity):
             return
 
         # Determinar qué animación de disparo reproducir según la dirección
-        # Si dispara hacia abajo (0, 1), usar animación "shoot_down" si existe
-        if self._shoot_dir_current == (0, 1) and "shoot_down" in self._animations:
+        if self._shoot_dir_current == (0, -1) and "shoot_up" in self._animations:
+            # Dispara hacia arriba
+            self._animation_override = "shoot_up"
+            self._set_current_animation("shoot_up", force_reset=True)
+        elif self._shoot_dir_current == (0, 1) and "shoot_down" in self._animations:
+            # Dispara hacia abajo
             self._animation_override = "shoot_down"
             self._set_current_animation("shoot_down", force_reset=True)
         else:
