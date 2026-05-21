@@ -1774,7 +1774,8 @@ class Game:
 
         minimap_surface = self.minimap.render(self.dungeon)
         minimap_position = self.hud_panels.compute_minimap_position(self.screen, minimap_surface)
-        self.hud_panels.blit_minimap_panel(self.screen, minimap_surface, minimap_position)
+        # Renderizar minimapa sin el marco (frame panel eliminado)
+        self.screen.blit(minimap_surface, minimap_position)
 
         # Paneles de esquina eliminados (panel_esquina.png, panel_esquina_inverso.png)
 
