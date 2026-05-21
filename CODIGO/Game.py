@@ -116,7 +116,7 @@ class Game:
 
         # --- Paneles de jugadores (stacked vertically on left side) ---
         from ui.HudPanels import HUDPanel
-        # P1: 5% larger (450*1.05=473, 200*1.05=210)
+        # P1: 10% larger total (473*1.05=497, 210*1.05=221)
         self.hud_panel_p1 = HUDPanel(
             player_id=1,
             anchor="top_left",
@@ -124,17 +124,17 @@ class Game:
             screen_width=cfg.SCREEN_W,
             screen_height=cfg.SCREEN_H,
             custom_y=180,
-            custom_width=473,
-            custom_height=210
+            custom_width=497,
+            custom_height=221
         )
-        # P2: standard size, 5px lower
+        # P2: standard size, much lower (500px down)
         self.hud_panel_p2 = HUDPanel(
             player_id=2,
             anchor="top_left",
             panel_image_path="assets/ui/panel_jugador2.png",
             screen_width=cfg.SCREEN_W,
             screen_height=cfg.SCREEN_H,
-            custom_y=395  # 5px lower than before (was 390)
+            custom_y=895  # 500px lower (was 395)
         )
 
         # ---------- Recursos ----------
