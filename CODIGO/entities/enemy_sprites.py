@@ -580,7 +580,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             cols=5,
             frames_a_usar=22,
             flip_horizontal=False,
-            tamaño_logico=32  # Escalar a tamaño pequeño como camera_chaser
+            tamaño_logico=96  # Mantener tamaño original, no escalar
         )
         if walk_frames:
             # idle y walk comparten la misma animación (sin copiar, misma referencia)
@@ -598,7 +598,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             cols=4,
             frames_a_usar=16,
             flip_horizontal=False,
-            tamaño_logico=32  # Escalar a tamaño pequeño
+            tamaño_logico=96  # Mantener tamaño original, no escalar
         )
         if shoot_frames:
             frames["shoot"] = shoot_frames
