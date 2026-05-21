@@ -271,7 +271,8 @@ class HUDPanel:
     def __init__(self, player_id: int, anchor: str,
                  panel_image_path: str | None = None,
                  screen_width: int = 960,
-                 screen_height: int = 640):
+                 screen_height: int = 640,
+                 custom_y: int | None = None):
         """
         Inicializa un panel de HUD para un jugador.
 
@@ -281,11 +282,13 @@ class HUDPanel:
             panel_image_path: ruta al PNG del panel (puede ser None)
             screen_width: ancho de la pantalla lógica
             screen_height: alto de la pantalla lógica
+            custom_y: posición Y personalizada (sobreescribe el anchor)
         """
         self.player_id = player_id
         self.anchor = anchor
         self.screen_width = screen_width
         self.screen_height = screen_height
+        self.custom_y = custom_y
         self.panel_image = None
         self.rect = pygame.Rect(0, 0, self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
 
@@ -308,16 +311,18 @@ class HUDPanel:
                 self.panel_image = None
 
     def _actualizar_posicion(self) -> None:
-        """Actualiza la posición del panel según el anchor."""
-        if self.anchor == "top_left":
-            self.rect.x = self.MARGIN
+        """Actualiza la posición del panel según el anchor o custom_y."""
+        self.rect.x = self.MARGIN
+
+        # Si hay custom_y, usarlo (sobrescribe anchor)
+        if self.custom_y is not None:
+            self.rect.y = self.custom_y
+        elif self.anchor == "top_left":
             self.rect.y = self.MARGIN
         elif self.anchor == "bottom_left":
-            self.rect.x = self.MARGIN
             self.rect.y = self.screen_height - self.rect.height - self.MARGIN
         else:
             # Default: top_left
-            self.rect.x = self.MARGIN
             self.rect.y = self.MARGIN
 
     def render(self, surface: pygame.Surface, player_data: dict) -> pygame.Rect:
