@@ -1044,8 +1044,16 @@ class Room:
         """
         ts = CFG.TILE_SIZE
 
+        # Color de suelo y pared según tipo de sala
+        room_type = getattr(self, "type", "normal")
+        if room_type == "boss":
+            floor = (30, 6, 6)    # rojo oscuro casi negro
+            wall  = (80, 18, 18)  # rojo oscuro para paredes
+        else:
+            floor = CFG.COLOR_FLOOR
+            wall  = CFG.COLOR_WALL
+
         # Rellenar el suelo con un color plano para evitar repetir sprites.
-        floor = CFG.COLOR_FLOOR
         for ty in range(CFG.MAP_H):
             row = self.tiles[ty]
             for tx in range(CFG.MAP_W):
@@ -1059,7 +1067,6 @@ class Room:
 
         if not drew_with_tileset:
             # Fallback: colorear las paredes a mano, evitando el exterior.
-            wall = CFG.COLOR_WALL
             for ty in range(CFG.MAP_H):
                 row = self.tiles[ty]
                 for tx in range(CFG.MAP_W):
@@ -1116,6 +1123,23 @@ class Room:
             "opened": False,
             "loot_table": loot_table,
         }
+
+    # ------------------------------------------------------------------ #
+    # Boss
+    # ------------------------------------------------------------------ #
+    def setup_boss_room(self) -> None:
+        """
+        Convierte esta sala en la sala del boss.
+        Tamaño fijo definido en Config (BOSS_ROOM_W × BOSS_ROOM_H).
+        Sin enemigos normales — el boss se añadirá en una fase posterior.
+        """
+        self.type = "boss"
+        self.safe = False
+        self.no_spawn = True
+        self.no_combat = False
+        self.locked = False
+        self.clear_obstacles()
+        self.build_centered(CFG.BOSS_ROOM_W, CFG.BOSS_ROOM_H)
 
     def _handle_treasure_events(self, events, player) -> None:
         if not self.treasure:
