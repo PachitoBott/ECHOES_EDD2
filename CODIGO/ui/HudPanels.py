@@ -272,6 +272,7 @@ class HUDPanel:
                  panel_image_path: str | None = None,
                  screen_width: int = 960,
                  screen_height: int = 640,
+                 custom_x: int | None = None,
                  custom_y: int | None = None,
                  custom_width: int | None = None,
                  custom_height: int | None = None):
@@ -284,6 +285,7 @@ class HUDPanel:
             panel_image_path: ruta al PNG del panel (puede ser None)
             screen_width: ancho de la pantalla lógica
             screen_height: alto de la pantalla lógica
+            custom_x: posición X personalizada (sobreescribe el anchor)
             custom_y: posición Y personalizada (sobreescribe el anchor)
             custom_width: ancho personalizado (sobreescribe DEFAULT_WIDTH)
             custom_height: alto personalizado (sobreescribe DEFAULT_HEIGHT)
@@ -292,6 +294,7 @@ class HUDPanel:
         self.anchor = anchor
         self.screen_width = screen_width
         self.screen_height = screen_height
+        self.custom_x = custom_x
         self.custom_y = custom_y
         self.panel_image = None
 
@@ -319,10 +322,17 @@ class HUDPanel:
                 self.panel_image = None
 
     def _actualizar_posicion(self) -> None:
-        """Actualiza la posición del panel según el anchor o custom_y."""
-        self.rect.x = self.MARGIN
+        """Actualiza la posición del panel según el anchor o custom_x/custom_y."""
+        # Posición X
+        if self.custom_x is not None:
+            self.rect.x = self.custom_x
+        elif self.anchor == "top_left":
+            self.rect.x = self.MARGIN
+        else:
+            # Default: top_left
+            self.rect.x = self.MARGIN
 
-        # Si hay custom_y, usarlo (sobrescribe anchor)
+        # Posición Y
         if self.custom_y is not None:
             self.rect.y = self.custom_y
         elif self.anchor == "top_left":

@@ -114,27 +114,29 @@ class Game:
             # Centra el minimapa dentro del panel de esquina para que quede cubierto.
             self.hud_panels.set_minimap_anchor("top-right",  margin=(80, 140))
 
-        # --- Paneles de jugadores (stacked vertically on left side) ---
+        # --- Paneles de jugadores (P1 bottom-left, P2 bottom-right) ---
         from ui.HudPanels import HUDPanel
-        # P1: 10% larger total (473*1.05=497, 210*1.05=221)
+        # P1: bottom-left (497x221)
         self.hud_panel_p1 = HUDPanel(
             player_id=1,
             anchor="top_left",
             panel_image_path="assets/ui/panel_jugador1.png",
             screen_width=cfg.SCREEN_W,
             screen_height=cfg.SCREEN_H,
-            custom_y=180,
+            custom_y=895,  # Same as P2 (bottom)
             custom_width=497,
             custom_height=221
         )
-        # P2: standard size, much lower (500px down)
+        # P2: bottom-right (450x200) - positioned on right side at same height
+        # custom_x = screen_width - panel_width - margin = 960 - 450 - 16 = 494
         self.hud_panel_p2 = HUDPanel(
             player_id=2,
             anchor="top_left",
             panel_image_path="assets/ui/panel_jugador2.png",
             screen_width=cfg.SCREEN_W,
             screen_height=cfg.SCREEN_H,
-            custom_y=895  # 500px lower (was 395)
+            custom_x=494,  # Right side
+            custom_y=895   # Same height as P1
         )
 
         # ---------- Recursos ----------
