@@ -529,8 +529,16 @@ class Player(Entity):
     def _start_shoot_animation(self) -> None:
         if self._respawn_animating:
             return
-        self._animation_override = "shoot"
-        self._set_current_animation("shoot", force_reset=True)
+
+        # Determinar qué animación de disparo reproducir según la dirección
+        # Si dispara hacia abajo (0, 1), usar animación "shoot_down" si existe
+        if self._shoot_dir_current == (0, 1) and "shoot_down" in self._animations:
+            self._animation_override = "shoot_down"
+            self._set_current_animation("shoot_down", force_reset=True)
+        else:
+            # Fallback a animación genérica de disparo
+            self._animation_override = "shoot"
+            self._set_current_animation("shoot", force_reset=True)
 
     def _update_animation(self, dt: float, moving: bool) -> None:
         """Determina qué animación reproducir según estado del jugador.
