@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Tuple
+import os
 
 import pygame
 
@@ -245,3 +246,116 @@ class HudPanels:
             y = sh - mh - margin_y
 
         return (x, y)
+
+
+# ========================================================================
+# Nueva estructura: HUDPanel para los dos paneles de jugadores
+# ========================================================================
+
+class HUDPanel:
+    """
+    Panel del HUD que muestra vida y monedas de un jugador.
+    El sprite del panel se carga desde un archivo PNG.
+    Si el PNG no existe, muestra un rectángulo de color placeholder.
+    """
+
+    # Tamaños predeterminados (se ajustan cuando lleguen los PNGs reales)
+    DEFAULT_WIDTH = 240
+    DEFAULT_HEIGHT = 80
+    MARGIN = 16
+
+    # Colores para placeholders
+    PLACEHOLDER_COLOR = (30, 30, 45)
+    PLACEHOLDER_BORDER_COLOR = (50, 50, 70)
+
+    def __init__(self, player_id: int, anchor: str,
+                 panel_image_path: str | None = None,
+                 screen_width: int = 960,
+                 screen_height: int = 640):
+        """
+        Inicializa un panel de HUD para un jugador.
+
+        Args:
+            player_id: 1 o 2
+            anchor: "top_left" o "bottom_left"
+            panel_image_path: ruta al PNG del panel (puede ser None)
+            screen_width: ancho de la pantalla lógica
+            screen_height: alto de la pantalla lógica
+        """
+        self.player_id = player_id
+        self.anchor = anchor
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        self.panel_image = None
+        self.rect = pygame.Rect(0, 0, self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
+
+        if panel_image_path:
+            self._cargar_panel(panel_image_path)
+
+        self._actualizar_posicion()
+
+    def _cargar_panel(self, path: str) -> None:
+        """Carga el PNG del panel. Si no existe, panel_image queda en None."""
+        if path and os.path.exists(path):
+            try:
+                self.panel_image = pygame.image.load(path).convert_alpha()
+                # Actualizar tamaño del rect según el PNG
+                self.rect.width = self.panel_image.get_width()
+                self.rect.height = self.panel_image.get_height()
+            except pygame.error:
+                self.panel_image = None
+
+    def _actualizar_posicion(self) -> None:
+        """Actualiza la posición del panel según el anchor."""
+        if self.anchor == "top_left":
+            self.rect.x = self.MARGIN
+            self.rect.y = self.MARGIN
+        elif self.anchor == "bottom_left":
+            self.rect.x = self.MARGIN
+            self.rect.y = self.screen_height - self.rect.height - self.MARGIN
+        else:
+            # Default: top_left
+            self.rect.x = self.MARGIN
+            self.rect.y = self.MARGIN
+
+    def render(self, surface: pygame.Surface, player_data: dict) -> pygame.Rect:
+        """
+        Dibuja el panel con los datos del jugador.
+
+        Args:
+            surface: superficie donde dibujar
+            player_data: {
+                "health": int,
+                "max_health": int,
+                "coins": int
+            }
+
+        Returns:
+            El rect ocupado por el panel
+        """
+        self._dibujar_fondo(surface)
+        # Cuando lleguen los PNGs, agregar lógica aquí para dibujar vida/monedas
+        return self.rect
+
+    def _dibujar_fondo(self, surface: pygame.Surface) -> None:
+        """Dibuja el PNG del panel o un rectángulo placeholder."""
+        if self.panel_image:
+            surface.blit(self.panel_image, self.rect)
+        else:
+            # Placeholder temporal: rectángulo de color
+            pygame.draw.rect(surface, self.PLACEHOLDER_COLOR, self.rect)
+            pygame.draw.rect(surface, self.PLACEHOLDER_BORDER_COLOR, self.rect, 2)
+
+    def set_panel_image(self, path: str) -> None:
+        """
+        Permite cambiar el PNG del panel en caliente.
+        Llamar cuando lleguen los archivos PNG reales.
+        """
+        self._cargar_panel(path)
+        self._actualizar_posicion()
+
+    def actualizar_tamaño_pantalla(self, screen_width: int, screen_height: int) -> None:
+        """Actualiza el tamaño de la pantalla y reposiciona el panel."""
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        self._actualizar_posicion()

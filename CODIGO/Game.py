@@ -114,6 +114,23 @@ class Game:
             # Centra el minimapa dentro del panel de esquina para que quede cubierto.
             self.hud_panels.set_minimap_anchor("top-right",  margin=(80, 140))
 
+        # --- Paneles de jugadores (placeholders hasta que lleguen los PNGs) ---
+        from ui.HudPanels import HUDPanel
+        self.hud_panel_p1 = HUDPanel(
+            player_id=1,
+            anchor="top_left",
+            panel_image_path="assets/ui/panel_player1.png",  # aún no existe
+            screen_width=cfg.SCREEN_W,
+            screen_height=cfg.SCREEN_H
+        )
+        self.hud_panel_p2 = HUDPanel(
+            player_id=2,
+            anchor="bottom_left",
+            panel_image_path="assets/ui/panel_player2.png",  # aún no existe
+            screen_width=cfg.SCREEN_W,
+            screen_height=cfg.SCREEN_H
+        )
+
         # ---------- Recursos ----------
         self.tileset = Tileset()
         self.minimap = Minimap(cell=16, padding=8)
@@ -1723,49 +1740,43 @@ class Game:
             pygame.display.flip()
             return
 
-        inventory_rect = self.hud_panels.blit_inventory_panel(self.screen)
-        weapon_rect = self._draw_weapon_hud(inventory_rect)
-
-        gold_amount = getattr(self.player, "gold", 0)
-        microchip_rect = self._draw_coin_counter(inventory_rect, weapon_rect, gold_amount)
+        # Panel de inventario anterior eliminado
+        # La vida y monedas se mostrarán en los nuevos paneles cuando lleguen
 
         seed_text = self.ui_font.render(f"Seed: {self.current_seed}", True, (230, 230, 230))
-
-        text_x, text_y = self.hud_panels.inventory_content_anchor()
-        if weapon_rect.width:
-            text_x = max(text_x, weapon_rect.right + int(self.weapon_text_margin))
-        if microchip_rect.width:
-            text_x = max(text_x, microchip_rect.right + int(self.weapon_text_margin))
-        line_gap = 6
-
-        header_rect = pygame.Rect(0, 0, 0, 0)
-        if weapon_rect.width and weapon_rect.height:
-            header_rect = weapon_rect.copy()
-        if microchip_rect.width and microchip_rect.height:
-            header_rect = (
-                header_rect.union(microchip_rect)
-                if header_rect.width or header_rect.height
-                else microchip_rect
-            )
-        if header_rect.height:
-            text_y = max(text_y, header_rect.bottom + line_gap)
-
-        battery_origin = (
-            text_x + int(self._life_battery_offset.x),
-            text_y + int(self._life_battery_offset.y),
-        )
-        batteries_rect = self._blit_life_batteries(self.screen, battery_origin)
-        if batteries_rect.height:
-            text_y = batteries_rect.bottom + line_gap
-
         seed_position = (20, 100)
         self.screen.blit(seed_text, seed_position)
+
+        # Dibujar los nuevos paneles de jugadores (con placeholders de color)
+        player_data_p1 = {
+            "health": getattr(self.player, "lives", 0),
+            "max_health": getattr(self.player, "max_lives", 0),
+            "coins": getattr(self.player, "gold", 0)
+        }
+        self.hud_panel_p1.render(self.screen, player_data_p1)
+
+        # Panel del Jugador 2 (si hay jugador remoto)
+        if self.remote_players:
+            # Obtener datos del primer jugador remoto
+            remote_player = next(iter(self.remote_players.values()), None)
+            if remote_player:
+                player_data_p2 = {
+                    "health": getattr(remote_player, "lives", 0),
+                    "max_health": getattr(remote_player, "max_lives", 0),
+                    "coins": getattr(remote_player, "gold", 0)
+                }
+            else:
+                player_data_p2 = {"health": 0, "max_health": 0, "coins": 0}
+        else:
+            player_data_p2 = {"health": 0, "max_health": 0, "coins": 0}
+
+        self.hud_panel_p2.render(self.screen, player_data_p2)
 
         minimap_surface = self.minimap.render(self.dungeon)
         minimap_position = self.hud_panels.compute_minimap_position(self.screen, minimap_surface)
         self.hud_panels.blit_minimap_panel(self.screen, minimap_surface, minimap_position)
 
-        self.hud_panels.blit_corner_panel(self.screen)
+        # Paneles de esquina eliminados (panel_esquina.png, panel_esquina_inverso.png)
 
         # Contador de fragmentos de empatía
         self._draw_empathy_counter()
