@@ -12,6 +12,7 @@ import pygame
 from Config import Config
 from ui.StartMenu import StartMenu
 from core.Tileset import Tileset
+from core.TilesetManager import TilesetManager
 from entities.Player import Player
 from world.Dungeon import Dungeon
 from world.background import MatrixBackground
@@ -141,7 +142,8 @@ class Game:
         )
 
         # ---------- Recursos ----------
-        self.tileset = Tileset()
+        self.tileset_manager = TilesetManager()
+        self.tileset_manager.set_zone(1)  # Inicializar con Zona 1
         self.minimap = Minimap(cell=16, padding=8)
 
         # ---------- Fondo matrix ----------
@@ -1567,6 +1569,12 @@ class Game:
         if new_zone != self._current_zone:
             self._current_zone = new_zone
 
+            # --- Cambiar tileset según la zona ---
+            self.tileset_manager.set_zone(new_zone)
+
+            # --- Cambiar paleta del fondo matrix según la zona ---
+            self.matrix_bg.set_zona(new_zone)
+
             # Cinemática: solo una vez por zona por partida
             if new_zone not in self._zones_cinematics_shown:
                 self._zones_cinematics_shown.add(new_zone)
@@ -1666,7 +1674,9 @@ class Game:
         self.matrix_bg.render(self.world)
 
         room = self.dungeon.current_room
-        room.draw(self.world, self.tileset)
+        # Usar tileset correspondiente a la zona actual
+        current_tileset = self.tileset_manager.get_current_tileset()
+        room.draw(self.world, current_tileset)
 
         if hasattr(room, "enemies"):
             for enemy in room.enemies:

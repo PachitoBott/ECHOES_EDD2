@@ -33,11 +33,39 @@ class Columna:
 class MatrixBackground:
     """
     Fondo animado estilo matrix con datos cayendo.
-    Paleta azul-morado oscuro.
+    Cambia de paleta según la zona donde esté el jugador.
     Se renderiza detrás de las salas del nivel.
     """
 
-    # Paleta de colores
+    # Paletas de colores por zona
+    ZONE_PALETTES = {
+        1: {
+            # Azul-morado oscuro (Zona 1)
+            "bg":     (4,   3,  12),
+            "head":   (140, 100, 220),
+            "bright": (80,  60, 160),
+            "mid":    (40,  30, 100),
+            "tail":   (20,  15,  55),
+        },
+        2: {
+            # Rojo-negro (Zona 2)
+            "bg":     (8,   2,   2),
+            "head":   (220, 40,  40),
+            "bright": (150, 20,  20),
+            "mid":    (80,  10,  10),
+            "tail":   (35,  5,   5),
+        },
+        3: {
+            # Rojo más oscuro e intenso (Zona 3)
+            "bg":     (10,  2,   2),
+            "head":   (255, 30,  30),
+            "bright": (180, 15,  15),
+            "mid":    (100, 8,   8),
+            "tail":   (45,  4,   4),
+        },
+    }
+
+    # Paleta actual (se inicializa con Zona 1)
     COLOR_HEAD = (140, 100, 220)    # Cabeza de la columna (más brillante)
     COLOR_BRIGHT = (80, 60, 160)    # Mitad superior de la cola
     COLOR_MID = (40, 30, 100)       # Mitad inferior de la cola
@@ -201,3 +229,22 @@ class MatrixBackground:
             return self.COLOR_MID
         else:
             return self.COLOR_TAIL
+
+    def set_zona(self, zona: int) -> None:
+        """
+        Cambia la paleta de colores del fondo según la zona.
+        Se llama cuando el jugador entra a una nueva zona.
+        El cambio es instantáneo — sin transición por ahora.
+
+        Args:
+            zona: número de zona (1, 2, 3, etc.)
+        """
+        # Obtener paleta para esta zona, con fallback a Zona 1
+        paleta = self.ZONE_PALETTES.get(zona, self.ZONE_PALETTES[1])
+
+        # Actualizar colores actuales
+        self.COLOR_BG = paleta["bg"]
+        self.COLOR_HEAD = paleta["head"]
+        self.COLOR_BRIGHT = paleta["bright"]
+        self.COLOR_MID = paleta["mid"]
+        self.COLOR_TAIL = paleta["tail"]
