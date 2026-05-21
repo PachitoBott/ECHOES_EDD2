@@ -374,29 +374,38 @@ def cargar_spritesheet_cuadricula(ruta: str,
                                    frame_w: int,
                                    frame_h: int,
                                    cols: int,
-                                   frames_a_usar: int) -> list[pygame.Surface]:
+                                   frames_a_usar: int,
+                                   flip_horizontal: bool = False) -> list[pygame.Surface]:
     """
     Carga frames de un spritesheet en cuadrícula.
 
     Extrae frames de un spritesheet que está organizado en una cuadrícula
-    (ej: 4x4) y los escala al tamaño lógico del juego (32x32).
+    (ej: 4x4, 3x3) y los escala al tamaño lógico del juego (32x32).
 
     Args:
         ruta: path al PNG del spritesheet (ej: 'assets/camera_chaser.png')
         frame_w: ancho de cada frame en píxeles (ej: 64)
         frame_h: alto de cada frame en píxeles (ej: 64)
-        cols: número de columnas en la cuadrícula (ej: 4)
-        frames_a_usar: cuántos frames cargar desde el inicio (ej: 15)
+        cols: número de columnas en la cuadrícula (ej: 4 o 3)
+        frames_a_usar: cuántos frames cargar desde el inicio (ej: 15, 8, 5)
+        flip_horizontal: si True, flipea todos los frames horizontalmente
 
     Returns:
         Lista de pygame.Surface con los frames en orden,
         escalados a tamaño lógico (32x32).
+        Si el archivo no existe, devuelve frames placeholder rojo.
     """
+    import os
+
+    if not os.path.exists(ruta):
+        print(f"[Sprites] No encontrado: {ruta}")
+        return _frames_placeholder(frame_w, frame_h, frames_a_usar)
+
     try:
         sheet = pygame.image.load(ruta).convert_alpha()
     except (pygame.error, FileNotFoundError) as e:
         print(f"[ADVERTENCIA] No se pudo cargar spritesheet {ruta}: {e}")
-        return []
+        return _frames_placeholder(frame_w, frame_h, frames_a_usar)
 
     frames = []
     tamaño_logico = 32  # Tamaño visual del enemigo en el juego
@@ -412,6 +421,10 @@ def cargar_spritesheet_cuadricula(ruta: str,
         frame_surface = pygame.Surface((frame_w, frame_h), pygame.SRCALPHA)
         frame_surface.blit(sheet, (0, 0), pygame.Rect(x, y, frame_w, frame_h))
 
+        # Aplicar flip si se solicita (para corregir sprites invertidos)
+        if flip_horizontal:
+            frame_surface = pygame.transform.flip(frame_surface, True, False)
+
         # Escalar al tamaño lógico del juego
         if frame_w != tamaño_logico or frame_h != tamaño_logico:
             frame_surface = pygame.transform.scale(
@@ -422,6 +435,24 @@ def cargar_spritesheet_cuadricula(ruta: str,
         frames.append(frame_surface)
 
     return frames
+
+
+def _frames_placeholder(w: int, h: int, n: int) -> list[pygame.Surface]:
+    """
+    Devuelve N frames de color sólido como placeholder.
+    El juego no crashea si falta un spritesheet.
+
+    Args:
+        w: ancho del frame
+        h: alto del frame
+        n: cantidad de frames a generar
+
+    Returns:
+        Lista de N superficies rojo semitransparente
+    """
+    surface = pygame.Surface((w, h), pygame.SRCALPHA)
+    surface.fill((180, 0, 0, 200))  # rojo semitransparente
+    return [surface.copy() for _ in range(n)]
 
 
 def resolve_enemy_variant(preferred: Iterable[str]) -> str:
@@ -445,22 +476,49 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
     color = _VARIANT_COLORS.get(variant_slug, _VARIANT_COLORS["default"])
     frames: dict[str, list[pygame.Surface]] = {}
 
-    # --- Caso especial: green_chaser usa spritesheet camera_chaser.png para animación "run" ---
+    # --- Caso especial: green_chaser usa spritesheets para las animaciones ---
     if variant_slug == "green_chaser":
-        spritesheet_path = "assets/camera_chaser.png"
+        # Cargar animación "run" (walk) desde camera_chaser.png - 4 columnas, 15 frames
         run_frames = cargar_spritesheet_cuadricula(
-            ruta=spritesheet_path,
+            ruta="assets/camera_chaser.png",
             frame_w=64,
             frame_h=64,
             cols=4,
-            frames_a_usar=15
+            frames_a_usar=15,
+            flip_horizontal=False
         )
         if run_frames:
-            # Usar los 15 frames del spritesheet para la animación "run"
             frames["run"] = run_frames
         else:
-            # Si no se puede cargar el spritesheet, usar archivos individuales como fallback
             frames["run"] = _load_state_frames(base_dir, "run", 4, color)
+
+        # Cargar animación "idle" desde camera_chaser_idle.png - 3 columnas, 8 frames
+        idle_frames = cargar_spritesheet_cuadricula(
+            ruta="assets/camera_chaser_idle.png",
+            frame_w=64,
+            frame_h=64,
+            cols=3,
+            frames_a_usar=8,
+            flip_horizontal=False
+        )
+        if idle_frames:
+            frames["idle"] = idle_frames
+        else:
+            frames["idle"] = _load_state_frames(base_dir, "idle", 4, color)
+
+        # Cargar animación "attack" desde camera_chaser_attack.png - 3 columnas, 5 frames
+        attack_frames = cargar_spritesheet_cuadricula(
+            ruta="assets/camera_chaser_attack.png",
+            frame_w=64,
+            frame_h=64,
+            cols=3,
+            frames_a_usar=5,
+            flip_horizontal=False
+        )
+        if attack_frames:
+            frames["attack"] = attack_frames
+        else:
+            frames["attack"] = _load_state_frames(base_dir, "attack", 4, color)
     else:
         # Para otros enemigos, cargar normalmente
         pass

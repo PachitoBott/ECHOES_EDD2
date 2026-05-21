@@ -388,6 +388,24 @@ class FastChaserEnemy(Enemy):
         self._update_facing(dir_x)
         self.animator.trigger_attack()
 
+    def _update_animation(self, dt: float) -> None:
+        """
+        Actualiza la animación basada en el estado del enemigo.
+        Prioridad: attack > run > idle
+        """
+        # Si está en cooldown de ataque, se está reproduciendo la animación de ataque
+        if self._attack_timer > 0.0:
+            base_state = "attack"
+        # Si está en movimiento, usar animación "run" (walk)
+        elif not self._movement_locked and self.state in (WANDER, CHASE):
+            base_state = "run"
+        # Por defecto, idle
+        else:
+            base_state = "idle"
+
+        self.animator.set_base_state(base_state)
+        self.animator.update(dt)
+
 
 class ShooterEnemy(Enemy):
     """Dispara si te ve (LoS) y estás en rango."""
