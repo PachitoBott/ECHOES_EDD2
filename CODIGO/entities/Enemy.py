@@ -601,7 +601,7 @@ class TankEnemy(Enemy):
         self.animator.fps_overrides.update({
             "idle": 3.5,
             "run": 6.0,
-            "shoot": 60.0,  # Animación de ataque muy rápida, casi instantánea
+            "shoot": 31.0,  # Animación de ataque: ~0.7 segundos
         })
         self._load_attack_sound("tank_enemy_sfx.mp3")
         # Aumentar volumen para TankEnemy

@@ -565,7 +565,8 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             tamaño_logico=96  # Mantener tamaño original, no escalar
         )
         if shoot_frames:
-            frames["shoot"] = shoot_frames
+            # Invertir frames para que se reproduzcan al revés (del último al primero)
+            frames["shoot"] = list(reversed(shoot_frames))
         else:
             frames["shoot"] = _load_state_frames(base_dir, "shoot", 4, color)
     else:
