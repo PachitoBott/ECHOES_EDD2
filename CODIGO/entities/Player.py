@@ -540,9 +540,9 @@ class Player(Entity):
             self._animation_override = "shoot_down"
             self._set_current_animation("shoot_down", force_reset=True)
         else:
-            # Fallback a animación genérica de disparo
-            self._animation_override = "shoot"
-            self._set_current_animation("shoot", force_reset=True)
+            # Fallback a animación genérica de disparo (para disparos laterales)
+            self._animation_override = "attack"
+            self._set_current_animation("attack", force_reset=True)
 
     def _update_animation(self, dt: float, moving: bool) -> None:
         """Determina qué animación reproducir según estado del jugador.
