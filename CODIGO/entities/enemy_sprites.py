@@ -375,7 +375,8 @@ def cargar_spritesheet_cuadricula(ruta: str,
                                    frame_h: int,
                                    cols: int,
                                    frames_a_usar: int,
-                                   flip_horizontal: bool = False) -> list[pygame.Surface]:
+                                   flip_horizontal: bool = False,
+                                   tamaño_logico: int = 32) -> list[pygame.Surface]:
     """
     Carga frames de un spritesheet en cuadrícula.
 
@@ -408,7 +409,7 @@ def cargar_spritesheet_cuadricula(ruta: str,
         return _frames_placeholder(frame_w, frame_h, frames_a_usar)
 
     frames = []
-    tamaño_logico = 32  # Tamaño visual del enemigo en el juego
+    # tamaño_logico se recibe como parámetro (default: 32 para enemigos pequeños como camera_chaser)
 
     for i in range(frames_a_usar):
         # Convertir índice a posición en cuadrícula
@@ -529,7 +530,8 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             frame_h=96,
             cols=4,
             frames_a_usar=11,
-            flip_horizontal=False
+            flip_horizontal=False,
+            tamaño_logico=96  # Mantener tamaño original, no escalar
         )
         if idle_frames:
             frames["idle"] = idle_frames
@@ -543,7 +545,8 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             frame_h=96,
             cols=5,
             frames_a_usar=18,
-            flip_horizontal=False
+            flip_horizontal=False,
+            tamaño_logico=96  # Mantener tamaño original, no escalar
         )
         if run_frames:
             frames["run"] = run_frames
@@ -558,7 +561,8 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             frame_h=96,
             cols=5,
             frames_a_usar=22,
-            flip_horizontal=False
+            flip_horizontal=False,
+            tamaño_logico=96  # Mantener tamaño original, no escalar
         )
         if shoot_frames:
             frames["shoot"] = shoot_frames
