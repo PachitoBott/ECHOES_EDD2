@@ -272,7 +272,9 @@ class HUDPanel:
                  panel_image_path: str | None = None,
                  screen_width: int = 960,
                  screen_height: int = 640,
-                 custom_y: int | None = None):
+                 custom_y: int | None = None,
+                 custom_width: int | None = None,
+                 custom_height: int | None = None):
         """
         Inicializa un panel de HUD para un jugador.
 
@@ -283,6 +285,8 @@ class HUDPanel:
             screen_width: ancho de la pantalla lógica
             screen_height: alto de la pantalla lógica
             custom_y: posición Y personalizada (sobreescribe el anchor)
+            custom_width: ancho personalizado (sobreescribe DEFAULT_WIDTH)
+            custom_height: alto personalizado (sobreescribe DEFAULT_HEIGHT)
         """
         self.player_id = player_id
         self.anchor = anchor
@@ -290,7 +294,11 @@ class HUDPanel:
         self.screen_height = screen_height
         self.custom_y = custom_y
         self.panel_image = None
-        self.rect = pygame.Rect(0, 0, self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
+
+        # Usar tamaños personalizados si se proporcionan, sino usar defaults
+        width = custom_width if custom_width is not None else self.DEFAULT_WIDTH
+        height = custom_height if custom_height is not None else self.DEFAULT_HEIGHT
+        self.rect = pygame.Rect(0, 0, width, height)
 
         if panel_image_path:
             self._cargar_panel(panel_image_path)
