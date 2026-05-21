@@ -48,7 +48,7 @@ _STATE_FRAME_COUNTS: dict[str, int] = {
     "run": 4,
     "shoot": 4,
     "attack": 4,
-    "death": 8,
+    # "death" ha sido eliminado - ahora los efectos de muerte se manejan con código
 }
 
 _BOSS_LEG_COUNTS: dict[str, int] = {

@@ -21,6 +21,7 @@ class Enemy(Entity):
     """Base con FSM + LoS. Subclases cambian stats/comportamientos."""
 
     SPRITE_VARIANT = "default"
+    _death_effect_manager_global = None  # Asignado por Game al inicializar
 
     def __init__(self, x: float, y: float, hp: int = 3, gold_reward: int = 5) -> None:
         super().__init__(x, y, w=12, h=12, speed=40.0)
@@ -212,10 +213,25 @@ class Enemy(Entity):
             return
         self._is_dying = True
         self.hp = 0
-        self.animator.trigger_death()
+
         # Reproducir sonido de eliminación
         if self._elimination_sound:
             self._elimination_sound.play()
+
+        # Spawnear efecto de muerte (reemplaza animación de muerte)
+        if self._death_effect_manager_global:
+            self._death_effect_manager_global.spawn(
+                x=self.x,
+                y=self.y,
+                sprite_width=self.w,
+                sprite_height=self.h,
+                lifetime=0.5,
+                num_particles=25,
+                particle_color=(255, 100, 100)  # Rojo
+            )
+
+        # Marcar como listo para remover (sin esperar animación de muerte)
+        self._ready_to_remove = True
 
     def _movement_speed_factor(self) -> float:
         return self._slow_multiplier if self._slow_timer > 0.0 else 1.0
@@ -514,6 +530,14 @@ class BasicEnemy(Enemy):
 
     def __init__(self, x, y):
         super().__init__(x, y, hp=3, gold_reward=5)
+
+        # Ajustar hitbox para que coincida con el sprite de 96×96 (75% = 72×72)
+        cx, cy = self.x + self.w / 2.0, self.y + self.h / 2.0
+        self.w = 72
+        self.h = 72
+        self.x = cx - self.w / 2.0
+        self.y = cy - self.h / 2.0
+
         self.fire_cooldown = 1.1
         self._fire_timer = 0.0
         self.fire_range = 210.0

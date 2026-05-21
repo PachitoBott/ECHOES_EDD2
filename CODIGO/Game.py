@@ -41,6 +41,9 @@ from dev.logger import log_game, log_asset, log_room, log_player
 from dev.hot_reload import AssetWatcher
 from dev.debug_console import DebugConsole
 
+# --- Sistemas de efectos ---
+from systems.death_effect import DeathEffectManager
+
 
 class Game:
     COIN_SPRITE_NAME = "moneda.png"
@@ -145,6 +148,12 @@ class Game:
         self.tileset_manager = TilesetManager()
         self.tileset_manager.set_zone(1)  # Inicializar con Zona 1
         self.minimap = Minimap(cell=16, padding=8)
+
+        # ---------- Efectos visuales ----------
+        self.death_effect_manager = DeathEffectManager()
+        # Asignar el gestor de efectos de muerte a la clase Enemy para que todos los enemigos lo usen
+        from entities.Enemy import Enemy
+        Enemy._death_effect_manager_global = self.death_effect_manager
 
         # ---------- Fondo matrix ----------
         self.matrix_bg = MatrixBackground(cfg.SCREEN_W, cfg.SCREEN_H)
@@ -908,6 +917,7 @@ class Game:
         self._spawn_room_enemies(room)
         self._update_enemies(dt, room)
         self._update_projectiles(dt, room)
+        self.death_effect_manager.update(dt)
         player_died = self._handle_collisions(room)
         if player_died:
             return
@@ -1430,6 +1440,7 @@ class Game:
         self.door_cooldown = 0.25
         self.projectiles.clear()
         self.enemy_projectiles.clear()
+        self.death_effect_manager.clear()
 
         new_room = self.dungeon.current_room
         depth = self.dungeon.depth_map.get((self.dungeon.i, self.dungeon.j), -1)
@@ -1682,7 +1693,10 @@ class Game:
             for enemy in room.enemies:
                 enemy.draw(self.world)
 
-        for pickup in getattr(room, "pickups", ()): 
+        # Renderizar efectos de muerte
+        self.death_effect_manager.render(self.world)
+
+        for pickup in getattr(room, "pickups", ()):
             pickup.draw(self.world)
 
         self.player.draw(self.world)
