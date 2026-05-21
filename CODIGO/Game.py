@@ -14,6 +14,7 @@ from ui.StartMenu import StartMenu
 from core.Tileset import Tileset
 from entities.Player import Player
 from world.Dungeon import Dungeon
+from world.background import MatrixBackground
 from ui.Minimap import Minimap
 from core.Projectile import ProjectileGroup
 from ui.Shop import Shop
@@ -142,6 +143,9 @@ class Game:
         # ---------- Recursos ----------
         self.tileset = Tileset()
         self.minimap = Minimap(cell=16, padding=8)
+
+        # ---------- Fondo matrix ----------
+        self.matrix_bg = MatrixBackground(cfg.SCREEN_W, cfg.SCREEN_H)
 
         # ---------- Estado runtime ----------
         self.projectiles = ProjectileGroup()          # balas del jugador
@@ -874,6 +878,9 @@ class Game:
 
         # Hot-reload: verificar si algún asset cambió en disco
         self.asset_watcher.tick()
+
+        # --- Actualizar fondo matrix ---
+        self.matrix_bg.update(dt)
 
         # --- Trigger intro cinemática en primer frame ---
         if not self._intro_played:
@@ -1654,6 +1661,10 @@ class Game:
 
     def _render_world(self) -> None:
         self.world.fill(self.cfg.COLOR_BG)
+
+        # --- Renderizar fondo matrix antes de salas y entidades ---
+        self.matrix_bg.render(self.world)
+
         room = self.dungeon.current_room
         room.draw(self.world, self.tileset)
 
