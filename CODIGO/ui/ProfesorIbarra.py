@@ -137,19 +137,19 @@ IBARRA_CATALOG: list[dict] = [
         "icon_char": "~",
     },
     {
-        "id": "evidencia_guardada",
-        "name": "Evidencia Guardada",
-        "price": 60,
+        "id": "eco_senal",
+        "name": "Eco de Señal",
+        "price": 90,
         "max_buys": 1,
         "desc_lines": [
-            "Guardas pruebas de todo.",
-            "Revela el mapa completo",
-            "de manera permanente.",
+            "Tu señal rebota en las redes.",
+            "Cada disparo lanza una bala",
+            "paralela al mismo tiempo.",
             "",
             "Solo puedes comprarla una vez.",
         ],
-        "icon_color": (220, 120, 255),
-        "icon_char": "E",
+        "icon_color": (255, 140, 40),
+        "icon_char": "»",
     },
 ]
 
@@ -188,6 +188,7 @@ class ProfesorIbarra:
         self._purchase_counts: dict[str, int] = {item["id"]: 0 for item in IBARRA_CATALOG}
         self._last_msg: str = ""
         self._msg_timer: float = 0.0
+        self._item_images_cache: dict[str, pygame.Surface] = {}  # Cache de imágenes
 
         # --- Efectos pendientes (Game.py los consume) ---
         self.emp_pending: bool = False
@@ -322,9 +323,9 @@ class ProfesorIbarra:
             # Se guarda para usar con Q
             player._ibarra_emp = True
 
-        elif iid == "evidencia_guardada":
-            # Efecto inmediato: revelar mapa
-            self.map_reveal_pending = True
+        elif iid == "eco_senal":
+            # Doble disparo: Player.try_shoot() lo detecta
+            player._ibarra_double_shot = True
 
     def _set_msg(self, msg: str, duration: float = 2.5) -> None:
         self._last_msg   = msg
@@ -443,6 +444,24 @@ class ProfesorIbarra:
             frame = pygame.transform.smoothscale(frame, (98, 98))
             frames.append(frame)
         return frames
+
+    def _get_item_image(self, item_id: str, size: int = 100) -> pygame.Surface | None:
+        """Carga la imagen del ítem. Cachea para evitar recargar cada frame."""
+        cache_key = f"{item_id}_{size}"
+        if cache_key in self._item_images_cache:
+            return self._item_images_cache[cache_key]
+
+        img_path = Path(__file__).parent.parent / "assets" / "ui" / f"{item_id}.png"
+        if not img_path.exists():
+            return None
+
+        try:
+            img = pygame.image.load(str(img_path)).convert_alpha()
+            img = pygame.transform.smoothscale(img, (size, size))
+            self._item_images_cache[cache_key] = img
+            return img
+        except Exception:
+            return None
 
     def _tick_talk_anim(self, dt: float) -> None:
         """Avanza la animación de hablar."""
@@ -645,12 +664,6 @@ class ProfesorIbarra:
             surface.blit(font.render(label, True, text_col), (text_x, y))
             y += lh + 4
 
-        y += 2
-        # Hint parpadeante
-        hint_alpha = int(160 + 80 * math.sin(self._time * 4.0))
-        hint_surf = font.render("[ 1 / 2 / 3 ]  o haz click en una opción", True, (80, 160, 130))
-        hint_surf.set_alpha(hint_alpha)
-        surface.blit(hint_surf, (text_x, y))
 
     # --- feedback ---
     def _draw_feedback_ui(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
@@ -679,124 +692,219 @@ class ProfesorIbarra:
                 color = (180, 225, 255)
             surface.blit(font.render(line, True, color), (text_x, y)); y += lh
 
-        # Hint
-        hint_alpha = int(160 + 80 * math.sin(self._time * 4.0))
-        hint_surf = font.render("[ E / ESPACIO ]  Continuar", True, (80, 160, 130))
-        hint_surf.set_alpha(hint_alpha)
-        surface.blit(hint_surf, (text_x, py + ph - lh - 8))
 
     # --- tienda carousel ---
     def _draw_tienda_ui(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
-        sw, sh = surface.get_size()
-        lh = font.get_height() + 4
+        sw, sh   = surface.get_size()
+        lh       = font.get_height() + 4
+        desc_lh  = font.get_height() + 3
 
-        # Dimensiones del panel principal
-        pw = min(sw - 16, 480)
-        max_desc_lines = max(len(it["desc_lines"]) for it in IBARRA_CATALOG)
-        ph = 30 + 52 + 4 + 16 + lh * 2 + 4 + (lh + 2) * max_desc_lines + 10 + lh + 16
-        ph = max(ph, 260)
-        px, py = self._draw_panel(surface, pw, ph)
+        # ── Dimensiones ─────────────────────────────────────────────────
+        HEADER_H   = 54
+        CTRL_BAR_H = 40
+        LEFT_W     = 220          # columna izquierda (icono + nav)
+        ICON_SIZE  = 100
+        max_desc   = max(len(it["desc_lines"]) for it in IBARRA_CATALOG)
+        right_content_h = (lh + 10 +           # nombre
+                           lh + 8 +            # precio | disponib.
+                           8 +                 # separador
+                           max_desc * desc_lh + 20 +  # descripcion
+                           lh + 8)             # mensaje
+        ph = max(HEADER_H + right_content_h + CTRL_BAR_H + 16, 420)
+        pw = min(sw - 40, 760)
 
-        # Título
-        title_surf = font.render("[ Tienda del Profesor Ibarra ]", True, (100, 200, 255))
-        surface.blit(title_surf, (px + pw // 2 - title_surf.get_width() // 2, py + 8))
+        px = sw // 2 - pw // 2
+        py = sh // 2 - ph // 2
 
-        item = IBARRA_CATALOG[self._carousel_idx]
-        iid  = item["id"]
-        bought   = self._purchase_counts.get(iid, 0)
-        max_buys = item["max_buys"]
+        # ── Panel principal ──────────────────────────────────────────────
+        panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
+        panel.fill((2, 6, 20, 252))
+
+        # Borde teal doble
+        pygame.draw.rect(panel, (0, 185, 235, 255), (0, 0, pw, ph), 2)
+        pygame.draw.rect(panel, (0, 80, 120, 100),  (5, 5, pw-10, ph-10), 1)
+
+        # Esquinas L
+        C = 20
+        cc = (0, 220, 255, 255)
+        for cx2, cy2, dx, dy in [(0,0,1,1),(pw,0,-1,1),(0,ph,1,-1),(pw,ph,-1,-1)]:
+            pygame.draw.line(panel, cc, (cx2, cy2), (cx2 + dx*C, cy2), 3)
+            pygame.draw.line(panel, cc, (cx2, cy2), (cx2, cy2 + dy*C), 3)
+
+        # Línea bajo el header
+        pygame.draw.line(panel, (0, 150, 200, 220), (14, HEADER_H), (pw-14, HEADER_H), 1)
+        # Diamantes en los extremos
+        for ddx in [12, pw-12]:
+            pts = [(ddx, HEADER_H-5),(ddx+5,HEADER_H),(ddx,HEADER_H+5),(ddx-5,HEADER_H)]
+            pygame.draw.polygon(panel, (0, 200, 250, 220), pts)
+
+        # Divisor vertical columna izquierda
+        pygame.draw.line(panel, (0, 100, 145, 160),
+                         (LEFT_W, HEADER_H+1), (LEFT_W, ph-CTRL_BAR_H-1), 1)
+
+        # Línea footer
+        pygame.draw.line(panel, (0, 90, 130, 150), (14, ph-CTRL_BAR_H), (pw-14, ph-CTRL_BAR_H), 1)
+
+        surface.blit(panel, (px, py))
+
+        # ── Header ───────────────────────────────────────────────────────
+        title = font.render("◈  INVENTARIO DEL PROFESOR IBARRA  ◈", True, (0, 230, 255))
+        surface.blit(title, (px + pw//2 - title.get_width()//2,
+                              py + HEADER_H//2 - title.get_height()//2))
+
+        # ── Datos del ítem ───────────────────────────────────────────────
+        item      = IBARRA_CATALOG[self._carousel_idx]
+        iid       = item["id"]
+        bought    = self._purchase_counts.get(iid, 0)
+        max_buys  = item["max_buys"]
         remaining = max_buys - bought
         exhausted = remaining <= 0
+        icon_col  = item["icon_color"] if not exhausted else (50, 52, 62)
+        arr_col   = (70, 185, 235) if not exhausted else (45, 58, 75)
 
-        # --- Icono del ítem (cuadrado coloreado con char) ---
-        icon_size = 52
-        icon_x    = px + pw // 2 - icon_size // 2
-        icon_y    = py + 30
+        # ────────────────── COLUMNA IZQUIERDA ──────────────────────────
+        left_cx = px + LEFT_W // 2          # centro horizontal izq
+        body_top = py + HEADER_H + 1
+        body_h   = ph - HEADER_H - CTRL_BAR_H - 2
+        icon_y   = body_top + body_h // 2 - ICON_SIZE // 2 - 18
 
-        icon_color = item["icon_color"] if not exhausted else (80, 80, 80)
-        icon_surf  = pygame.Surface((icon_size, icon_size), pygame.SRCALPHA)
-        pygame.draw.rect(icon_surf, (*icon_color, 200), (0, 0, icon_size, icon_size), border_radius=8)
-        pygame.draw.rect(icon_surf, (255, 255, 255, 120), (0, 0, icon_size, icon_size), 2, border_radius=8)
+        # Halo del icono
+        if not exhausted:
+            halo = pygame.Surface((ICON_SIZE+32, ICON_SIZE+32), pygame.SRCALPHA)
+            pygame.draw.rect(halo, (*icon_col, 28), (0,0,ICON_SIZE+32,ICON_SIZE+32),
+                             border_radius=18)
+            surface.blit(halo, (left_cx - (ICON_SIZE+32)//2, icon_y-16))
 
-        # Carácter en el centro del ícono
-        try:
-            icon_font = pygame.font.SysFont(None, 36)
-        except Exception:
-            icon_font = font
-        ch_surf = icon_font.render(item["icon_char"], True, (255, 255, 255))
-        icon_surf.blit(ch_surf, (icon_size // 2 - ch_surf.get_width() // 2,
-                                  icon_size // 2 - ch_surf.get_height() // 2))
-        surface.blit(icon_surf, (icon_x, icon_y))
-
-        # Flechas de navegación ← →
-        arrow_col = (160, 200, 255) if not exhausted else (80, 80, 100)
-        lbl = font.render("<", True, arrow_col)
-        surface.blit(lbl, (icon_x - lbl.get_width() - 16, icon_y + icon_size // 2 - lh // 2))
-        rbl = font.render(">", True, arrow_col)
-        surface.blit(rbl, (icon_x + icon_size + 16, icon_y + icon_size // 2 - lh // 2))
-
-        # Indicador de posición  ○●○○
-        dot_y = icon_y + icon_size + 4
-        n = len(IBARRA_CATALOG)
-        dot_spacing = 14
-        dots_x_start = px + pw // 2 - (n * dot_spacing) // 2
-        for i in range(n):
-            col = (140, 210, 255) if i == self._carousel_idx else (70, 90, 120)
-            pygame.draw.circle(surface, col, (dots_x_start + i * dot_spacing + dot_spacing // 2,
-                                               dot_y + 5), 4 if i == self._carousel_idx else 3)
-
-        # Nombre del ítem
-        name_col  = (255, 255, 180) if not exhausted else (120, 120, 100)
-        name_surf = font.render(item["name"], True, name_col)
-        text_y    = dot_y + 16
-        surface.blit(name_surf, (px + pw // 2 - name_surf.get_width() // 2, text_y))
-        text_y   += lh
-
-        # Precio  |  compras restantes
-        price_col = (255, 220, 60) if not exhausted else (100, 100, 80)
-        price_str = f"{item['price']} microchips"
-        if remaining > 0:
-            buy_str = f"Disponibles: {remaining}/{max_buys}"
+        # Icono — intenta cargar PNG, fallback a cuadrado coloreado
+        img = self._get_item_image(item["id"], ICON_SIZE)
+        if img:
+            # Usar imagen del ítem
+            surface.blit(img, (left_cx - ICON_SIZE//2, icon_y))
         else:
-            buy_str = "AGOTADO"
-        info_surf  = font.render(f"{price_str}   |   {buy_str}", True, price_col)
-        surface.blit(info_surf, (px + pw // 2 - info_surf.get_width() // 2, text_y))
-        text_y += lh
+            # Fallback: cuadrado coloreado con letra
+            icon_sf = pygame.Surface((ICON_SIZE, ICON_SIZE), pygame.SRCALPHA)
+            pygame.draw.rect(icon_sf, (*icon_col, 225), (0,0,ICON_SIZE,ICON_SIZE), border_radius=14)
+            pygame.draw.rect(icon_sf, (255,255,255,170), (0,0,ICON_SIZE,ICON_SIZE), 2, border_radius=14)
+            # Reflejo sutil en la esquina superior
+            shine = pygame.Surface((ICON_SIZE, ICON_SIZE), pygame.SRCALPHA)
+            pygame.draw.rect(shine, (255,255,255,22), (4,4,ICON_SIZE-8,ICON_SIZE//3), border_radius=10)
+            icon_sf.blit(shine, (0,0))
+            try:
+                ifont = pygame.font.SysFont(None, 64)
+            except Exception:
+                ifont = font
+            ch = ifont.render(item["icon_char"], True, (255,255,255))
+            icon_sf.blit(ch, (ICON_SIZE//2-ch.get_width()//2, ICON_SIZE//2-ch.get_height()//2))
+            surface.blit(icon_sf, (left_cx - ICON_SIZE//2, icon_y))
 
-        # --- Panel de descripción (mini panel debajo) ---
-        desc_pw = pw - 16
+        # Flechas
+        arr_y = icon_y + ICON_SIZE // 2 - lh // 2
+        la = font.render("◀", True, arr_col)
+        ra = font.render("▶", True, arr_col)
+        surface.blit(la, (px + 10, arr_y))
+        surface.blit(ra, (px + LEFT_W - ra.get_width() - 10, arr_y))
+
+        # Índice numérico  "2 / 4"
+        idx_str  = f"{self._carousel_idx+1} / {len(IBARRA_CATALOG)}"
+        idx_surf = font.render(idx_str, True, (60, 130, 165))
+        surface.blit(idx_surf, (left_cx - idx_surf.get_width()//2, icon_y + ICON_SIZE + 8))
+
+        # Dots
+        n = len(IBARRA_CATALOG)
+        ds = 16
+        dot_y = icon_y + ICON_SIZE + 8 + lh + 4
+        dx0 = left_cx - (n * ds) // 2
+        for i in range(n):
+            dcx = dx0 + i * ds + ds // 2
+            if i == self._carousel_idx:
+                pygame.draw.circle(surface, (0, 210, 255), (dcx, dot_y), 5)
+                pygame.draw.circle(surface, (0, 180, 220, 90), (dcx, dot_y), 9, 1)
+            else:
+                pygame.draw.circle(surface, (35, 65, 95), (dcx, dot_y), 3)
+
+        # ────────────────── COLUMNA DERECHA ────────────────────────────
+        rx   = px + LEFT_W + 18
+        rw   = pw - LEFT_W - 32
+        ry   = body_top + 18
+
+        # ── Badge de estado ─────────────────────────────────────────────
+        if exhausted:
+            badge_txt = "AGOTADO"
+            badge_bg  = (120, 20, 20, 180)
+            badge_fg  = (255, 80, 80)
+        elif remaining == max_buys:
+            badge_txt = "DISPONIBLE"
+            badge_bg  = (10, 80, 40, 180)
+            badge_fg  = (60, 220, 120)
+        else:
+            badge_txt = f"{remaining} RESTANTE{'S' if remaining!=1 else ''}"
+            badge_bg  = (20, 70, 110, 180)
+            badge_fg  = (80, 190, 240)
+
+        b_surf = font.render(badge_txt, True, badge_fg)
+        b_pw   = b_surf.get_width() + 18
+        b_ph   = b_surf.get_height() + 6
+        badge  = pygame.Surface((b_pw, b_ph), pygame.SRCALPHA)
+        badge.fill(badge_bg)
+        pygame.draw.rect(badge, (*badge_fg, 180), (0,0,b_pw,b_ph), 1)
+        badge.blit(b_surf, (9, 3))
+        surface.blit(badge, (rx + rw - b_pw, ry))
+
+        # ── Nombre ──────────────────────────────────────────────────────
+        name_col  = (255, 255, 210) if not exhausted else (95, 95, 85)
+        name_surf = font.render(item["name"], True, name_col)
+        surface.blit(name_surf, (rx, ry + b_ph + 6))
+        ry += b_ph + 6 + lh
+
+        # Línea bajo el nombre
+        pygame.draw.line(surface, (0, 100, 140, 130), (rx, ry+2), (rx+rw, ry+2), 1)
+        ry += 10
+
+        # ── Precio ──────────────────────────────────────────────────────
+        price_col = (255, 215, 40) if not exhausted else (70, 70, 60)
+        coin_surf = font.render("⬡", True, price_col)
+        amt_surf  = font.render(f" {item['price']} microchips", True, price_col)
+        surface.blit(coin_surf, (rx, ry))
+        surface.blit(amt_surf,  (rx + coin_surf.get_width(), ry))
+        ry += lh + 10
+
+        # ── Panel descripción ────────────────────────────────────────────
         desc_lines = item["desc_lines"]
-        desc_lh    = font.get_height() + 2
-        desc_ph    = len(desc_lines) * desc_lh + 10
-        desc_px    = px + 8
-        desc_py    = text_y + 4
+        d_ph = len(desc_lines) * desc_lh + 18
+        desc_bg = pygame.Surface((rw, d_ph), pygame.SRCALPHA)
+        desc_bg.fill((5, 14, 38, 215))
+        pygame.draw.rect(desc_bg, (0, 105, 155, 170), (0, 0, rw, d_ph), 1)
+        # Acento izquierdo de color
+        pygame.draw.rect(desc_bg, (*icon_col, 180), (0, 0, 3, d_ph))
+        surface.blit(desc_bg, (rx, ry))
 
-        desc_surf  = pygame.Surface((desc_pw, desc_ph), pygame.SRCALPHA)
-        desc_surf.fill((12, 24, 52, 200))
-        pygame.draw.rect(desc_surf, (60, 120, 200, 180), (0, 0, desc_pw, desc_ph), 1)
-        surface.blit(desc_surf, (desc_px, desc_py))
-
-        dy = desc_py + 5
+        dy = ry + 9
         for line in desc_lines:
-            dc = (185, 225, 255) if line else (0, 0, 0, 0)
             if line:
-                dl = font.render(line, True, dc)
-                surface.blit(dl, (desc_px + 8, dy))
+                dl = font.render(line, True, (160, 208, 255))
+                surface.blit(dl, (rx + 10, dy))
             dy += desc_lh
+        ry += d_ph + 10
 
-        # Mensaje temporal (error/confirmación)
+        # ── Mensaje temporal ─────────────────────────────────────────────
         if self._last_msg:
-            msg_col  = (255, 200, 80) if "Comprado" in self._last_msg else (255, 100, 100)
-            msg_surf = font.render(self._last_msg, True, msg_col)
-            surface.blit(msg_surf, (px + pw // 2 - msg_surf.get_width() // 2,
-                                     py + ph - lh - 4))
+            mc  = (70, 255, 130) if "Comprado" in self._last_msg else (255, 80, 80)
+            ms  = font.render(self._last_msg, True, mc)
+            surface.blit(ms, (rx, ry))
 
-        # Instrucciones de control
-        hint_lines = [
-            "< / >  Navegar     E / Enter  Comprar     ESC  Cerrar",
+        # ── Barra de controles ───────────────────────────────────────────
+        ctrl_y = py + ph - CTRL_BAR_H + (CTRL_BAR_H - lh) // 2
+        ctrls  = [("◀ / ▶", "Navegar"), ("E / Enter", "Comprar"), ("ESC", "Cerrar")]
+        sep    = font.render("  ·  ", True, (30, 58, 85))
+        parts: list[tuple] = [
+            (font.render(k, True, (0, 190, 230)),
+             font.render(f" {a}", True, (105, 140, 170)))
+            for k, a in ctrls
         ]
-        hint_y = py + ph + 4
-        for hl in hint_lines:
-            hs = font.render(hl, True, (90, 130, 170))
-            surface.blit(hs, (px + pw // 2 - hs.get_width() // 2, hint_y))
-            hint_y += lh
+        tot_w = sum(k.get_width() + a.get_width() for k,a in parts) + sep.get_width()*(len(parts)-1)
+        cx2   = px + pw//2 - tot_w//2
+        for i, (ks, as_) in enumerate(parts):
+            surface.blit(ks,  (cx2, ctrl_y)); cx2 += ks.get_width()
+            surface.blit(as_, (cx2, ctrl_y)); cx2 += as_.get_width()
+            if i < len(parts)-1:
+                surface.blit(sep, (cx2, ctrl_y)); cx2 += sep.get_width()

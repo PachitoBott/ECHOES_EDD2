@@ -7,6 +7,7 @@ import pygame
 
 from core.Entity import Entity
 from Config import CFG
+from core.Projectile import Projectile
 from entities.Weapons import WeaponFactory
 from systems.animation import Animation, AnimationManager
 
@@ -328,6 +329,42 @@ class Player(Entity):
         created = self.weapon.fire((cx, cy), self._shoot_dir_current)
         if not created:
             return
+
+        # Eco de Señal: dos balas desviadas ±2 grados cada una desde la línea recta
+        if getattr(self, "_ibarra_double_shot", False):
+            import math
+            ref = created[0]
+
+            # Calcular ángulo del disparo original
+            angle_rad = math.atan2(ref.dy, ref.dx)
+
+            # Primera bala: desviada -2 grados
+            angle_left = angle_rad - math.radians(2)
+            dx_left = math.cos(angle_left)
+            dy_left = math.sin(angle_left)
+
+            # Segunda bala: desviada +2 grados
+            angle_right = angle_rad + math.radians(2)
+            dx_right = math.cos(angle_right)
+            dy_right = math.sin(angle_right)
+
+            # Reemplazar la primera bala con la versión desviada
+            ref.dx = dx_left
+            ref.dy = dy_left
+
+            # Agregar segunda bala desviada en la otra dirección
+            extra = Projectile(
+                ref.x,
+                ref.y,
+                dx_right, dy_right,
+                speed=ref.speed,
+                radius=ref.radius,
+                color=ref.color,
+                effects=list(ref.effects),
+                damage=ref.damage,
+                owner_id=ref.owner_id,
+            )
+            created.append(extra)
 
         self._start_shoot_animation()
         adder = getattr(out_projectiles, "add", None)
