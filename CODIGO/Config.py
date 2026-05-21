@@ -65,7 +65,7 @@ class Config:
     BOSS_ROOM_W: int = 19
     BOSS_ROOM_H: int = 13
 
-    TILESET_PATH: Optional[str] = "assets/tileset.png"
+    TILESET_PATH: Optional[str] = "assets/tileset_temporal.png"
     PLAYER_SPRITES_PATH: Optional[str] = "assets/player/blue_flaco"
     PLAYER_SPRITE_PREFIX: str = "player"
     COLOR_BG: Tuple[int,int,int] = (8, 12, 28)
