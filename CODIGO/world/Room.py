@@ -1117,6 +1117,25 @@ class Room:
             "loot_table": loot_table,
         }
 
+    # ------------------------------------------------------------------ #
+    # Boss
+    # ------------------------------------------------------------------ #
+    def setup_boss_room(self) -> None:
+        """
+        Convierte esta sala en la sala del boss.
+        Tamaño fijo definido en Config (BOSS_ROOM_W × BOSS_ROOM_H).
+        No spawna enemigos todavía — el boss se añadirá en una fase posterior.
+        """
+        self.type = "boss"
+        self.safe = False
+        self.no_spawn = True   # sin enemigos normales
+        self.no_combat = False
+        self.locked = False
+        self.clear_obstacles()
+
+        # Reconstruir tiles con tamaño fijo del boss
+        self.build_centered(CFG.BOSS_ROOM_W, CFG.BOSS_ROOM_H)
+
     def _handle_treasure_events(self, events, player) -> None:
         if not self.treasure:
             return
