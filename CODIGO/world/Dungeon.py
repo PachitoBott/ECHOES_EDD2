@@ -114,6 +114,9 @@ class Dungeon:
         # <<< COMENTADO: la tienda antigua se reemplaza por Profesor Ibarra como único NPC de compra
         # self._place_shop_room()
 
+        # <<< NUEVO: sala del boss en el extremo más lejano de Zona 2
+        self._place_boss_room()
+
         # <<< NUEVO: sala segura con Mara en Zona 2
         self._place_mara_safe_room()
 
@@ -412,6 +415,35 @@ class Dungeon:
         setattr(room, "type", "shop")     # <<< etiqueta directa en Room
         self.shop_pos = (sx, sy)          # <<< guarda la coordenada para otras clases
 
+    def _place_boss_room(self) -> None:
+        """
+        Coloca la sala del boss en la sala más lejana de Zona 2 (mayor profundidad BFS).
+        Tamaño fijo: CFG.BOSS_ROOM_W × CFG.BOSS_ROOM_H.
+        """
+        if not hasattr(self, "zones"):
+            return
+
+        zone2 = [
+            pos for pos in self.rooms
+            if self.zones.get(pos, 1) == 2 and pos != self.start
+        ]
+        if not zone2:
+            return
+
+        main_set = set(self.main_path)
+        zone2.sort(key=lambda p: (
+            -self.depth_map.get(p, 0),
+            0 if p in main_set else 1,
+        ))
+
+        boss_pos = zone2[0]
+        room = self.rooms.get(boss_pos)
+        if room is None:
+            return
+
+        room.setup_boss_room()
+        self.boss_pos = boss_pos
+
     def _place_mara_safe_room(self) -> None:
         """
         Coloca una sala segura con Mara (NPC) en Zona 2.
@@ -426,10 +458,10 @@ class Dungeon:
         zone2_rooms = [pos for pos in self.rooms.keys()
                        if self.room_zone(pos) == 2]
 
-        # Evitar inicio y tienda
         forbidden = {self.start}
-        if hasattr(self, "shop_pos"):
-            forbidden.add(self.shop_pos)
+        for attr in ("shop_pos", "boss_pos"):
+            if hasattr(self, attr):
+                forbidden.add(getattr(self, attr))
 
         zone2_candidates = [pos for pos in zone2_rooms if pos not in forbidden]
 
@@ -453,8 +485,9 @@ class Dungeon:
             return
 
         forbidden = {self.start}
-        if hasattr(self, "shop_pos"):
-            forbidden.add(getattr(self, "shop_pos"))
+        for attr in ("shop_pos", "boss_pos"):
+            if hasattr(self, attr):
+                forbidden.add(getattr(self, attr))
 
         # Prioriza el camino principal para que aparezcan "entre" salas de combate
         main_candidates = [pos for pos in self.main_path if pos not in forbidden]
@@ -495,7 +528,7 @@ class Dungeon:
             return
 
         salt = 0xC0BB1E
-        safe_types = {"shop", "treasure", "profesor_ibarra"}
+        safe_types = {"shop", "treasure", "profesor_ibarra", "boss"}
 
         for pos, room in sorted(self.rooms.items()):
             if pos == self.start:
@@ -527,7 +560,7 @@ class Dungeon:
             return
 
         forbidden: set[tuple[int, int]] = {self.start}
-        for attr in ("shop_pos", "mara_pos"):
+        for attr in ("shop_pos", "mara_pos", "boss_pos"):
             if hasattr(self, attr):
                 forbidden.add(getattr(self, attr))
 

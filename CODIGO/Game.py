@@ -186,6 +186,15 @@ class Game:
         self._current_zone: int = 1
         self._intro_played: bool = False
         self._mara_cutscene_played: bool = False  # Cinemática de Mara: se dispara solo una vez
+        self._zones_cinematics_shown: set = set()  # zonas cuya cinemática ya se mostró esta run
+
+        # Banner de zona (estilo Binding of Isaac)
+        self._zone_banner_text: str = ""
+        self._zone_banner_sub: str = ""
+        self._zone_banner_timer: float = 0.0
+        self._ZONE_BANNER_DURATION: float = 2.8   # segundos totales
+        self._ZONE_BANNER_FADE: float = 0.4        # segundos de fade in/out
+        self._boss_banner_shown: bool = False      # banner de boss: solo una vez por run
 
         # ---------- Networking (Fase 3) ----------
         self.net: NetworkManager | None = None
@@ -373,6 +382,10 @@ class Game:
             self.shop.close()
             self.shop.configure_for_seed(self.current_seed)
 
+        # Debug: saltar directamente a la boss room al iniciar
+        if self.cfg.DEBUG_START_IN_BOSS_ROOM and hasattr(self.dungeon, "boss_pos"):
+            self.dungeon.i, self.dungeon.j = self.dungeon.boss_pos
+
         # marcar room inicial como explorado
         self.dungeon.explored = set()
         self.dungeon.explored.add((self.dungeon.i, self.dungeon.j))
@@ -388,7 +401,7 @@ class Game:
             self.player.x, self.player.y = spawn_x, spawn_y
         if hasattr(self.player, "reset_loadout"):
             self.player.reset_loadout()
-        setattr(self.player, "gold", 0)
+        setattr(self.player, "gold", 999)
 
         # Set up shooting callback for network synchronization
         if self.net:
@@ -406,6 +419,11 @@ class Game:
         # Trigger narrativa: marcar para reproducir intro en el primer frame
         self._intro_played = False
         self._current_zone = 1
+        self._zones_cinematics_shown = set()
+        self._zone_banner_text = ""
+        self._zone_banner_sub = ""
+        self._zone_banner_timer = 0.0
+        self._boss_banner_shown = False
 
     def _reset_runtime_state(self) -> None:
         self.projectiles.clear()
@@ -893,6 +911,13 @@ class Game:
 
         # --- Trigger transiciones de zona ---
         self._check_zone_transitions()
+
+        # --- Trigger entrada a sala del boss (banner temporal) ---
+        self._check_boss_room_entry(room)
+
+        # --- Tick del banner de zona ---
+        if self._zone_banner_timer > 0:
+            self._zone_banner_timer -= dt
 
         # --- Trigger diálogos con Mara ---
         self._check_mara_dialogue_request(room, events)
@@ -1560,15 +1585,9 @@ class Game:
 
     def _check_zone_transitions(self) -> None:
         """
-        Verifica si el jugador ha entrado en una nueva zona y dispara la cinemática
-        de transición correspondiente.
-
-        Las zonas se asignan por profundidad BFS en el dungeon:
-        - Zona 1: depth 0-3
-        - Zona 2: depth 4+ (incluye el final del juego)
-
-        NOTA: La cinemática de Mara (mara_encounter) se dispara en _check_mara_room_entry(),
-        no aquí. Solo las transiciones de zona general se disparan aquí.
+        Verifica si el jugador ha entrado en una nueva zona.
+        - La cinemática de transición se dispara UNA SOLA VEZ por zona por partida.
+        - Además muestra un banner estilo Binding of Isaac con el nombre de la zona.
         """
         if not hasattr(self.dungeon, "room_zone"):
             return
@@ -1579,15 +1598,95 @@ class Game:
         if new_zone is None:
             return
 
-        # Si la zona cambió, disparar cinemática de transición (excepto si es Zona 2 con Mara especial)
         if new_zone != self._current_zone:
-            old_zone = self._current_zone
             self._current_zone = new_zone
 
-            # Determinar qué cinemática reproducir según la transición
-            # Nota: Zona 2 Ya no dispara cinemática aquí - se maneja en _check_mara_room_entry()
-            cinematic_id = f"zone_transition_{new_zone}"
-            self.cinematics.reproducir(cinematic_id)
+            # Cinemática: solo una vez por zona por partida
+            if new_zone not in self._zones_cinematics_shown:
+                self._zones_cinematics_shown.add(new_zone)
+                cinematic_id = f"zone_transition_{new_zone}"
+                self.cinematics.reproducir(cinematic_id)
+
+            # Banner de zona (siempre que cambia, no solo la primera vez)
+            _ZONE_NAMES = {
+                1: ("ZONA 1", "Los primeros comentarios"),
+                2: ("ZONA 2", "La viralización"),
+            }
+            name, sub = _ZONE_NAMES.get(new_zone, (f"ZONA {new_zone}", ""))
+            self._show_zone_banner(name, sub)
+
+    def _check_boss_room_entry(self, room) -> None:
+        """Muestra un banner temporal al entrar a la sala del boss (solo una vez por run)."""
+        if self._boss_banner_shown:
+            return
+        if getattr(room, "type", "") != "boss":
+            return
+        self._boss_banner_shown = True
+        self._show_zone_banner("SALA DEL BOSS", "¿Estás listo?")
+
+    def _show_zone_banner(self, title: str, subtitle: str = "") -> None:
+        """Activa el banner de zona con el texto dado."""
+        self._zone_banner_text = title
+        self._zone_banner_sub = subtitle
+        self._zone_banner_timer = self._ZONE_BANNER_DURATION
+
+    def _draw_zone_banner(self) -> None:
+        """Dibuja el banner estilo Binding of Isaac si está activo."""
+        if self._zone_banner_timer <= 0:
+            return
+
+        sw, sh = self.screen.get_size()
+        t = self._zone_banner_timer
+        dur = self._ZONE_BANNER_DURATION
+        fade = self._ZONE_BANNER_FADE
+
+        # Calcular alpha (fade in al inicio, fade out al final)
+        if t > dur - fade:
+            alpha = int(255 * (dur - t) / fade)
+        elif t < fade:
+            alpha = int(255 * t / fade)
+        else:
+            alpha = 255
+        alpha = max(0, min(255, alpha))
+
+        # Fuente grande para el título (cacheada en el objeto)
+        if not hasattr(self, "_banner_font_title"):
+            try:
+                vt323 = str(assets_dir("ui") / "VT323-Regular.ttf")
+                self._banner_font_title = pygame.font.Font(vt323, 72)
+                self._banner_font_sub   = pygame.font.Font(vt323, 36)
+            except Exception:
+                self._banner_font_title = pygame.font.SysFont("consolas", 52)
+                self._banner_font_sub   = pygame.font.SysFont("consolas", 28)
+        font_title = self._banner_font_title
+        font_sub   = self._banner_font_sub
+
+        title_surf = font_title.render(self._zone_banner_text, True, (230, 220, 200))
+        sub_surf = font_sub.render(self._zone_banner_sub, True, (170, 155, 135)) if self._zone_banner_sub else None
+
+        # Franja horizontal semitransparente centrada
+        banner_h = title_surf.get_height() + (sub_surf.get_height() + 8 if sub_surf else 0) + 28
+        banner_y = sh // 2 - banner_h // 2
+
+        banner = pygame.Surface((sw, banner_h), pygame.SRCALPHA)
+        banner.fill((0, 0, 0, int(160 * alpha / 255)))
+        self.screen.blit(banner, (0, banner_y))
+
+        # Líneas decorativas
+        line_col = (180, 140, 80, alpha)
+        line_surf = pygame.Surface((sw, 2), pygame.SRCALPHA)
+        line_surf.fill(line_col)
+        self.screen.blit(line_surf, (0, banner_y))
+        self.screen.blit(line_surf, (0, banner_y + banner_h - 2))
+
+        # Título
+        title_surf.set_alpha(alpha)
+        self.screen.blit(title_surf, title_surf.get_rect(center=(sw // 2, banner_y + 16 + title_surf.get_height() // 2)))
+
+        # Subtítulo
+        if sub_surf:
+            sub_surf.set_alpha(alpha)
+            self.screen.blit(sub_surf, sub_surf.get_rect(center=(sw // 2, banner_y + banner_h - 16 - sub_surf.get_height() // 2)))
 
     def _on_mara_dialogue_finished(self) -> None:
         """
@@ -1787,6 +1886,9 @@ class Game:
 
         # Notificaciones de subtítulos (fragmentos ganados, apoyos, etc.)
         self.subtitulos.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)
+
+        # Banner de cambio de zona / sala del boss (encima de todo el HUD)
+        self._draw_zone_banner()
 
         mx, my = pygame.mouse.get_pos()
         cursor_rect = self._cursor_surface.get_rect(center=(mx, my))
