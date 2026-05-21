@@ -569,6 +569,41 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             frames["shoot"] = list(reversed(shoot_frames))
         else:
             frames["shoot"] = _load_state_frames(base_dir, "shoot", 4, color)
+
+    # --- Caso especial: yellow_shooter usa spritesheets para las animaciones ---
+    elif variant_slug == "yellow_shooter":
+        # Cargar animación "walk" desde yellow_walk.png - 5 columnas, 22 frames
+        walk_frames = cargar_spritesheet_cuadricula(
+            ruta="assets/yellow_walk.png",
+            frame_w=96,
+            frame_h=96,
+            cols=5,
+            frames_a_usar=22,
+            flip_horizontal=False,
+            tamaño_logico=32  # Escalar a tamaño pequeño como camera_chaser
+        )
+        if walk_frames:
+            # idle y walk comparten la misma animación (sin copiar, misma referencia)
+            frames["idle"] = walk_frames
+            frames["run"] = walk_frames
+        else:
+            frames["idle"] = _load_state_frames(base_dir, "idle", 4, color)
+            frames["run"] = _load_state_frames(base_dir, "run", 4, color)
+
+        # Cargar animación "shoot" desde yellow_attack.png - 4 columnas, 16 frames
+        shoot_frames = cargar_spritesheet_cuadricula(
+            ruta="assets/yellow_attack.png",
+            frame_w=96,
+            frame_h=96,
+            cols=4,
+            frames_a_usar=16,
+            flip_horizontal=False,
+            tamaño_logico=32  # Escalar a tamaño pequeño
+        )
+        if shoot_frames:
+            frames["shoot"] = shoot_frames
+        else:
+            frames["shoot"] = _load_state_frames(base_dir, "shoot", 4, color)
     else:
         # Para otros enemigos, cargar normalmente
         pass

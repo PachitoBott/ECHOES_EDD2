@@ -424,6 +424,14 @@ class ShooterEnemy(Enemy):
         self.reaction_delay = 0.55
         self._load_attack_sound("shooter_enemy_sfx.mp3")
 
+        # Configurar FPS para yellow_shooter si es la variante actual
+        if self.sprite_variant == "yellow_shooter":
+            self.animator.fps_overrides.update({
+                "idle": 10.0,
+                "run": 10.0,
+                "shoot": 12.0,
+            })
+
     def update(self, dt, player, room):
         super().update(dt, player, room)
         self._fire_timer = max(0.0, self._fire_timer - dt)
@@ -515,6 +523,13 @@ class BasicEnemy(Enemy):
         # Reducir volumen del BasicEnemy en 75%
         if self._attack_sound:
             self._attack_sound.set_volume(0.025)  # 25% del volumen base (0.10)
+
+        # Configurar FPS para yellow_shooter
+        self.animator.fps_overrides.update({
+            "idle": 10.0,
+            "run": 10.0,
+            "shoot": 12.0,
+        })
 
     def update(self, dt, player, room):
         super().update(dt, player, room)
