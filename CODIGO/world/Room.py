@@ -1139,7 +1139,10 @@ class Room:
         self.no_combat = False
         self.locked = False
         self.clear_obstacles()
+        # build_centered sobreescribe los tiles, así que re-tallamos los
+        # corredores después para que las puertas sigan siendo accesibles.
         self.build_centered(CFG.BOSS_ROOM_W, CFG.BOSS_ROOM_H)
+        self.carve_corridors(width_tiles=2, length_tiles=3)
 
     def _handle_treasure_events(self, events, player) -> None:
         if not self.treasure:
