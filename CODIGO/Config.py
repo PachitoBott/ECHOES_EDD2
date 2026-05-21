@@ -14,7 +14,7 @@ class StartMenuButton:
 class StartMenuConfig:
     """Opciones editables para personalizar el menú de inicio."""
 
-    title: str = "ECHOES"
+    title: str = "GHOSTED"
     subtitle: Optional[str] = "Una historia sobre ciberacoso"
     background_image: Optional[str] = None
     logo_image: Optional[str] = None

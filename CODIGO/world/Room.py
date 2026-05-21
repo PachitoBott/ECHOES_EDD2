@@ -709,48 +709,23 @@ class Room:
             can_interact = True
 
         for ev in events:
-            if ev.type == pygame.KEYDOWN:
-                # Activar interacción inicial
-                if ev.key == pygame.K_e and can_interact and prof.estado == prof.IDLE:
-                    prof.iniciar_interaccion()
-                    continue
+            if ev.type != pygame.KEYDOWN:
+                continue
 
-                # Abrir tienda directamente si la pregunta ya fue respondida
-                if ev.key == pygame.K_e and can_interact and prof.estado == prof.LISTO:
-                    shop_ui.open(world_surface.get_width() // 2, world_surface.get_height() // 2)
-                    continue
+            # Activar interacción inicial
+            if ev.key == pygame.K_e and can_interact and prof.estado == prof.IDLE:
+                prof.iniciar_interaccion()
+                continue
 
-                # Delegar teclas al profesor durante pregunta/feedback
-                if prof.estado in (prof.PREGUNTA, prof.FEEDBACK):
-                    prof.handle_event(ev, player)
-                    continue
+            # Abrir tienda carousel directamente si la pregunta ya fue respondida
+            if ev.key == pygame.K_e and can_interact and prof.estado == prof.LISTO:
+                prof.abrir_tienda()
+                continue
 
-                # Controles de la tienda si está abierta
-                if shop_ui.active:
-                    if ev.key == pygame.K_ESCAPE:
-                        shop_ui.close()
-                    elif ev.key == pygame.K_UP:
-                        shop_ui.move_selection(-1)
-                    elif ev.key == pygame.K_DOWN:
-                        shop_ui.move_selection(+1)
-                    elif ev.key in (pygame.K_RETURN, pygame.K_SPACE):
-                        shop_ui.try_buy(player)
-
-            # Mouse en la tienda
-            if shop_ui.active and ev.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN):
-                if hasattr(ev, "pos"):
-                    mx = ev.pos[0] // max(1, screen_scale)
-                    my = ev.pos[1] // max(1, screen_scale)
-                    if ev.type == pygame.MOUSEMOTION:
-                        shop_ui.update_hover((mx, my))
-                    elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-                        shop_ui.handle_click((mx, my), player)
-
-        # Transición automática: cuando el profesor marca ABRIR_TIENDA, abrir tienda
-        if prof.estado == prof.ABRIR_TIENDA:
-            shop_ui.ensure_inventory()
-            shop_ui.open(world_surface.get_width() // 2, world_surface.get_height() // 2)
-            prof.estado = prof.LISTO
+            # Delegar teclas al profesor en cualquier estado activo
+            # (PREGUNTA, FEEDBACK, TIENDA)
+            if prof.estado in (prof.PREGUNTA, prof.FEEDBACK, prof.TIENDA):
+                prof.handle_event(ev, player)
 
     def draw_overlay(self, surface, ui_font, player, shop_ui):
         """
@@ -774,17 +749,15 @@ class Room:
         if self.type == "profesor_ibarra" and self.profesor_ibarra is not None:
             prof = self.profesor_ibarra
             prof.draw(surface, ui_font)
-            # Hint de interacción cuando el jugador está cerca y la tienda no está abierta
+            # Hint de interacción cuando el jugador está cerca y está en IDLE
             if (hasattr(player, "rect")
                     and prof.can_interact(player.rect())
-                    and prof.estado == prof.IDLE
-                    and not shop_ui.active):
+                    and prof.estado == prof.IDLE):
                 prof.draw_idle_hint(surface, ui_font)
-            # Hint cuando la pregunta ya fue respondida
+            # Hint cuando la pregunta ya fue respondida y puede reabrir
             if (hasattr(player, "rect")
                     and prof.can_interact(player.rect())
-                    and prof.estado == prof.LISTO
-                    and not shop_ui.active):
+                    and prof.estado == prof.LISTO):
                 tip = ui_font.render("E - Abrir tienda", True, (140, 210, 255))
                 cx, cy = prof.pos
                 surface.blit(tip, (cx - tip.get_width() // 2, cy - 58))

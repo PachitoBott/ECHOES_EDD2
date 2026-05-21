@@ -491,8 +491,24 @@ class Game:
             # Resto del manejo de teclas del juego
             if e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_ESCAPE:
-                    self._show_pause_menu()
-                    return []
+                    # Si la tienda del Profesor Ibarra está abierta, el ESC
+                    # cierra la tienda (no abre pausa). Dejar pasar el evento.
+                    _ibarra_tienda_activa = False
+                    try:
+                        _room = self.dungeon.current_room
+                        if getattr(_room, "type", "") == "profesor_ibarra":
+                            _prof = getattr(_room, "profesor_ibarra", None)
+                            if _prof is not None and _prof.estado == _prof.TIENDA:
+                                _ibarra_tienda_activa = True
+                    except Exception:
+                        pass
+                    if not _ibarra_tienda_activa:
+                        self._show_pause_menu()
+                        return []
+                elif e.key == pygame.K_q:
+                    self._use_ibarra_item("emp")
+                elif e.key == pygame.K_r:
+                    self._use_ibarra_item("modo_privado")
                 elif e.key == pygame.K_m:
                     self._stats_pending_reason = "manual_same_seed"
                     self.start_new_run(seed=self.current_seed)
@@ -832,14 +848,16 @@ class Game:
 
         room = self.dungeon.current_room
 
-        # --- Profesor Ibarra: bloquear gameplay durante la pregunta ---
+        # --- Profesor Ibarra: bloquear gameplay durante la pregunta o tienda ---
         if getattr(room, "type", "") == "profesor_ibarra":
             prof = getattr(room, "profesor_ibarra", None)
-            if prof is not None and prof.estado in (prof.PREGUNTA, prof.FEEDBACK):
+            if prof is not None and prof.estado in (prof.PREGUNTA, prof.FEEDBACK, prof.TIENDA):
                 room.handle_events(
                     events, self.player, self.shop,
                     self.world, self.ui_font, self.cfg.SCREEN_SCALE,
                 )
+                # Consumir efectos pendientes del profesor
+                self._apply_ibarra_pending_effects(prof, room)
                 return
 
         self._update_player(dt, room)
@@ -1380,6 +1398,81 @@ class Game:
         is_start = (self.dungeon.i, self.dungeon.j) == getattr(self.dungeon, "start", (cx, cy))
         room.locked = (not is_start) and (len(room.enemies) > 0) and (not room.cleared)
 
+    def _use_ibarra_item(self, iid: str) -> None:
+        """Activa un ítem guardado del Profesor Ibarra (EMP con Q, Modo Privado con R)."""
+        if iid == "emp":
+            if not getattr(self.player, "_ibarra_emp", False):
+                return
+            self.player._ibarra_emp = False
+            room = self.dungeon.current_room
+            count = 0
+            for enemy in getattr(room, "enemies", []):
+                try:
+                    enemy.stun_timer = max(getattr(enemy, "stun_timer", 0.0), 4.0)
+                    count += 1
+                except Exception:
+                    pass
+            if hasattr(self, "subtitulos"):
+                self.subtitulos.agregar(f"[EMP] {count} enemigos congelados!", duracion=2.5, tipo="apoyo")
+            log_game.info("EMP usado: %d enemigos congelados", count)
+
+        elif iid == "modo_privado":
+            if not getattr(self.player, "_ibarra_modo_privado", False):
+                return
+            self.player._ibarra_modo_privado = False
+            current = getattr(self.player, "invulnerable_timer", 0.0)
+            self.player.invulnerable_timer = max(current, 5.0)
+            if hasattr(self, "subtitulos"):
+                self.subtitulos.agregar("[Modo Privado] Invulnerable 5s!", duracion=2.5, tipo="apoyo")
+            log_game.info("Modo Privado usado: invulnerable 5s")
+
+    def _draw_ibarra_item_hud(self, surface: pygame.Surface) -> None:
+        """Dibuja iconos HUD en la esquina inferior derecha para EMP (Q) y Modo Privado (R)."""
+        has_emp  = getattr(self.player, "_ibarra_emp", False)
+        has_modo = getattr(self.player, "_ibarra_modo_privado", False)
+
+        if not has_emp and not has_modo:
+            return
+
+        icon_size = 44
+        padding   = 8
+        margin_r  = 16   # margen desde el borde derecho
+        margin_b  = 16   # margen desde el borde inferior
+        sw, sh    = surface.get_size()
+
+        items_to_draw = []
+        if has_emp:
+            items_to_draw.append({"color": (220, 190, 40), "char": "~", "key": "Q",  "name": "EMP"})
+        if has_modo:
+            items_to_draw.append({"color": (60, 140, 230), "char": "M", "key": "R",  "name": "Modo P."})
+
+        font = self.ui_font
+
+        # Calcular posición inicial (derecha → izquierda)
+        total_w = len(items_to_draw) * icon_size + (len(items_to_draw) - 1) * padding
+        x_start = sw - margin_r - total_w
+        y       = sh - margin_b - icon_size - font.get_height() - 4
+
+        for i, item in enumerate(items_to_draw):
+            ix = x_start + i * (icon_size + padding)
+
+            # Fondo sólido del icono (sin SRCALPHA para máxima compatibilidad)
+            bg = pygame.Surface((icon_size, icon_size))
+            bg.fill((20, 20, 30))
+            pygame.draw.rect(bg, item["color"], (2, 2, icon_size - 4, icon_size - 4))
+            pygame.draw.rect(bg, (255, 255, 255), (0, 0, icon_size, icon_size), 2)
+
+            # Carácter grande en el centro
+            ch = font.render(item["char"], True, (255, 255, 255))
+            bg.blit(ch, (icon_size // 2 - ch.get_width() // 2,
+                         icon_size // 2 - ch.get_height() // 2 - 3))
+
+            # Etiqueta de tecla abajo del icono
+            key_lbl = font.render(f"[{item['key']}]", True, (200, 200, 200))
+            surface.blit(bg, (ix, y))
+            surface.blit(key_lbl, (ix + icon_size // 2 - key_lbl.get_width() // 2,
+                                    y + icon_size + 2))
+
     def _update_shop(self, events: list) -> None:
         current_room = self.dungeon.current_room
         if hasattr(current_room, "handle_events"):
@@ -1391,6 +1484,26 @@ class Game:
                 self.ui_font,
                 self.cfg.SCREEN_SCALE,
             )
+
+    def _apply_ibarra_pending_effects(self, prof, room) -> None:
+        """
+        Consume efectos pendientes inmediatos del Profesor Ibarra.
+
+        - map_reveal_pending: agrega todas las salas del dungeon al set explored.
+        (EMP y Modo Privado se usan con Q/R, no son pendientes inmediatos)
+        """
+        if prof.map_reveal_pending:
+            prof.map_reveal_pending = False
+            dungeon = self.dungeon
+            if hasattr(dungeon, "rooms") and hasattr(dungeon, "explored"):
+                try:
+                    for pos in dungeon.rooms:
+                        dungeon.explored.add(pos)
+                    log_game.info("Ibarra Evidencia Guardada: mapa revelado (%d salas)", len(dungeon.rooms))
+                except Exception as exc:
+                    log_game.warning("map_reveal_pending error: %s", exc)
+            if hasattr(self, "subtitulos"):
+                self.subtitulos.agregar("[Mapa revelado]", duracion=2.5, tipo="apoyo")
 
     def _check_mara_room_entry(self, room) -> None:
         """
@@ -1656,6 +1769,9 @@ class Game:
 
         # Contador de fragmentos de empatía
         self._draw_empathy_counter()
+
+        # Iconos de ítems guardados del Profesor Ibarra (EMP / Modo Privado)
+        self._draw_ibarra_item_hud(self.screen)
 
         # Notificaciones de subtítulos (fragmentos ganados, apoyos, etc.)
         self.subtitulos.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)

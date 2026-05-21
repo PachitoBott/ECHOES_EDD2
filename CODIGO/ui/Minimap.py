@@ -11,10 +11,14 @@ class Minimap:
         self.grid     = (120, 120, 140)   # celdas no exploradas
         self.explored = (180, 180, 200)   # celdas exploradas
         self.current  = (255, 100, 100)   # posición del jugador
-        self.shop_col = (255, 215, 0)     # dorado para la tienda
+        self.shop_col     = (60, 200, 80)    # verde para tienda regular
+        self.ibarra_col   = (60, 200, 80)    # verde para Profesor Ibarra (misma tienda)
         self.treasure_col = (130, 205, 255)  # azul claro para cofres
-        self.boss_col = (255, 130, 60)    # naranja intenso para boss
-        self.mara_col = (255, 200, 100)   # amarillo/dorado para sala de Mara (VISIBLE DESDE INICIO)
+        self.boss_col     = (255, 130, 60)   # naranja intenso para boss
+        self.mara_col     = (255, 200, 100)  # amarillo/dorado para sala de Mara
+
+        # Salas especiales SIEMPRE visibles en el mapa (no requieren exploración)
+        self._always_visible = {"safe_mara", "shop", "treasure", "boss", "profesor_ibarra"}
 
         # Opcional: mostrar icono $ sobre la tienda
         self.show_shop_icon = True
@@ -62,12 +66,11 @@ class Minimap:
                 room = dungeon.rooms.get((i, j)) if hasattr(dungeon, "rooms") else None
                 room_type = getattr(room, "type", "normal")
 
-                # Sala de Mara: SIEMPRE VISIBLE desde el inicio (no requiere exploración)
-                if room_type == "safe_mara":
-                    color = self.mara_col
-                # Otras salas: se colorean solo si fueron exploradas
-                elif (i, j) in explored:
-                    if room_type == "shop":
+                # Salas especiales: SIEMPRE visibles aunque no hayan sido exploradas
+                if room_type in self._always_visible:
+                    if room_type == "safe_mara":
+                        color = self.mara_col
+                    elif room_type in ("shop", "profesor_ibarra"):
                         color = self.shop_col
                     elif room_type == "treasure":
                         color = self.treasure_col
@@ -75,6 +78,9 @@ class Minimap:
                         color = self.boss_col
                     else:
                         color = self.explored
+                # Salas normales: solo visibles si fueron exploradas
+                elif (i, j) in explored:
+                    color = self.explored
 
                 # Jugador actual sobreescribe el color
                 if (i, j) == cur:
@@ -83,10 +89,9 @@ class Minimap:
                 # Dibujo del bloque
                 pygame.draw.rect(surf, color, rect)
 
-                # Icono de tienda (encima del rect), sólo si existe la sala
-                if self.show_shop_icon and room_type == "shop":
-                    # Muestra el icono si ya fue explorada (comportamiento típico)
-                    if (i, j) in explored and shop_glyph and shop_glyph2:
+                # Icono de tienda (encima del rect), siempre visible para salas de tienda
+                if self.show_shop_icon and room_type in ("shop", "profesor_ibarra"):
+                    if shop_glyph and shop_glyph2:
                         # Centrar el texto en la celda
                         gx = rect.x + rect.w // 2
                         gy = rect.y + rect.h // 2
