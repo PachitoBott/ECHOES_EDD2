@@ -759,15 +759,9 @@ class TankEnemy(Enemy):
 
     def draw(self, surf: pygame.Surface) -> None:
         """
-        Renderiza el tank con escalado visual.
-        Los frames son 96x96, pero se escalan a 48x48 visual.
+        Renderiza el tank con sus frames de 96x96 píxeles sin escalado.
         """
         frame = self.animator.current_surface()
-
-        # Escalar frame de 96x96 a 48x48 (visual size)
-        visual_size = 48
-        if frame.get_size() != (visual_size, visual_size):
-            frame = pygame.transform.scale(frame, (visual_size, visual_size))
 
         # Aplicar flip según dirección
         if not self._facing_right:
@@ -780,6 +774,6 @@ class TankEnemy(Enemy):
             flash_overlay.fill((255, 255, 255, 220))
             frame.blit(flash_overlay, (0, 0), special_flags=pygame.BLEND_ADD)
 
-        # Renderizar en posición correcta
+        # Renderizar en posición correcta (sin escalado)
         dest = frame.get_rect(center=self.rect().center)
         surf.blit(frame, dest)
