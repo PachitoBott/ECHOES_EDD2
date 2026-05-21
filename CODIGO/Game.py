@@ -21,7 +21,6 @@ from ui.Shopkeeper import Shopkeeper
 from ui.HudPanels import HudPanels
 from ui.PauseMenu import PauseMenu, PauseMenuButton
 from ui.GameOverScreen import GameOverScreen
-from ui.BlurredBackground import BlurredBackground
 from Statistics import StatisticsManager
 from entities.Pickup import Pickup
 from core.asset_paths import WEAPON_SPRITE_FILENAMES, assets_dir, weapon_sprite_path
@@ -143,9 +142,6 @@ class Game:
         # ---------- Recursos ----------
         self.tileset = Tileset()
         self.minimap = Minimap(cell=16, padding=8)
-
-        # ---------- Fondo borroso ----------
-        self.blurred_background = BlurredBackground(cfg.SCREEN_W, cfg.SCREEN_H)
 
         # ---------- Estado runtime ----------
         self.projectiles = ProjectileGroup()          # balas del jugador
@@ -878,9 +874,6 @@ class Game:
 
         # Hot-reload: verificar si algún asset cambió en disco
         self.asset_watcher.tick()
-
-        # --- Actualizar fondo borroso ---
-        self.blurred_background.update(dt)
 
         # --- Trigger intro cinemática en primer frame ---
         if not self._intro_played:
@@ -1661,10 +1654,6 @@ class Game:
 
     def _render_world(self) -> None:
         self.world.fill(self.cfg.COLOR_BG)
-
-        # Dibujar fondo borroso antes del contenido
-        self.blurred_background.draw(self.world)
-
         room = self.dungeon.current_room
         room.draw(self.world, self.tileset)
 
