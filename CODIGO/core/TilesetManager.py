@@ -12,9 +12,9 @@ from core.Tileset import Tileset
 
 # Mapeo de zona → ruta de tileset
 ZONE_TILESETS = {
-    1: "assets/tilesets/level_1/tileset_temporal.png",   # Zona 1
-    2: "assets/tilesets/level_1/tileset_temporal2.png",  # Zona 2
-    3: "assets/tilesets/level_1/tileset_temporal2.png",  # Zona 3 (mismo que Zona 2)
+    1: "assets/tileset_temporal.png",   # Zona 1
+    2: "assets/tileset_temporal2.png",  # Zona 2
+    3: "assets/tileset_temporal2.png",  # Zona 3 (mismo que Zona 2)
 }
 
 
