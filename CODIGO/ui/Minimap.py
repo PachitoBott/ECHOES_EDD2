@@ -40,7 +40,7 @@ class Minimap:
     MINIMAP_BG_BORDER_WIDTH = 1
 
     # Salas especiales que siempre son visibles
-    ALWAYS_VISIBLE_TYPES = {"safe_mara", "shop", "treasure", "boss", "profesor_ibarra"}
+    ALWAYS_VISIBLE_TYPES = {"shop", "boss", "profesor_ibarra"}
 
     def __init__(self, cell: int = 20, padding: int = 10) -> None:
         """
@@ -253,10 +253,8 @@ class Minimap:
 
         # Salas especiales: color especial
         if room_type in self.ALWAYS_VISIBLE_TYPES:
-            if room_type == "safe_mara":
-                return self.NODE_COLOR_SPECIAL  # amarillo/dorado
-            elif room_type == "boss":
-                return (200, 0, 0)  # rojo oscuro
+            if room_type == "boss":
+                return (220, 40, 40)  # rojo intenso para boss
             else:
                 return (60, 200, 80)  # verde (shop, prof. ibarra)
 

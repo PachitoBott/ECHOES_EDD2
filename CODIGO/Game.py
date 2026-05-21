@@ -178,14 +178,8 @@ class Game:
 
         self.dialogue = DialogueSystem(cfg.SCREEN_W, cfg.SCREEN_H, font_size=14)
 
-        # Cargar diálogos de Mara
-        try:
-            self.dialogue.cargar_json("narrative/mara_dialogues.json", "mara")
-        except Exception as e:
-            log_game.warning(f"No se pudieron cargar diálogos de Mara: {e}")
-
         # Estado del juego compartido con el sistema de diálogos
-        self._estado_juego: dict = {"apoyo": 0}
+        self._estado_juego: dict = {}
 
         # Sistema de notificaciones en pantalla
         self.subtitulos = SubtitleSystem(cfg.SCREEN_W, cfg.SCREEN_H, font_size=20)
@@ -193,7 +187,6 @@ class Game:
         # Control de estado narrativo
         self._current_zone: int = 1
         self._intro_played: bool = False
-        self._mara_cutscene_played: bool = False  # Cinemática de Mara: se dispara solo una vez
         self._zones_cinematics_shown: set = set()  # zonas cuya cinemática ya se mostró esta run
 
         # Banner de zona (estilo Binding of Isaac)
@@ -441,7 +434,6 @@ class Game:
         self.cleared = False
         self._run_gold_spent = 0
         self._run_kills = 0
-        self._estado_juego["apoyo"] = 0
 
     def _register_gold_spent(self, amount: int) -> None:
         if amount <= 0:
@@ -914,9 +906,6 @@ class Game:
         self._handle_room_transition(room)
         self._update_shop(events)
 
-        # --- Trigger entrada a sala de Mara (cinemática única) ---
-        self._check_mara_room_entry(room)
-
         # --- Trigger transiciones de zona ---
         self._check_zone_transitions()
 
@@ -927,8 +916,6 @@ class Game:
         if self._zone_banner_timer > 0:
             self._zone_banner_timer -= dt
 
-        # --- Trigger diálogos con Mara ---
-        self._check_mara_dialogue_request(room, events)
 
     def _update_player(self, dt: float, room) -> None:
         # Modo dios: mantener el timer de invulnerabilidad alto
@@ -942,7 +929,7 @@ class Game:
             return
 
         # Salas especiales sin enemigos
-        if getattr(room, "type", "normal") in ("safe_mara", "profesor_ibarra"):
+        if getattr(room, "type", "normal") in ("profesor_ibarra",):
             return  # Salas especiales sin combate
 
         cx, cy = self.dungeon.grid_w // 2, self.dungeon.grid_h // 2
@@ -1555,42 +1542,6 @@ class Game:
             if hasattr(self, "subtitulos"):
                 self.subtitulos.agregar("[Mapa revelado]", duracion=2.5, tipo="apoyo")
 
-    def _check_mara_room_entry(self, room) -> None:
-        """
-        Verifica si el jugador entró a la sala segura de Mara (type='safe_mara').
-
-        Si es la primera vez que entra, dispara la cinemática 'mara_encounter' una sola vez.
-        Las entradas posteriores no disparan cinemática.
-        """
-        # Verificar que ya se marcó la sala de Mara en el dungeon
-        if not hasattr(self.dungeon, "mara_pos"):
-            return
-
-        current_pos = (self.dungeon.i, self.dungeon.j)
-
-        # ¿Estamos en la sala de Mara?
-        if current_pos != self.dungeon.mara_pos:
-            return
-
-        # ¿Ya se disparó la cinemática en esta partida?
-        if self._mara_cutscene_played:
-            log_game.debug(f"Mara room entrada ignorada (ya se reprodujo cinemática)")
-            return
-
-        # ¿La cinemática ya está en reproducción? (evitar restart múltiples)
-        if self.cinematics.activo:
-            log_game.debug(f"Mara cinematic already playing, skipping restart")
-            return
-
-        # Primera entrada: disparar cinemática y marcar como reproducida
-        log_game.info(f"[CINEMATIC] Primera entrada a sala de Mara - reproduciendo cinematica mara_encounter")
-        result = self.cinematics.reproducir("mara_encounter")
-        if result:
-            self._mara_cutscene_played = True
-            log_game.debug(f"Flag _mara_cutscene_played = {self._mara_cutscene_played}")
-        else:
-            log_game.warning(f"Failed to play mara_encounter cinematic")
-
     def _check_zone_transitions(self) -> None:
         """
         Verifica si el jugador ha entrado en una nueva zona.
@@ -1696,61 +1647,6 @@ class Game:
             sub_surf.set_alpha(alpha)
             self.screen.blit(sub_surf, sub_surf.get_rect(center=(sw // 2, banner_y + banner_h - 16 - sub_surf.get_height() // 2)))
 
-    def _on_mara_dialogue_finished(self) -> None:
-        """
-        Callback ejecutado cuando termina el diálogo con Mara.
-        Detecta si el jugador eligió una opción compasiva y otorga fragmento de empatía.
-        """
-        # Obtener el nodo actual (la opción elegida por el jugador)
-        nodo = self.dialogue.obtener_nodo_actual()
-        if nodo is None:
-            return
-
-        # Verificar si la opción fue compasiva (meta tiene es_empatia=true)
-        meta = nodo.meta or {}
-        es_empatia = meta.get("es_empatia", False)
-
-        if es_empatia:
-            # Otorgar fragmento de empatía
-            self.player.empathy_fragments += 1
-            log_game.info(f"✨ +1 Fragmento de Empatía - Total: {self.player.empathy_fragments}")
-
-    def _check_mara_dialogue_request(self, room, events) -> None:
-        """
-        Verifica si el jugador ha solicitado un diálogo con Mara.
-
-        El diálogo se inicia cuando:
-        1. Estamos en la sala de Mara (type='safe_mara')
-        2. El jugador presionó E cerca de ella
-        """
-        if not hasattr(room, "_mara_dialogue_requested"):
-            return
-
-        if not getattr(room, "_mara_dialogue_requested", False):
-            return
-
-        # Limpiar el flag
-        room._mara_dialogue_requested = False
-
-        # Snapshot del apoyo antes del diálogo para calcular la ganancia al terminar
-        apoyo_antes = self._estado_juego.get("apoyo", 0)
-
-        def _on_fin_mara():
-            ganado = self._estado_juego.get("apoyo", 0) - apoyo_antes
-            if ganado > 0:
-                self.subtitulos.agregar(
-                    f"[FRAGMENTO DE EMPATÍA +{ganado}]",
-                    duracion=3.5,
-                    tipo="apoyo",
-                )
-                log_game.info("Fragmento de empatía ganado al hablar con Mara: +%d", ganado)
-
-        # Iniciar diálogo con Mara, conectado al estado del juego
-        self.dialogue.iniciar(
-            "mara",
-            estado_juego=self._estado_juego,
-            callback_fin=_on_fin_mara,
-        )
 
     def _render(self) -> None:
         self._render_world()
