@@ -114,19 +114,19 @@ class Game:
             # Centra el minimapa dentro del panel de esquina para que quede cubierto.
             self.hud_panels.set_minimap_anchor("top-right",  margin=(80, 140))
 
-        # --- Paneles de jugadores (placeholders hasta que lleguen los PNGs) ---
+        # --- Paneles de jugadores ---
         from ui.HudPanels import HUDPanel
         self.hud_panel_p1 = HUDPanel(
             player_id=1,
             anchor="top_left",
-            panel_image_path="assets/ui/panel_player1.png",  # aún no existe
+            panel_image_path="assets/ui/panel_jugador1.png",
             screen_width=cfg.SCREEN_W,
             screen_height=cfg.SCREEN_H
         )
         self.hud_panel_p2 = HUDPanel(
             player_id=2,
             anchor="bottom_left",
-            panel_image_path="assets/ui/panel_player2.png",  # aún no existe
+            panel_image_path="assets/ui/panel_jugador2.png",
             screen_width=cfg.SCREEN_W,
             screen_height=cfg.SCREEN_H
         )
