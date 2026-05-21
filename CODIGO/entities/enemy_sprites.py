@@ -370,6 +370,60 @@ class LayeredBossAnimator:
         return finished_cycle
 
 
+def cargar_spritesheet_cuadricula(ruta: str,
+                                   frame_w: int,
+                                   frame_h: int,
+                                   cols: int,
+                                   frames_a_usar: int) -> list[pygame.Surface]:
+    """
+    Carga frames de un spritesheet en cuadrícula.
+
+    Extrae frames de un spritesheet que está organizado en una cuadrícula
+    (ej: 4x4) y los escala al tamaño lógico del juego (32x32).
+
+    Args:
+        ruta: path al PNG del spritesheet (ej: 'assets/camera_chaser.png')
+        frame_w: ancho de cada frame en píxeles (ej: 64)
+        frame_h: alto de cada frame en píxeles (ej: 64)
+        cols: número de columnas en la cuadrícula (ej: 4)
+        frames_a_usar: cuántos frames cargar desde el inicio (ej: 15)
+
+    Returns:
+        Lista de pygame.Surface con los frames en orden,
+        escalados a tamaño lógico (32x32).
+    """
+    try:
+        sheet = pygame.image.load(ruta).convert_alpha()
+    except (pygame.error, FileNotFoundError) as e:
+        print(f"[ADVERTENCIA] No se pudo cargar spritesheet {ruta}: {e}")
+        return []
+
+    frames = []
+    tamaño_logico = 32  # Tamaño visual del enemigo en el juego
+
+    for i in range(frames_a_usar):
+        # Convertir índice a posición en cuadrícula
+        col = i % cols
+        fila = i // cols
+        x = col * frame_w
+        y = fila * frame_h
+
+        # Extraer frame del spritesheet
+        frame_surface = pygame.Surface((frame_w, frame_h), pygame.SRCALPHA)
+        frame_surface.blit(sheet, (0, 0), pygame.Rect(x, y, frame_w, frame_h))
+
+        # Escalar al tamaño lógico del juego
+        if frame_w != tamaño_logico or frame_h != tamaño_logico:
+            frame_surface = pygame.transform.scale(
+                frame_surface,
+                (tamaño_logico, tamaño_logico)
+            )
+
+        frames.append(frame_surface)
+
+    return frames
+
+
 def resolve_enemy_variant(preferred: Iterable[str]) -> str:
     """Pick the best available sprite variant from a list of preferences."""
 
@@ -391,7 +445,31 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
     color = _VARIANT_COLORS.get(variant_slug, _VARIANT_COLORS["default"])
     frames: dict[str, list[pygame.Surface]] = {}
 
+    # --- Caso especial: green_chaser usa spritesheet camera_chaser.png para animación "run" ---
+    if variant_slug == "green_chaser":
+        spritesheet_path = "assets/camera_chaser.png"
+        run_frames = cargar_spritesheet_cuadricula(
+            ruta=spritesheet_path,
+            frame_w=64,
+            frame_h=64,
+            cols=4,
+            frames_a_usar=15
+        )
+        if run_frames:
+            # Usar los 15 frames del spritesheet para la animación "run"
+            frames["run"] = run_frames
+        else:
+            # Si no se puede cargar el spritesheet, usar archivos individuales como fallback
+            frames["run"] = _load_state_frames(base_dir, "run", 4, color)
+    else:
+        # Para otros enemigos, cargar normalmente
+        pass
+
+    # Cargar el resto de animaciones normalmente
     for state, expected_count in _STATE_FRAME_COUNTS.items():
+        # Si ya se cargó "run" desde el spritesheet, no sobrescribir
+        if state in frames:
+            continue
         frames[state] = _load_state_frames(base_dir, state, expected_count, color)
 
     # Detect extra states that may exist on disk (e.g., alternative actions).
