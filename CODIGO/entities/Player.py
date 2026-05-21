@@ -549,15 +549,19 @@ class Player(Entity):
 
         Prioridad:
         1. death (si está muriendo)
-        2. attack (si está disparando) - se repite mientras se mantiene el botón
-        3. walk (si se está moviendo)
-        4. idle (si está quieto)
+        2. _animation_override (si existe - disparos direccionales específicos)
+        3. attack (si está disparando genéricamente)
+        4. walk (si se está moviendo)
+        5. idle (si está quieto)
         """
         is_shooting = self._shoot_dir_current != (0, 0)
 
         # Lógica de prioridad
         if self._respawn_animating:
             active_name = "death"
+        elif self._animation_override:
+            # Usar animación específica de disparo si está establecida
+            active_name = self._animation_override
         elif is_shooting:
             active_name = "attack"
         elif moving:
@@ -571,8 +575,16 @@ class Player(Entity):
             animation = self._animations[active_name]
             animation.update(dt)
 
+            # Animaciones de disparo específicas terminan y se resetean a idle/walk
+            if self._animation_override and animation.is_finished():
+                self._animation_override = None
+                # Volver a idle o walk según estado
+                if moving:
+                    self._set_current_animation("walk")
+                else:
+                    self._set_current_animation("idle")
             # Attack se repite mientras se mantenga presionado
-            if active_name == "attack" and animation.is_finished():
+            elif active_name == "attack" and animation.is_finished():
                 # Reiniciar attack si aún está disparando
                 if is_shooting:
                     animation.reset()
