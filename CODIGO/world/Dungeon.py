@@ -117,13 +117,7 @@ class Dungeon:
         # <<< NUEVO: sala del boss en el extremo más lejano de Zona 2
         self._place_boss_room()
 
-        # <<< NUEVO: sala segura con Mara en Zona 2
-        self._place_mara_safe_room()
-
-        # <<< NUEVO: ubicar salas de tesoro en el recorrido
-        self._place_treasure_rooms()
-
-        # <<< NUEVO: sala del Profesor Ibarra (una en Zona 1, una en Zona 2)
+        # <<< NUEVO: sala del Profesor Ibarra en Zona 1
         self._place_profesor_ibarra_rooms()
 
         # Obstáculos en salas hostiles
@@ -444,91 +438,12 @@ class Dungeon:
         room.setup_boss_room()
         self.boss_pos = boss_pos
 
-    def _place_mara_safe_room(self) -> None:
-        """
-        Coloca una sala segura con Mara (NPC) en Zona 2.
-
-        La sala segura es un lugar sin combate donde el jugador puede
-        conversar con Mara sobre empatía y aislamiento digital.
-        """
-        if not hasattr(self, "zones"):
-            return
-
-        # Buscar salas en Zona 2
-        zone2_rooms = [pos for pos in self.rooms.keys()
-                       if self.room_zone(pos) == 2]
-
-        forbidden = {self.start}
-        for attr in ("shop_pos", "boss_pos"):
-            if hasattr(self, attr):
-                forbidden.add(getattr(self, attr))
-
-        zone2_candidates = [pos for pos in zone2_rooms if pos not in forbidden]
-
-        if not zone2_candidates:
-            return
-
-        # Seleccionar una sala aleatoria de Zona 2
-        mara_pos = random.choice(zone2_candidates)
-        room = self.rooms.get(mara_pos)
-
-        if not room:
-            return
-
-        # Marcar como sala segura con Mara
-        setattr(room, "type", "safe_mara")
-        self.mara_pos = mara_pos
-
-    def _place_treasure_rooms(self, max_rooms: int = 1, base_chance: float = 0.12) -> None:
-        """Selecciona algunas salas y las convierte en cuartos del tesoro."""
-        if not self.rooms:
-            return
-
-        forbidden = {self.start}
-        for attr in ("shop_pos", "boss_pos"):
-            if hasattr(self, attr):
-                forbidden.add(getattr(self, attr))
-
-        # Prioriza el camino principal para que aparezcan "entre" salas de combate
-        main_candidates = [pos for pos in self.main_path if pos not in forbidden]
-        branch_candidates = [pos for pos in self.rooms.keys() if pos not in forbidden and pos not in main_candidates]
-
-        # Ordena candidatos por profundidad para diversificar
-        def depth_of(pos: tuple[int, int]) -> int:
-            return self.depth_map.get(pos, 0)
-
-        main_candidates.sort(key=depth_of)
-        branch_candidates.sort(key=depth_of)
-
-        chosen: list[tuple[int, int]] = []
-
-        rng = random.random
-        for pos in main_candidates + branch_candidates:
-            if len(chosen) >= max_rooms:
-                break
-            depth = depth_of(pos)
-            if depth <= 0:
-                continue
-            chance = base_chance + 0.04 * min(depth, 5)
-            if rng() > min(0.55, chance):
-                continue
-            chosen.append(pos)
-
-        self.treasure_rooms: set[tuple[int, int]] = set()
-        for pos in chosen:
-            room = self.rooms.get(pos)
-            if not room:
-                continue
-            if hasattr(room, "setup_treasure_room"):
-                room.setup_treasure_room(list(self._treasure_loot_table))
-                self.treasure_rooms.add(pos)
-
     def _populate_hostile_obstacles(self) -> None:
         if not self.rooms:
             return
 
         salt = 0xC0BB1E
-        safe_types = {"shop", "treasure", "profesor_ibarra", "boss"}
+        safe_types = {"shop", "profesor_ibarra", "boss"}
 
         for pos, room in sorted(self.rooms.items()):
             if pos == self.start:
@@ -560,7 +475,7 @@ class Dungeon:
             return
 
         forbidden: set[tuple[int, int]] = {self.start}
-        for attr in ("shop_pos", "mara_pos", "boss_pos"):
+        for attr in ("shop_pos", "boss_pos"):
             if hasattr(self, attr):
                 forbidden.add(getattr(self, attr))
 
