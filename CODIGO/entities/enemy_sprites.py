@@ -487,7 +487,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             cols=4,
             frames_a_usar=15,
             flip_horizontal=False,
-            tamaño_logico=32  # Mantener tamaño original (32x32)
+            tamaño_logico=64  # Escalar de 32x32 a 64x64
         )
         if run_frames:
             frames["run"] = run_frames
@@ -502,7 +502,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             cols=3,
             frames_a_usar=8,
             flip_horizontal=False,
-            tamaño_logico=32  # Mantener tamaño original (32x32)
+            tamaño_logico=64  # Escalar de 32x32 a 64x64
         )
         if idle_frames:
             frames["idle"] = idle_frames
@@ -517,7 +517,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             cols=3,
             frames_a_usar=5,
             flip_horizontal=False,
-            tamaño_logico=32  # Mantener tamaño original (32x32)
+            tamaño_logico=64  # Escalar de 32x32 a 64x64
         )
         if attack_frames:
             frames["attack"] = attack_frames
@@ -583,7 +583,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             cols=5,
             frames_a_usar=22,
             flip_horizontal=False,
-            tamaño_logico=64  # Escalar a 64x64
+            tamaño_logico=96  # Mantener tamaño original, no escalar
         )
         if walk_frames:
             # idle y walk comparten la misma animación (sin copiar, misma referencia)
@@ -601,7 +601,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             cols=4,
             frames_a_usar=16,
             flip_horizontal=False,
-            tamaño_logico=64  # Escalar a 64x64
+            tamaño_logico=96  # Mantener tamaño original, no escalar
         )
         if shoot_frames:
             frames["shoot"] = shoot_frames
