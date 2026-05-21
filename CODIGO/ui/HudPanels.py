@@ -265,8 +265,8 @@ class HUDPanel:
     MARGIN = 16
 
     # Colores para placeholders
-    PLACEHOLDER_COLOR = (30, 30, 45)
-    PLACEHOLDER_BORDER_COLOR = (50, 50, 70)
+    PLACEHOLDER_COLOR = (255, 200, 0)  # Amarillo brillante para visibility
+    PLACEHOLDER_BORDER_COLOR = (255, 255, 255)  # Borde blanco
 
     def __init__(self, player_id: int, anchor: str,
                  panel_image_path: str | None = None,
