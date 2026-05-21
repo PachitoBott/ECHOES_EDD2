@@ -12,6 +12,7 @@ Flujo de estado:
 """
 from __future__ import annotations
 import math
+from pathlib import Path
 import pygame
 
 
@@ -192,6 +193,18 @@ class ProfesorIbarra:
         self.emp_pending: bool = False
         self.map_reveal_pending: bool = False
 
+        # --- Sprite sheet animado (conversación) ---
+        self._talk_frames: list[pygame.Surface] = self._load_talk_frames()
+        self._talk_frame_idx: int = 0
+        self._talk_anim_timer: float = 0.0
+        self._TALK_FRAME_SPEED: float = 0.10  # segundos por frame
+
+        # --- Sprite sheet idle (en partida) ---
+        self._idle_frames: list[pygame.Surface] = self._load_idle_frames()
+        self._idle_frame_idx: int = 0
+        self._idle_anim_timer: float = 0.0
+        self._IDLE_FRAME_SPEED: float = 0.20  # segundos por frame (idle más lento)
+
     # ------------------------------------------------------------------
     # Interacción
     # ------------------------------------------------------------------
@@ -322,6 +335,18 @@ class ProfesorIbarra:
     # ------------------------------------------------------------------
     def handle_event(self, ev: pygame.event.Event, player) -> None:
         """Procesa un evento dentro del estado activo del profesor."""
+
+        # Click del mouse en opciones de pregunta
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+            if self.estado == self.PREGUNTA:
+                for idx, rect in enumerate(getattr(self, "_option_rects", [])):
+                    if rect.collidepoint(ev.pos):
+                        self.responder(idx, player)
+                        return
+            elif self.estado == self.TIENDA:
+                self.handle_tienda_event(ev, player)
+                return
+
         if ev.type != pygame.KEYDOWN:
             return
 
@@ -356,18 +381,110 @@ class ProfesorIbarra:
             if self._msg_timer <= 0.0:
                 self._last_msg = ""
 
+        # Avanzar animación de hablar en estados de conversación
+        if self.estado in (self.PREGUNTA, self.FEEDBACK):
+            self._tick_talk_anim(real_dt)
+
+        # Avanzar animación idle siempre
+        if self._idle_frames:
+            self._idle_anim_timer += real_dt
+            if self._idle_anim_timer >= self._IDLE_FRAME_SPEED:
+                self._idle_anim_timer -= self._IDLE_FRAME_SPEED
+                self._idle_frame_idx = (self._idle_frame_idx + 1) % len(self._idle_frames)
+
+    # ------------------------------------------------------------------
+    # Sprite sheet animado
+    # ------------------------------------------------------------------
+    def _load_talk_frames(self) -> list[pygame.Surface]:
+        """Carga los primeros 10 frames del sprite sheet 4×3 de 128×128 px por frame."""
+        sheet_path = Path(__file__).parent.parent / "assets" / "npc" / "profesor_ibarra_sheet.png"
+        if not sheet_path.exists():
+            return []
+        try:
+            sheet = pygame.image.load(str(sheet_path)).convert_alpha()
+        except Exception:
+            return []
+
+        FRAME_W, FRAME_H = 192, 192
+        COLS = 4
+        MAX_FRAMES = 10
+        frames: list[pygame.Surface] = []
+        for i in range(MAX_FRAMES):
+            col = i % COLS
+            row = i // COLS
+            rect = pygame.Rect(col * FRAME_W, row * FRAME_H, FRAME_W, FRAME_H)
+            frame = pygame.Surface((FRAME_W, FRAME_H), pygame.SRCALPHA)
+            frame.blit(sheet, (0, 0), rect)
+            # Escalar a 96×96 para usar dentro del panel de diálogo
+            frame = pygame.transform.smoothscale(frame, (96, 96))
+            frames.append(frame)
+        return frames
+
+    def _load_idle_frames(self) -> list[pygame.Surface]:
+        """Carga los 3 primeros frames del sprite sheet idle 2×2 de 196×196 px por frame."""
+        sheet_path = Path(__file__).parent.parent / "assets" / "npc" / "profesor_ibarra_idle.png"
+        if not sheet_path.exists():
+            return []
+        try:
+            sheet = pygame.image.load(str(sheet_path)).convert_alpha()
+        except Exception:
+            return []
+
+        FRAME_W, FRAME_H = 196, 196
+        COLS = 2
+        MAX_FRAMES = 3
+        frames: list[pygame.Surface] = []
+        for i in range(MAX_FRAMES):
+            col = i % COLS
+            row = i // COLS
+            rect = pygame.Rect(col * FRAME_W, row * FRAME_H, FRAME_W, FRAME_H)
+            frame = pygame.Surface((FRAME_W, FRAME_H), pygame.SRCALPHA)
+            frame.blit(sheet, (0, 0), rect)
+            frame = pygame.transform.smoothscale(frame, (98, 98))
+            frames.append(frame)
+        return frames
+
+    def _tick_talk_anim(self, dt: float) -> None:
+        """Avanza la animación de hablar."""
+        if not self._talk_frames:
+            return
+        self._talk_anim_timer += dt
+        if self._talk_anim_timer >= self._TALK_FRAME_SPEED:
+            self._talk_anim_timer -= self._TALK_FRAME_SPEED
+            self._talk_frame_idx = (self._talk_frame_idx + 1) % len(self._talk_frames)
+
+    def _draw_talk_sprite(self, surface: pygame.Surface, panel_x: int, panel_y: int, panel_w: int) -> None:
+        """Obsoleto — el retrato ahora va integrado dentro del panel via _draw_portrait_box."""
+        pass
+
     # ------------------------------------------------------------------
     # Renderizado
     # ------------------------------------------------------------------
+    def _get_screen_font(self) -> pygame.font.Font:
+        """Fuente para dibujar el diálogo directamente en screen (tamaño 2x)."""
+        if not hasattr(self, "_screen_font_cache"):
+            vt323 = Path(__file__).parent.parent / "assets" / "ui" / "VT323-Regular.ttf"
+            try:
+                self._screen_font_cache = pygame.font.Font(str(vt323), 34)
+            except Exception:
+                self._screen_font_cache = pygame.font.SysFont("consolas", 26)
+        return self._screen_font_cache
+
     def draw(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
+        """Dibuja solo el sprite/hologram en el world surface."""
         self.update()
         self._draw_hologram(surface)
+        # Los paneles de diálogo se dibujan en screen via draw_screen()
+
+    def draw_screen(self, screen: pygame.Surface) -> None:
+        """Dibuja los paneles de diálogo directamente en el screen surface (encima del HUD)."""
+        font = self._get_screen_font()
         if self.estado == self.PREGUNTA:
-            self._draw_question_ui(surface, font)
+            self._draw_question_ui(screen, font)
         elif self.estado == self.FEEDBACK:
-            self._draw_feedback_ui(surface, font)
+            self._draw_feedback_ui(screen, font)
         elif self.estado == self.TIENDA:
-            self._draw_tienda_ui(surface, font)
+            self._draw_tienda_ui(screen, font)
 
     def draw_idle_hint(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
         cx, cy = self.pos
@@ -376,43 +493,72 @@ class ProfesorIbarra:
 
     # --- hologram body ---
     def _draw_hologram(self, surface: pygame.Surface) -> None:
-        t   = self._time
         cx, cy = self.pos
 
+        # Si hay sprite idle, usarlo en lugar del placeholder
+        if self._idle_frames:
+            frame = self._idle_frames[self._idle_frame_idx]
+            fw, fh = frame.get_size()
+            surface.blit(frame, (cx - fw // 2, cy - fh // 2))
+            return
+
+        # Fallback: placeholder hologramático
+        t       = self._time
         alpha   = int(155 + 65 * math.sin(t * 3.7))
         flicker = int(18 * math.sin(t * 11.3))
         head_c  = (50 + flicker, 170 + flicker, 240)
         body_c  = (30 + flicker, 140 + flicker, 215)
 
         tmp = pygame.Surface((44, 72), pygame.SRCALPHA)
-
-        # cabeza
         pygame.draw.circle(tmp, (*head_c, alpha), (22, 10), 9)
-        # torso
         pygame.draw.rect(tmp, (*body_c, alpha), (14, 21, 16, 22))
-        # brazos
         pygame.draw.rect(tmp, (*body_c, alpha), (5,  22, 9, 16))
         pygame.draw.rect(tmp, (*body_c, alpha), (30, 22, 9, 16))
-        # piernas
         pygame.draw.rect(tmp, (*body_c, alpha), (14, 43, 7, 16))
         pygame.draw.rect(tmp, (*body_c, alpha), (23, 43, 7, 16))
-
-        # scanlines horizontales
         scan_a = max(0, min(255, 65 + flicker))
         for yl in range(0, 72, 4):
             pygame.draw.line(tmp, (*head_c, scan_a), (0, yl), (43, yl))
-
         surface.blit(tmp, (cx - 22, cy - 36))
 
-        # indicador de señal (parpadea)
         sig_a = int(175 + 80 * math.sin(t * 2.8))
         sig   = pygame.Surface((6, 6), pygame.SRCALPHA)
         pygame.draw.circle(sig, (120, 230, 255, sig_a), (3, 3), 3)
         surface.blit(sig, (cx + 16, cy - 44))
 
-    # --- panel helper ---
+    # --- panel helper (bottom-aligned, estilo RPG) ---
+    def _draw_dialogue_panel(self, surface: pygame.Surface, ph: int) -> tuple[int, int, int]:
+        """Dibuja el panel de diálogo en la parte inferior. Retorna (px, py, pw)."""
+        sw, sh = surface.get_size()
+        pw = sw - 32
+        px = 16
+        py = sh - ph - 175  # margen para quedar por encima del HUD
+
+        # Fondo principal
+        panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
+        panel.fill((3, 8, 24, 235))
+
+        # Borde exterior teal
+        pygame.draw.rect(panel, (0, 160, 210, 220), (0, 0, pw, ph), 2)
+        # Borde interior más oscuro (doble borde)
+        pygame.draw.rect(panel, (0, 80, 120, 140), (3, 3, pw - 6, ph - 6), 1)
+
+        # Línea decorativa superior
+        pygame.draw.line(panel, (0, 200, 255, 180), (12, 2), (pw - 12, 2), 1)
+
+        # Esquinas decoradas
+        corner = 8
+        col = (0, 200, 255, 200)
+        for cx2, cy2, dx, dy in [(0,0,1,1),(pw,0,-1,1),(0,ph,1,-1),(pw,ph,-1,-1)]:
+            pygame.draw.line(panel, col, (cx2, cy2), (cx2 + dx*corner, cy2), 2)
+            pygame.draw.line(panel, col, (cx2, cy2), (cx2, cy2 + dy*corner), 2)
+
+        surface.blit(panel, (px, py))
+        return px, py, pw
+
     def _draw_panel(self, surface: pygame.Surface, pw: int, ph: int,
                     cx: int | None = None, cy: int | None = None) -> tuple[int, int]:
+        """Panel centrado genérico (usado por la tienda)."""
         sw, sh = surface.get_size()
         if cx is None:
             cx = sw // 2
@@ -421,64 +567,123 @@ class ProfesorIbarra:
         px = max(4, cx - pw // 2)
         py = max(4, cy - ph // 2)
         panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
-        panel.fill((8, 16, 38, 218))
-        pygame.draw.rect(panel, (65, 165, 255, 210), (0, 0, pw, ph), 2)
+        panel.fill((3, 8, 24, 235))
+        pygame.draw.rect(panel, (0, 160, 210, 220), (0, 0, pw, ph), 2)
+        pygame.draw.rect(panel, (0, 80, 120, 140), (3, 3, pw - 6, ph - 6), 1)
         surface.blit(panel, (px, py))
         return px, py
 
+    def _draw_portrait_box(self, surface: pygame.Surface, px: int, py: int, ph: int) -> int:
+        """Dibuja el recuadro del retrato con el sprite animado. Retorna el x donde empieza el texto."""
+        PORTRAIT_SIZE = 210
+        PORTRAIT_PAD  = 12
+        box_x = px + PORTRAIT_PAD
+        box_y = py + (ph - PORTRAIT_SIZE) // 2
+        box_rect = pygame.Rect(box_x, box_y, PORTRAIT_SIZE, PORTRAIT_SIZE)
+
+        # Fondo del retrato
+        portrait_bg = pygame.Surface((PORTRAIT_SIZE, PORTRAIT_SIZE), pygame.SRCALPHA)
+        portrait_bg.fill((0, 20, 50, 200))
+        pygame.draw.rect(portrait_bg, (0, 160, 220, 180), (0, 0, PORTRAIT_SIZE, PORTRAIT_SIZE), 2)
+        surface.blit(portrait_bg, box_rect.topleft)
+
+        # Sprite animado (escalar al tamaño del recuadro)
+        if self._talk_frames:
+            frame = pygame.transform.smoothscale(self._talk_frames[self._talk_frame_idx],
+                                                  (PORTRAIT_SIZE, PORTRAIT_SIZE))
+            surface.blit(frame, box_rect.topleft)
+
+        # Nombre debajo del retrato
+        return box_x + PORTRAIT_SIZE + 12  # x donde empieza el texto
+
     # --- pregunta ---
     def _draw_question_ui(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
-        lh   = font.get_height() + 3
-        rows = (1                               # nombre
-                + 2                             # intro
-                + len(self.pregunta["texto"])   # pregunta
-                + len(self.pregunta["opciones"])# opciones
-                + 1                             # hint teclas
-                + 2)                            # padding
-        ph = 14 + rows * lh
-        pw = min(surface.get_width() - 8, 500)
-        px, py = self._draw_panel(surface, pw, ph)
+        lh = font.get_height() + 4
+        ph = 16 + lh * 2 + 6 + lh * len(self.pregunta["texto"]) + 6 + lh * len(self.pregunta["opciones"]) + 6 + lh + 10
+        ph = max(ph, 270)
 
-        y = py + 8
-        surface.blit(
-            font.render("Profesor Eduardo Ibarra:", True, (100, 200, 255)),
-            (px + 10, y)); y += lh
+        px, py, pw = self._draw_dialogue_panel(surface, ph)
+        text_x = self._draw_portrait_box(surface, px, py, ph)
+        text_w = pw - (text_x - px) - 10
 
-        for line in [
-            "Daniel, antes de comprar nada, necesito saber",
-            "si estás entendiendo cómo sobrevivir a esto.",
-        ]:
-            surface.blit(font.render(line, True, (170, 210, 255)), (px + 10, y)); y += lh
+        # Nameplate
+        name_surf = font.render("◈  PROF. EDUARDO IBARRA", True, (0, 220, 255))
+        surface.blit(name_surf, (text_x, py + 8))
 
-        y += 3
+        # Línea separadora bajo el nombre
+        pygame.draw.line(surface, (0, 140, 180, 160),
+                         (text_x, py + 8 + lh + 1),
+                         (text_x + text_w, py + 8 + lh + 1), 1)
+
+        y = py + 8 + lh + 8
+
+        # Intro en gris azulado
+        for line in ["Daniel, antes de comprar nada, necesito saber",
+                     "si estás entendiendo cómo sobrevivir a esto."]:
+            surface.blit(font.render(line, True, (140, 190, 220)), (text_x, y)); y += lh
+
+        y += 4
+        # Pregunta en blanco cálido
         for line in self.pregunta["texto"]:
-            surface.blit(font.render(line, True, (255, 255, 200)), (px + 10, y)); y += lh
+            surface.blit(font.render(line, True, (240, 240, 200)), (text_x, y)); y += lh
 
-        y += 3
-        for opcion in self.pregunta["opciones"]:
-            surface.blit(font.render(opcion, True, (210, 210, 148)), (px + 18, y)); y += lh
+        y += 6
+        # Opciones clickeables con numeración clara
+        mouse_pos = pygame.mouse.get_pos()
+        self._option_rects: list[pygame.Rect] = []
+        for idx, opcion in enumerate(self.pregunta["opciones"]):
+            label = f"  {idx + 1}.  {opcion.split('.', 1)[-1].strip()}"
+            opt_rect = pygame.Rect(text_x, y, text_w, lh + 2)
+            self._option_rects.append(opt_rect)
+            hovered = opt_rect.collidepoint(mouse_pos)
+            bg_col = (0, 80, 60, 120) if hovered else (0, 0, 0, 0)
+            if hovered:
+                bg = pygame.Surface((text_w, lh + 4), pygame.SRCALPHA)
+                bg.fill(bg_col)
+                surface.blit(bg, (text_x, y - 2))
+            text_col = (120, 255, 180) if hovered else (200, 230, 170)
+            surface.blit(font.render(label, True, text_col), (text_x, y))
+            y += lh + 4
 
-        y += 3
-        surface.blit(
-            font.render("Presiona 1, 2 o 3 para responder.", True, (130, 175, 130)),
-            (px + 10, y))
+        y += 2
+        # Hint parpadeante
+        hint_alpha = int(160 + 80 * math.sin(self._time * 4.0))
+        hint_surf = font.render("[ 1 / 2 / 3 ]  o haz click en una opción", True, (80, 160, 130))
+        hint_surf.set_alpha(hint_alpha)
+        surface.blit(hint_surf, (text_x, y))
 
     # --- feedback ---
     def _draw_feedback_ui(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
-        lh   = font.get_height() + 3
-        rows = 1 + len(self._feedback_lines) + 1
-        ph   = 14 + rows * lh
-        pw   = min(surface.get_width() - 8, 500)
-        px, py = self._draw_panel(surface, pw, ph)
+        lh = font.get_height() + 4
+        ph = max(270, 16 + lh + 8 + lh * len(self._feedback_lines) + 10)
 
-        y = py + 8
-        surface.blit(
-            font.render("Profesor Eduardo Ibarra:", True, (100, 200, 255)),
-            (px + 10, y)); y += lh
+        px, py, pw = self._draw_dialogue_panel(surface, ph)
+        text_x = self._draw_portrait_box(surface, px, py, ph)
+        text_w = pw - (text_x - px) - 10
 
+        # Nameplate
+        name_surf = font.render("◈  PROF. EDUARDO IBARRA", True, (0, 220, 255))
+        surface.blit(name_surf, (text_x, py + 8))
+
+        pygame.draw.line(surface, (0, 140, 180, 160),
+                         (text_x, py + 8 + lh + 1),
+                         (text_x + text_w, py + 8 + lh + 1), 1)
+
+        y = py + 8 + lh + 10
         for line in self._feedback_lines:
-            color = (255, 225, 90) if line.startswith("+") else (185, 225, 255)
-            surface.blit(font.render(line, True, color), (px + 10, y)); y += lh
+            if line.startswith("+"):
+                color = (100, 255, 140)
+            elif "incorrecto" in line.lower() or "no " in line.lower():
+                color = (255, 160, 100)
+            else:
+                color = (180, 225, 255)
+            surface.blit(font.render(line, True, color), (text_x, y)); y += lh
+
+        # Hint
+        hint_alpha = int(160 + 80 * math.sin(self._time * 4.0))
+        hint_surf = font.render("[ E / ESPACIO ]  Continuar", True, (80, 160, 130))
+        hint_surf.set_alpha(hint_alpha)
+        surface.blit(hint_surf, (text_x, py + ph - lh - 8))
 
     # --- tienda carousel ---
     def _draw_tienda_ui(self, surface: pygame.Surface, font: pygame.font.Font) -> None:

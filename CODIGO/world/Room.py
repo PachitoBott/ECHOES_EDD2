@@ -709,21 +709,19 @@ class Room:
             can_interact = True
 
         for ev in events:
-            if ev.type != pygame.KEYDOWN:
-                continue
+            # Activar interacción inicial con E
+            if ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_e and can_interact and prof.estado == prof.IDLE:
+                    prof.iniciar_interaccion()
+                    continue
 
-            # Activar interacción inicial
-            if ev.key == pygame.K_e and can_interact and prof.estado == prof.IDLE:
-                prof.iniciar_interaccion()
-                continue
+                # Abrir tienda carousel directamente si la pregunta ya fue respondida
+                if ev.key == pygame.K_e and can_interact and prof.estado == prof.LISTO:
+                    prof.abrir_tienda()
+                    continue
 
-            # Abrir tienda carousel directamente si la pregunta ya fue respondida
-            if ev.key == pygame.K_e and can_interact and prof.estado == prof.LISTO:
-                prof.abrir_tienda()
-                continue
-
-            # Delegar teclas al profesor en cualquier estado activo
-            # (PREGUNTA, FEEDBACK, TIENDA)
+            # Delegar TODOS los eventos al profesor en cualquier estado activo
+            # (PREGUNTA, FEEDBACK, TIENDA) — incluyendo MOUSEBUTTONDOWN
             if prof.estado in (prof.PREGUNTA, prof.FEEDBACK, prof.TIENDA):
                 prof.handle_event(ev, player)
 

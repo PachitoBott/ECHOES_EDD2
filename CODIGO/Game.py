@@ -1802,6 +1802,16 @@ class Game:
         # Notificaciones de subtítulos (fragmentos ganados, apoyos, etc.)
         self.subtitulos.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)
 
+        # Diálogo del Profesor Ibarra (encima del HUD)
+        try:
+            _room = self.dungeon.current_room
+            if getattr(_room, "type", "") == "profesor_ibarra":
+                _prof = getattr(_room, "profesor_ibarra", None)
+                if _prof is not None:
+                    _prof.draw_screen(self.screen)
+        except Exception:
+            pass
+
         # Banner de cambio de zona / sala del boss (encima de todo el HUD)
         self._draw_zone_banner()
 
