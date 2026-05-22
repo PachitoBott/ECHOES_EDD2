@@ -29,102 +29,140 @@ class Dungeon:
                  corrupted_room_chance: float = 0.08,
                  corrupted_bonus_mode: str = "upgrade",
                  corrupted_chip_bonus: float = 0.5) -> None:
+        # Convertir seed a valor entero base
         if seed is not None:
             random.seed(seed)
         if seed is None:
             seed = random.randrange(0, 10**9)
-        self.seed = seed
-        random.seed(self.seed)    
 
-        self.grid_w, self.grid_h = grid_w, grid_h
-        self.i, self.j = grid_w // 2, grid_h // 2  # posición actual (empieza centro)
-        self.start = (self.i, self.j)
-        self.rooms: Dict[Tuple[int, int], Room] = {}
-        self.explored: Set[Tuple[int, int]] = set()
-        self.main_path: list[Tuple[int, int]] = []  # <<< NUEVO: orden del camino principal
-        self.depth_map: Dict[Tuple[int, int], int] = {}
-        # Grafo académico (Fase 2): representa la red de salas del dungeon.
-        # Se construye en _build_grafo_y_depth_map() tras generar todas las salas.
-        self.grafo: Grafo = Grafo(dirigido=False)
+        # Intentar generar un dungeon válido (boss sin entrada solo por norte)
+        max_attempts = 50
+        attempt = 0
+        current_seed = seed
 
-        # Etiquetado de zonas para la narrativa (Fase 5)
-        # zones[pos] = 1 o 2 según la profundidad BFS desde el inicio
-        self.zones: Dict[Tuple[int, int], int] = {}
+        print(f"[DUNGEON] Iniciando generación de dungeon con seed base {seed}")
 
+        while attempt < max_attempts:
+            attempt += 1
+            current_seed = (seed + attempt - 1) % (10**9)
+            random.seed(current_seed)
+            print(f"[DUNGEON] Intento {attempt}/{max_attempts} con seed {current_seed}")
 
-        # 1) Camino principal
-        self._generate_main_path(length=main_len)
+            # Inicializar estructuras de dungeon
+            self.grid_w, self.grid_h = grid_w, grid_h
+            self.i, self.j = grid_w // 2, grid_h // 2  # posición actual (empieza centro)
+            self.start = (self.i, self.j)
+            self.rooms: Dict[Tuple[int, int], Room] = {}
+            self.explored: Set[Tuple[int, int]] = set()
+            self.main_path: list[Tuple[int, int]] = []  # <<< NUEVO: orden del camino principal
+            self.depth_map: Dict[Tuple[int, int], int] = {}
+            # Grafo académico (Fase 2): representa la red de salas del dungeon.
+            # Se construye en _build_grafo_y_depth_map() tras generar todas las salas.
+            self.grafo: Grafo = Grafo(dirigido=False)
 
-        # 2) Ramas opcionales
-        self._generate_branches(branch_chance, branch_min, branch_max)
+            # Etiquetado de zonas para la narrativa (Fase 5)
+            # zones[pos] = 1 o 2 según la profundidad BFS desde el inicio
+            self.zones: Dict[Tuple[int, int], int] = {}
 
-        # Tabla de botín compartida para cofres del tesoro
-        self._treasure_loot_table: list[dict] = [
-            {"name": "Monedas desperdigadas (+20)", "type": "gold", "amount": 20, "weight": 8},
-            {"name": "Bolsa de oro (+40)", "type": "gold", "amount": 40, "weight": 6},
-            {"name": "Saco pesado de oro (+65)", "type": "gold", "amount": 65, "weight": 4},
-            {"name": "Lingote antiguo (+120)", "type": "gold", "amount": 120, "weight": 2},
-            {"name": "Vida extra (+1)", "type": "upgrade", "id": "hp_up", "weight": 5},
-            {"name": "Blindaje reforzado (+1 golpe)", "type": "upgrade", "id": "armor_up", "weight": 3},
-            {"name": "Talismán de recarga (-10%)", "type": "upgrade", "id": "cdr_charm", "weight": 4},
-            {"name": "Aumento de velocidad (+5%)", "type": "upgrade", "id": "spd_up", "weight": 4},
-            {"name": "Manual de puntería (-12% cd)", "type": "upgrade", "id": "cdr_core", "weight": 2},
-            {"name": "Botas relámpago (+10% sprint)", "type": "upgrade", "id": "sprint_core", "weight": 3},
-            {"name": "Condensador de fase (-15% dash)", "type": "upgrade", "id": "dash_core", "weight": 2},
-            {"name": "Impulso cinético (+duración dash)", "type": "upgrade", "id": "dash_drive", "weight": 2},
-            {"name": "Tónico curativo (+2 HP)", "type": "heal", "amount": 2, "weight": 3},
-            {"name": "Viales reparadores (curación total)", "type": "consumable", "id": "heal_full", "weight": 2},
-            {"name": "Ración de campaña (+1 HP)", "type": "consumable", "id": "heal_small", "amount": 1, "weight": 4},
-            {"name": "Pistolas dobles", "type": "weapon", "id": "reportar", "weight": 1},
-            {"name": "Rifle ligero", "type": "weapon", "id": "apoyo_amigo", "weight": 1},
-            {"name": "Guantes tesla", "type": "weapon", "id": "evidencia", "weight": 1},
-            {"name": "Carabina incandescente", "type": "weapon", "id": "modo_incognito", "weight": 0.8},
-            {
-                "name": "Fardo del aventurero",
-                "type": "bundle",
-                "contents": [
-                    {"type": "gold", "amount": 55},
-                    {"type": "consumable", "id": "heal_small", "amount": 1},
-                    {"type": "upgrade", "id": "spd_up"},
-                ],
-                "weight": 3,
-            },
-            {
-                "name": "Mapa arrugado del tesoro",
-                "type": "bundle",
-                "contents": [
-                    {"type": "gold", "amount": 70},
-                    {"type": "consumable", "id": "heal_medium", "amount": 2},
-                ],
-                "weight": 2,
-            },
-        ]
+            # 1) Camino principal
+            self._generate_main_path(length=main_len)
 
-        # 3) Definir puertas según vecinos + tallar corredores
-        self._link_neighbors_and_carve()
+            # 2) Ramas opcionales
+            self._generate_branches(branch_chance, branch_min, branch_max)
 
-        # 4) Construir el grafo académico y calcular el mapa de profundidades
-        #    El grafo modela cada sala como nodo y cada puerta como arista.
-        #    bfs_con_distancias() reemplaza el BFS manual de _build_depth_map().
-        self._build_grafo_y_depth_map()
+            # Tabla de botín compartida para cofres del tesoro
+            self._treasure_loot_table: list[dict] = [
+                {"name": "Monedas desperdigadas (+20)", "type": "gold", "amount": 20, "weight": 8},
+                {"name": "Bolsa de oro (+40)", "type": "gold", "amount": 40, "weight": 6},
+                {"name": "Saco pesado de oro (+65)", "type": "gold", "amount": 65, "weight": 4},
+                {"name": "Lingote antiguo (+120)", "type": "gold", "amount": 120, "weight": 2},
+                {"name": "Vida extra (+1)", "type": "upgrade", "id": "hp_up", "weight": 5},
+                {"name": "Blindaje reforzado (+1 golpe)", "type": "upgrade", "id": "armor_up", "weight": 3},
+                {"name": "Talismán de recarga (-10%)", "type": "upgrade", "id": "cdr_charm", "weight": 4},
+                {"name": "Aumento de velocidad (+5%)", "type": "upgrade", "id": "spd_up", "weight": 4},
+                {"name": "Manual de puntería (-12% cd)", "type": "upgrade", "id": "cdr_core", "weight": 2},
+                {"name": "Botas relámpago (+10% sprint)", "type": "upgrade", "id": "sprint_core", "weight": 3},
+                {"name": "Condensador de fase (-15% dash)", "type": "upgrade", "id": "dash_core", "weight": 2},
+                {"name": "Impulso cinético (+duración dash)", "type": "upgrade", "id": "dash_drive", "weight": 2},
+                {"name": "Tónico curativo (+2 HP)", "type": "heal", "amount": 2, "weight": 3},
+                {"name": "Viales reparadores (curación total)", "type": "consumable", "id": "heal_full", "weight": 2},
+                {"name": "Ración de campaña (+1 HP)", "type": "consumable", "id": "heal_small", "amount": 1, "weight": 4},
+                {"name": "Pistolas dobles", "type": "weapon", "id": "reportar", "weight": 1},
+                {"name": "Rifle ligero", "type": "weapon", "id": "apoyo_amigo", "weight": 1},
+                {"name": "Guantes tesla", "type": "weapon", "id": "evidencia", "weight": 1},
+                {"name": "Carabina incandescente", "type": "weapon", "id": "modo_incognito", "weight": 0.8},
+                {
+                    "name": "Fardo del aventurero",
+                    "type": "bundle",
+                    "contents": [
+                        {"type": "gold", "amount": 55},
+                        {"type": "consumable", "id": "heal_small", "amount": 1},
+                        {"type": "upgrade", "id": "spd_up"},
+                    ],
+                    "weight": 3,
+                },
+                {
+                    "name": "Mapa arrugado del tesoro",
+                    "type": "bundle",
+                    "contents": [
+                        {"type": "gold", "amount": 70},
+                        {"type": "consumable", "id": "heal_medium", "amount": 2},
+                    ],
+                    "weight": 2,
+                },
+            ]
 
-        # 4.5) Asignar zonas narrativas (Fase 5) según profundidad BFS
-        self._assign_zones()
+            # 3) Construir el grafo académico y calcular el mapa de profundidades ANTES de placing
+            #    Necesitamos el depth_map para colocar el boss en la sala más lejana
+            self._build_grafo_y_depth_map()
 
-        # <<< COMENTADO: la tienda antigua se reemplaza por Profesor Ibarra como único NPC de compra
-        # self._place_shop_room()
+            # 3.5) Asignar zonas narrativas (Fase 5) según profundidad BFS
+            self._assign_zones()
 
-        # <<< NUEVO: sala del boss en el extremo más lejano de Zona 2
-        self._place_boss_room()
+            # 4) CRÍTICO: Colocar el boss ANTES de tallar corredores
+            #    Esto garantiza que la puerta norte del boss esté bloqueada cuando carve_corridors() se ejecute
+            #    Si no hacemos esto, la puerta norte se talla en _link_neighbors_and_carve() y no se puede destallar
+            self._place_boss_room()
 
-        # <<< NUEVO: sala del Profesor Ibarra en Zona 1
-        self._place_profesor_ibarra_rooms()
+            # 5) AHORA: Definir puertas según vecinos + tallar corredores
+            #    En este punto, la puerta norte del boss ya está bloqueada en setup_boss_room()
+            #    Así que carve_corridors() respetará ese bloqueo automáticamente
+            self._link_neighbors_and_carve()
 
-        # Obstáculos en salas hostiles
-        self._populate_hostile_obstacles()
+            # 6) VALIDAR: Verificar que boss room tenga entrada NO-norte
+            #    En este punto, los corredores ya están tallados y respetan el bloqueo norte
+            if self._check_boss_room_would_have_valid_entrance():
+                # Puertas válidas, procedemos
+                # Nota: setup_boss_room() ya fue llamado en _place_boss_room()
+                # y ha bloqueado automáticamente la entrada norte
 
+                # CRÍTICO: Bloquear entrada sur de sala arriba del boss
+                # Esto previene acceso indirecto al boss desde arriba
+                self._block_north_adjacencies_to_boss()
 
-        # marcar inicial como explorado
+                # Guardar seed ANTES de usar self.seed en otros métodos
+                self.seed = current_seed
+
+                # <<< NUEVO: sala del Profesor Ibarra en Zona 1
+                self._place_profesor_ibarra_rooms()
+
+                # Obstáculos en salas hostiles
+                self._populate_hostile_obstacles()
+
+                # marcar inicial como explorado
+                self.explored.add((self.i, self.j))
+
+                print(f"[DUNGEON] Dungeon generado exitosamente con seed {current_seed}")
+                return  # Éxito, dungeon generado correctamente
+            else:
+                # Dungeon inválido - reintentar con nuevo seed
+                print(f"[DUNGEON] Seed {current_seed} rechazada: boss solo accesible por norte. "
+                      f"Intentando seed {(seed + attempt) % (10**9)} (intento {attempt+1}/{max_attempts})...")
+
+        # Si llegamos aquí, no se logró generar un dungeon válido después de max_attempts
+        print(f"[DUNGEON] [WARNING] No se pudo generar dungeon valido en {max_attempts} intentos. "
+              f"Usando seed {current_seed} aunque tiene boss solo accesible por norte.")
+        self.seed = current_seed
         self.explored.add((self.i, self.j))
         
 
@@ -292,12 +330,6 @@ class Dungeon:
             room.doors["S"] = (x, y+1) in self.rooms
             room.doors["W"] = (x-1, y) in self.rooms
             room.doors["E"] = (x+1, y) in self.rooms
-
-            # Especial: sala del boss NO puede tener entrada por arriba (N)
-            # El boss está en la pared superior, así que solo puede entrar por los lados o por abajo
-            if getattr(room, "type", "") == "boss":
-                room.doors["N"] = False
-
             # Corredores visuales
             room.carve_corridors(width_tiles=2, length_tiles=3)
             
@@ -417,32 +449,127 @@ class Dungeon:
 
     def _place_boss_room(self) -> None:
         """
-        Coloca la sala del boss en la sala más lejana de Zona 2 (mayor profundidad BFS).
-        Tamaño fijo: CFG.BOSS_ROOM_W × CFG.BOSS_ROOM_H.
+        Coloca la sala del boss en una sala válida de Zona 2.
+
+        CRITERIOS DE SELECCIÓN (en orden de prioridad):
+        1. NUNCA una sala que tenga un vecino al norte (esto evitaría acceso norte garantizado)
+        2. Sala más lejana (mayor profundidad BFS)
+        3. Preferir salas del camino principal si hay empate de profundidad
+
+        Esto garantiza que el boss nunca será accesible desde arriba.
         """
         if not hasattr(self, "zones"):
             return
 
-        zone2 = [
+        # Obtener candidatos de Zona 2
+        zone2_candidates = [
             pos for pos in self.rooms
             if self.zones.get(pos, 1) == 2 and pos != self.start
         ]
-        if not zone2:
+        if not zone2_candidates:
             return
 
+        # CRÍTICO: Filtrar salas que NO tengan vecino al norte
+        # Una sala con norte vecino significa que hay acceso directo desde arriba
+        valid_candidates = []
+        for pos in zone2_candidates:
+            px, py = pos
+            room_north = self.rooms.get((px, py - 1))
+            if room_north is None:
+                # NO hay sala al norte - ¡VÁLIDA!
+                valid_candidates.append(pos)
+            else:
+                print(f"[DUNGEON] Candidato rechazado {pos}: tiene sala al norte {(px, py - 1)}")
+
+        if not valid_candidates:
+            print(f"[DUNGEON] [WARNING] No hay candidatos válidos en Zona 2 sin norte neighbor")
+            # Si no hay válidos, usar la lógica antigua (fallback)
+            valid_candidates = zone2_candidates
+
+        # Ordenar por profundidad y preferencia de camino principal
         main_set = set(self.main_path)
-        zone2.sort(key=lambda p: (
-            -self.depth_map.get(p, 0),
-            0 if p in main_set else 1,
+        valid_candidates.sort(key=lambda p: (
+            -self.depth_map.get(p, 0),  # Mayor profundidad primero
+            0 if p in main_set else 1,  # Preferir main path
         ))
 
-        boss_pos = zone2[0]
+        boss_pos = valid_candidates[0]
         room = self.rooms.get(boss_pos)
         if room is None:
             return
 
         room.setup_boss_room()
         self.boss_pos = boss_pos
+        print(f"[DUNGEON] Boss colocado en {boss_pos} (profundidad {self.depth_map.get(boss_pos, 0)})")
+
+    def _block_north_adjacencies_to_boss(self) -> None:
+        """
+        Bloquea las puertas sur de la sala arriba del boss room.
+
+        Esto es crítico: aunque la puerta norte del boss esté bloqueada,
+        si hay una sala arriba con puerta sur ABIERTA, permitiría acceso
+        indirecto al boss desde arriba.
+
+        Solución: Bloquear la puerta sur de cualquier sala arriba del boss.
+        """
+        if not hasattr(self, "boss_pos"):
+            return
+
+        boss_x, boss_y = self.boss_pos
+
+        # Sala arriba (norte) del boss
+        room_above = self.rooms.get((boss_x, boss_y - 1))
+        if room_above:
+            if room_above.doors.get("S"):
+                room_above.doors["S"] = False
+                print(f"[DUNGEON] Bloqueada entrada sur de sala arriba {(boss_x, boss_y - 1)}")
+
+    def _check_boss_room_would_have_valid_entrance(self) -> bool:
+        """
+        Verifica que LA SALA ACTUAL DEL BOSS tenga acceso válido (no solo norte).
+
+        CRÍTICO: Esta validación ocurre DESPUÉS de _link_neighbors_and_carve(),
+        cuando los corredores ya están tallados y las puertas están fijas.
+
+        Cheques realizados:
+        1. NO debe haber una sala directamente al norte del boss
+        2. Debe tener al menos una puerta abierta en S, E o W
+        3. Ambas condiciones garantizan que no hay entrada por norte
+
+        Retorna True si es válida (segura de norte)
+        Retorna False si hay acceso por norte (seed será rechazada)
+        """
+        if not hasattr(self, "boss_pos"):
+            return False
+
+        boss_x, boss_y = self.boss_pos
+        boss_room = self.rooms.get(self.boss_pos)
+        if boss_room is None:
+            return False
+
+        # CHEQUEO 1: ¿Hay una sala directamente al norte del boss?
+        room_north = self.rooms.get((boss_x, boss_y - 1))
+        if room_north is not None:
+            print(f"[DUNGEON] [FAIL] Boss room INVALIDO: Existe sala al norte {(boss_x, boss_y - 1)}")
+            return False
+
+        # CHEQUEO 2: Verificar puertas del boss (después de carve_corridors)
+        has_south = boss_room.doors.get("S", False)
+        has_east = boss_room.doors.get("E", False)
+        has_west = boss_room.doors.get("W", False)
+        has_north = boss_room.doors.get("N", False)
+
+        # Debe tener al menos una entrada NO-norte
+        is_valid = has_south or has_east or has_west
+        entrances_non_north = sum([has_south, has_east, has_west])
+
+        if is_valid:
+            print(f"[DUNGEON] [OK] Boss room VALIDO: Sin sala al norte, "
+                  f"{entrances_non_north} entrada(s) (S={has_south}, E={has_east}, W={has_west})")
+        else:
+            print(f"[DUNGEON] [FAIL] Boss room INVALIDO: Sin puertas NO-norte disponibles")
+
+        return is_valid
 
     def _populate_hostile_obstacles(self) -> None:
         if not self.rooms:

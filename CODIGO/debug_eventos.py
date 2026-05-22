@@ -46,11 +46,11 @@ print("\n[TEST 4] Verificar handler...")
 if ev.tipo == "evento":
     tipo_evento = ev.datos.get("tipo")
     if tipo_evento == "enemigo_muerto":
-        print(f"  ✅ CORRECTO: Se procesaría como enemigo_muerto")
+        print(f"  [OK] CORRECTO: Se procesaría como enemigo_muerto")
     else:
-        print(f"  ❌ ERROR: tipo_evento = {tipo_evento}")
+        print(f"  [ERROR] ERROR: tipo_evento = {tipo_evento}")
 else:
-    print(f"  ❌ ERROR: ev.tipo = {ev.tipo}")
+    print(f"  [ERROR] ERROR: ev.tipo = {ev.tipo}")
 
 print("\n" + "="*70)
 

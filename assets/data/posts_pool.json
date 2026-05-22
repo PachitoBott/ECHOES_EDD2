@@ -1,0 +1,242 @@
+[
+  {
+    "id": 1, "seed": 101, "es_acoso": true,
+    "texto": "jajaja vieron lo que hizo?? que asco de persona, merece todo lo que le pasa lol",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Burlarse y desear dano a alguien es acoso directo.",
+    "feedback_incorrecto": "Incorrecto. Esto es acoso directo. Reportar protege a la victima.",
+    "nivel_actividad": 0.85
+  },
+  {
+    "id": 2, "seed": 202, "es_acoso": false,
+    "texto": "esto no es verdad, conozco a esta persona y nunca haria eso. por favor dejen de compartir.",
+    "accion_correcta": "IGNORAR",
+    "feedback_correcto": "Correcto. Este mensaje defiende a la victima. No es acoso.",
+    "feedback_incorrecto": "Incorrecto. Este mensaje es de apoyo. Reportarlo silenciaria a un aliado.",
+    "nivel_actividad": 0.25
+  },
+  {
+    "id": 3, "seed": 303, "es_acoso": true,
+    "texto": "no se si creerle pero bueno... yo solo lo comparto por si acaso, cada quien que opine",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Compartir rumores sin verificar es acoso pasivo.",
+    "feedback_incorrecto": "Incorrecto. Difundir rumores amplifica el dano aunque no opines.",
+    "nivel_actividad": 0.60
+  },
+  {
+    "id": 4, "seed": 404, "es_acoso": true,
+    "texto": "claro que si, accidentalmente le tomaron la foto jajaja todo fue un accidente obvio >_>",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. El sarcasmo hostil y la burla tambien son acoso.",
+    "feedback_incorrecto": "Incorrecto. Aunque no insulte directamente, el sarcasmo hostil es acoso encubierto.",
+    "nivel_actividad": 0.72
+  },
+  {
+    "id": 5, "seed": 505, "es_acoso": true,
+    "texto": "yo no opino ni me meto pero la verdad el video esta ahi y habla solo. no digo mas ...",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Insinuar sin decir directamente tambien hace dano.",
+    "feedback_incorrecto": "Incorrecto. El silencio complice con insinuacion es acoso pasivo.",
+    "nivel_actividad": 0.55
+  },
+  {
+    "id": 6, "seed": 606, "es_acoso": true,
+    "texto": "compartan antes de que lo borren, esto tiene que verse, la gente debe saber quien es",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Urgir a compartir contenido danino amplifica el acoso.",
+    "feedback_incorrecto": "Incorrecto. Pedir que compartan antes de borrar busca maximizar el dano.",
+    "nivel_actividad": 0.90
+  },
+  {
+    "id": 7, "seed": 707, "es_acoso": false,
+    "texto": "si alguien esta siendo atacado en redes, no compartan el contenido. eso solo hace mas dano.",
+    "accion_correcta": "IGNORAR",
+    "feedback_correcto": "Correcto. Este post educa sobre como no propagar el acoso.",
+    "feedback_incorrecto": "Incorrecto. Este mensaje busca frenar el acoso, no causarlo.",
+    "nivel_actividad": 0.30
+  },
+  {
+    "id": 8, "seed": 808, "es_acoso": true,
+    "texto": "que raro es ese tipo, siempre tan callado... algo tendra que esconder no? xd",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Insinuar cosas negativas de alguien por su personalidad es acoso.",
+    "feedback_incorrecto": "Incorrecto. Cuestionar e insinuar sobre alguien sin base es acoso encubierto.",
+    "nivel_actividad": 0.65
+  },
+  {
+    "id": 9, "seed": 909, "es_acoso": true,
+    "texto": "alguien lo conoce? me parece sospechoso, tiene cara de... bueno ya saben :)",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Los comentarios con doble intencion tambien son una forma de acoso.",
+    "feedback_incorrecto": "Incorrecto. Las insinuaciones maliciosas disfrazadas de curiosidad son acoso.",
+    "nivel_actividad": 0.50
+  },
+  {
+    "id": 10, "seed": 1010, "es_acoso": false,
+    "texto": "recuerden que detras de cada perfil hay una persona real. piensen antes de comentar.",
+    "accion_correcta": "IGNORAR",
+    "feedback_correcto": "Correcto. Este es un mensaje de conciencia, no de acoso.",
+    "feedback_incorrecto": "Incorrecto. Este post promueve el respeto en linea.",
+    "nivel_actividad": 0.20
+  },
+  {
+    "id": 11, "seed": 1111, "es_acoso": true,
+    "texto": "es solo humor, si se ofende es su problema, hay que tener mas sentido del humor lol",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Justificar el acoso como humor no lo hace aceptable.",
+    "feedback_incorrecto": "Incorrecto. Decir que es humor no elimina el dano que causa.",
+    "nivel_actividad": 0.70
+  },
+  {
+    "id": 12, "seed": 1212, "es_acoso": true,
+    "texto": "nadie le cree, ya todos saben como es. mejor que desaparezca de redes de una vez",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Pedir que alguien desaparezca de redes es exclusion digital.",
+    "feedback_incorrecto": "Incorrecto. Intentar excluir a alguien de espacios digitales es acoso grave.",
+    "nivel_actividad": 0.80
+  },
+  {
+    "id": 13, "seed": 1313, "es_acoso": false,
+    "texto": "si alguien te esta haciendo dano en redes, no estas solo. hay personas que pueden ayudarte.",
+    "accion_correcta": "IGNORAR",
+    "feedback_correcto": "Correcto. Este mensaje ofrece apoyo a posibles victimas.",
+    "feedback_incorrecto": "Incorrecto. Este post es de apoyo y no debe reportarse.",
+    "nivel_actividad": 0.15
+  },
+  {
+    "id": 14, "seed": 1414, "es_acoso": true,
+    "texto": "le escribo desde 5 cuentas diferentes y ni se da cuenta jaja esto es demasiado facil",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Usar multiples cuentas para acosar es especialmente grave.",
+    "feedback_incorrecto": "Incorrecto. El acoso coordinado desde varias cuentas es una forma intensa de ciberacoso.",
+    "nivel_actividad": 0.75
+  },
+  {
+    "id": 15, "seed": 1515, "es_acoso": true,
+    "texto": "seguro esta mintiendo, siempre hace drama para llamar la atencion, tipico",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Invalidar la experiencia de una victima tambien es una forma de acoso.",
+    "feedback_incorrecto": "Incorrecto. Desacreditar a quien pide ayuda es acoso secundario.",
+    "nivel_actividad": 0.60
+  },
+  {
+    "id": 16, "seed": 1616, "es_acoso": false,
+    "texto": "reporte el perfil que estaba atacando a mi companero. no se queden callados ante el acoso.",
+    "accion_correcta": "IGNORAR",
+    "feedback_correcto": "Correcto. Este mensaje promueve reportar el acoso activamente.",
+    "feedback_incorrecto": "Incorrecto. Este post anima a tomar accion contra el acoso.",
+    "nivel_actividad": 0.35
+  },
+  {
+    "id": 17, "seed": 1717, "es_acoso": true,
+    "texto": "yo solo lo retuitee, no soy responsable de lo que dicen los demas, relax",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Retuitear contenido danino te hace parte de su difusion.",
+    "feedback_incorrecto": "Incorrecto. Compartir contenido de acoso te hace participe aunque no seas el autor.",
+    "nivel_actividad": 0.55
+  },
+  {
+    "id": 18, "seed": 1818, "es_acoso": true,
+    "texto": "alguien tiene mas fotos? las que vi son suficientes para reirse un rato jaja",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Solicitar material para burlarse de alguien es acoso activo.",
+    "feedback_incorrecto": "Incorrecto. Buscar mas contenido para ridiculizar a alguien escala el acoso.",
+    "nivel_actividad": 0.88
+  },
+  {
+    "id": 19, "seed": 1919, "es_acoso": false,
+    "texto": "hoy aprendi que el silencio tambien es complicidad. si ves acoso, actua.",
+    "accion_correcta": "IGNORAR",
+    "feedback_correcto": "Correcto. Este mensaje promueve una actitud activa contra el acoso.",
+    "feedback_incorrecto": "Incorrecto. Este post tiene un mensaje positivo sobre como combatir el acoso.",
+    "nivel_actividad": 0.22
+  },
+  {
+    "id": 20, "seed": 2020, "es_acoso": true,
+    "texto": "todo internet habla de el ahora mismo, ya no tiene donde esconderse jaja",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Celebrar la viralizacion del dano de alguien es acoso.",
+    "feedback_incorrecto": "Incorrecto. Regocijarse en la exposicion masiva de una victima es acoso.",
+    "nivel_actividad": 0.92
+  },
+  {
+    "id": 21, "seed": 2121, "es_acoso": true,
+    "texto": "le hackee el instagram y ahora tengo todas sus fotos privadas, demasiado sencillo",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. El hackeo y acceso no autorizado es un delito ademas de acoso.",
+    "feedback_incorrecto": "Incorrecto. Hackear cuentas ajenas es ilegal y una forma grave de ciberacoso.",
+    "nivel_actividad": 0.83
+  },
+  {
+    "id": 22, "seed": 2222, "es_acoso": false,
+    "texto": "si alguien comparte tus fotos sin permiso, tienes derecho a reportarlo y pedir que las bajen.",
+    "accion_correcta": "IGNORAR",
+    "feedback_correcto": "Correcto. Este mensaje informa sobre derechos digitales de las victimas.",
+    "feedback_incorrecto": "Incorrecto. Este post informa y empodera a posibles victimas.",
+    "nivel_actividad": 0.18
+  },
+  {
+    "id": 23, "seed": 2323, "es_acoso": true,
+    "texto": "creen un grupo para mandarle mensajes todos al mismo tiempo, que sienta lo que es",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Organizar ataques en masa es una de las formas mas daninas de acoso.",
+    "feedback_incorrecto": "Incorrecto. Coordinar ataques grupales contra alguien es acoso organizado.",
+    "nivel_actividad": 0.95
+  },
+  {
+    "id": 24, "seed": 2424, "es_acoso": true,
+    "texto": "es solo una broma pesada, si no aguanta que se desconecte, nadie lo obliga a estar aqui",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Decirle a la victima que se desconecte es otra forma de silenciarla.",
+    "feedback_incorrecto": "Incorrecto. Obligar a alguien a abandonar espacios digitales es una forma de acoso.",
+    "nivel_actividad": 0.67
+  },
+  {
+    "id": 25, "seed": 2525, "es_acoso": false,
+    "texto": "bloquee a alguien que me hacia sentir mal en redes. cuidar tu bienestar digital importa.",
+    "accion_correcta": "IGNORAR",
+    "feedback_correcto": "Correcto. Este mensaje normaliza el autocuidado digital de forma positiva.",
+    "feedback_incorrecto": "Incorrecto. Este post promueve el autocuidado digital, no el acoso.",
+    "nivel_actividad": 0.28
+  },
+  {
+    "id": 26, "seed": 2626, "es_acoso": true,
+    "texto": "le puse su direccion en el post para que vayan a decirle en persona lo que todos piensan",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Publicar datos personales de alguien para instigar ataques es doxing.",
+    "feedback_incorrecto": "Incorrecto. Publicar la direccion de alguien para que lo ataquen es doxing, un delito.",
+    "nivel_actividad": 0.97
+  },
+  {
+    "id": 27, "seed": 2727, "es_acoso": true,
+    "texto": "me hice pasar por el en un chat y dije cosas horribles, nadie sabe que fui yo xd",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. La suplantacion de identidad es una forma grave de ciberacoso.",
+    "feedback_incorrecto": "Incorrecto. Hacerse pasar por alguien para danarlo es suplantacion y puede ser delito.",
+    "nivel_actividad": 0.78
+  },
+  {
+    "id": 28, "seed": 2828, "es_acoso": false,
+    "texto": "antes de compartir algo preguntate: esto podria hacerle dano a alguien? si es si, no lo hagas.",
+    "accion_correcta": "IGNORAR",
+    "feedback_correcto": "Correcto. Este mensaje promueve la reflexion antes de compartir contenido.",
+    "feedback_incorrecto": "Incorrecto. Este post invita a pensar antes de actuar en redes.",
+    "nivel_actividad": 0.12
+  },
+  {
+    "id": 29, "seed": 2929, "es_acoso": true,
+    "texto": "nadie merece esto dice... si no queria problemas no debia publicar esas cosas, por algo pasa",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. Culpar a la victima de lo que le ocurre es una forma de acoso secundario.",
+    "feedback_incorrecto": "Incorrecto. Responsabilizar a la victima del acoso que recibe es victimizacion secundaria.",
+    "nivel_actividad": 0.73
+  },
+  {
+    "id": 30, "seed": 3030, "es_acoso": true,
+    "texto": "le di dislike a todo lo que tiene publicado con mis 3 cuentas, que sienta el rechazo",
+    "accion_correcta": "REPORTAR",
+    "feedback_correcto": "Correcto. El acoso coordinado usando multiples cuentas es especialmente danino.",
+    "feedback_incorrecto": "Incorrecto. Atacar sistematicamente el contenido de alguien desde varias cuentas es acoso.",
+    "nivel_actividad": 0.62
+  }
+]
