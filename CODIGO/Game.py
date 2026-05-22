@@ -975,7 +975,7 @@ class Game:
 
         # Validate that room exists (dungeon may have different sizes between clients)
         try:
-            room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
+            room = self.dungeon.rooms[sala_remota]
         except (KeyError, IndexError, TypeError) as e:
             log_net.warning(f"Sala {sala_remota} no existe en este dungeon: {e}")
             return
@@ -1065,7 +1065,7 @@ class Game:
 
         # Validate that room exists
         try:
-            room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
+            room = self.dungeon.rooms[sala_remota]
         except (KeyError, IndexError, TypeError) as e:
             log_net.warning(f"Sala {sala_remota} no existe en este dungeon: {e}")
             return
