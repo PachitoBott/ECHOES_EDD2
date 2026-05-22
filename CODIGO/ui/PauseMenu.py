@@ -98,7 +98,7 @@ class PauseMenu:
 
         # --- Carga de Fuentes (Estilo Retro) ---
         self.title_font = self._get_font("VT323-Regular.ttf", 96)
-        self.button_font = font or pygame.font.SysFont("arial", 32, bold=True)  # Font diferente para botones
+        self.button_font = font or self._get_font("VT323-Regular.ttf", 48)  # Misma fuente que StartMenu
         self.small_font = self._get_font("VT323-Regular.ttf", 32)
 
         # --- Cargar imágenes de botones ---
