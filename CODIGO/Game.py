@@ -2914,6 +2914,17 @@ class Game:
         self.player.draw(self.world)
 
         # --- Dibujar jugadores remotos (cubo negro) ---
+        # Sanity check: make sure self.player is not being treated as remote
+        local_player_pos = (self.player.x, self.player.y)
+        for rol, datos in self.remote_players.items():
+            # Check if this remote player position matches our local player (should never happen)
+            if isinstance(datos.get('pos'), (list, tuple)) and len(datos.get('pos')) >= 2:
+                remote_pos = (datos.get('pos')[0], datos.get('pos')[1])
+            else:
+                remote_pos = (datos.get('pos_x', float('nan')), datos.get('pos_y', float('nan')))
+            if remote_pos == local_player_pos and remote_pos != (float('nan'), float('nan')):
+                log_game.error(f"[SANITY] BUG: Remote player '{rol}' has same position as local player! {local_player_pos}")
+
         for rol, datos in self.remote_players.items():
             # Extraer posición: el protocolo usa "pos": [x, y]
             pos = datos.get("pos")
