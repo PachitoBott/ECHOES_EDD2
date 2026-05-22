@@ -682,7 +682,7 @@ class ProfesorIbarra:
         self._draw_hologram(surface)
         # Los paneles de diálogo se dibujan en screen via draw_screen()
 
-    def update_hover(self, mouse_pos: tuple[int, int]) -> None:
+    def update_hover(self, mouse_pos: tuple[int, int], screen_size: tuple[int, int]) -> None:
         """
         Detecta si el mouse está sobre el item actual y actualiza el tooltip.
         Se llama en cada frame cuando la tienda está abierta.
@@ -693,20 +693,15 @@ class ProfesorIbarra:
             return
 
         mx, my = mouse_pos
+        sw, sh = screen_size
+
         item = IBARRA_CATALOG[self._carousel_idx]
         iid = item["id"]
         bought = self._purchase_counts.get(iid, 0)
         max_buys = item["max_buys"]
         agotado = bought >= max_buys
 
-        # El item está en el carrusel, detectamos si el mouse está en el área general del panel
-        # Como el carrusel ocupa todo el panel central, simplemente comprobamos si el mouse
-        # está dentro del área de la tienda
-        # Por simplicidad, mostrar tooltip si el mouse está en la región aproximada del icono
-        # (columna izquierda del panel)
-        sw, sh = (1280, 720)  # Valores típicos, se ajustan dinámicamente
-
-        # Aproximación: si mouse está en región izquierda del panel, mostrar tooltip
+        # Mostrar tooltip si mouse está en región izquierda del panel (donde está el icono)
         if mx < sw // 2:
             self.tooltip.mostrar(
                 item["descripcion"],
@@ -721,16 +716,17 @@ class ProfesorIbarra:
     def draw_screen(self, screen: pygame.Surface) -> None:
         """Dibuja los paneles de diálogo directamente en el screen surface (encima del HUD)."""
         font = self._get_screen_font()
+        screen_size = screen.get_size()
 
         # Actualizar tooltip si está en tienda
         if self.estado == self.TIENDA:
-            mouse_pos = pygame.mouse.get_pos()
-            # Convertir a coordenadas lógicas
-            from core.config import Config
-            cfg = Config()
-            logical_mx = mouse_pos[0] // cfg.SCREEN_SCALE
-            logical_my = mouse_pos[1] // cfg.SCREEN_SCALE
-            self.update_hover((logical_mx, logical_my))
+            try:
+                mouse_pos = pygame.mouse.get_pos()
+                self.update_hover(mouse_pos, screen_size)
+            except Exception as e:
+                # Silenciar errores de hover para no romper tienda
+                self.tooltip.ocultar()
+                self._item_hover = False
 
         if self.estado == self.PREGUNTA:
             self._draw_question_ui(screen, font)
