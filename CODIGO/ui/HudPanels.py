@@ -581,9 +581,9 @@ class HUDPanel:
             surface: superficie donde dibujar
             es_p2: True si es panel P2 (mostrar placeholder si no hay sprites)
         """
-        # Tamaño del sprite (128x128 - 2x más grande)
-        SPRITE_SIZE = 128
-        SPRITE_MARGIN = 40  # Margen desde el borde izquierdo del panel (+10px)
+        # Tamaño del sprite (160x160 - aún más grande)
+        SPRITE_SIZE = 160
+        SPRITE_MARGIN = 40  # Margen desde el borde izquierdo del panel
 
         # Posición X (izquierda-centro del panel)
         x = self.rect.x + SPRITE_MARGIN
@@ -639,8 +639,8 @@ class HUDPanel:
 
         # Parámetros de posicionamiento
         ICON_SIZE = 48  # Más grande
-        MARGEN_INF = 12  # Margen desde el borde inferior del panel (dentro del panel)
-        MARGEN_IZQ = 130  # Offset X desde el borde izquierdo (+30px a la derecha)
+        MARGEN_INF = 42  # Margen desde el borde inferior del panel (+30px arriba)
+        MARGEN_IZQ = 160  # Offset X desde el borde izquierdo (+30px a la derecha)
         TEXT_MARGIN_LEFT = 12  # Espacio entre icono y número
 
         # Calcular Y desde el FONDO del panel hacia arriba
