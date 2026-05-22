@@ -49,7 +49,7 @@ from dev.debug_console import DebugConsole
 # --- Sistemas de efectos ---
 from systems.death_effect import DeathEffectManager
 from systems.power_effects import power_effect_manager
-from systems.player_spawn_effect import SpawnEffectManager
+# from systems.player_spawn_effect import SpawnEffectManager  # Ahora manejado internamente en Player
 
 
 class RemoteProjectile:
@@ -305,8 +305,8 @@ class Game:
         from entities.Enemy import Enemy
         Enemy._death_effect_manager_global = self.death_effect_manager
 
-        # Gestor de efectos de spawn del jugador
-        self.spawn_effect_manager = SpawnEffectManager()
+        # Gestor de efectos de spawn del jugador (ahora manejado internamente en Player)
+        # self.spawn_effect_manager = SpawnEffectManager()
 
         # ---------- Fondo matrix ----------
         self.matrix_bg = MatrixBackground(cfg.SCREEN_W, cfg.SCREEN_H)
@@ -1564,7 +1564,6 @@ class Game:
         self._sync_enemy_projectiles_to_client(room)  # Sincronizar balas de enemigos
         self._update_projectiles(dt, room)
         self.death_effect_manager.update(dt)
-        self.spawn_effect_manager.update(dt)  # Actualizar efecto de spawn del jugador
         power_effect_manager.update(dt)  # Actualizar efectos de poderes (EMP, invulnerabilidad, cura)
         room.update_obstacles(dt)  # Actualizar animaciones de obstáculos
         player_died = self._handle_collisions(room)
@@ -2359,11 +2358,7 @@ class Game:
                     self.player.x = px - self.player.w / 2
                     self.player.y = py - self.player.h / 2
 
-                # Iniciar efecto de spawn visual
-                player_center_x = self.player.x + self.player.w / 2
-                player_center_y = self.player.y + self.player.h / 2
-                self.spawn_effect_manager.spawn_player1(player_center_x, player_center_y)
-
+                # Efecto de spawn manejado internamente en Player._iniciar_revival()
                 self.projectiles.clear()
                 self.enemy_projectiles.clear()
                 self.door_cooldown = 0.25
@@ -2811,9 +2806,6 @@ class Game:
 
         # Renderizar efectos de poderes (EMP, invulnerabilidad, cura)
         power_effect_manager.render(self.world, camera_offset=(0, 0))
-
-        # Renderizar partículas de efecto de spawn
-        self.spawn_effect_manager.draw_particles(self.world, self.cfg.SCREEN_SCALE)
 
         for pickup in getattr(room, "pickups", ()):
             pickup.draw(self.world)
