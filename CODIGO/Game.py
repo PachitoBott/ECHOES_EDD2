@@ -3493,7 +3493,7 @@ class Game:
         boss = room.boss
 
         # Dimensiones y posición de la barra (inmóvil en centro superior)
-        bar_width = 300
+        bar_width = 600
         bar_height = 24
         bar_x = (self.cfg.SCREEN_W * self.cfg.SCREEN_SCALE - bar_width) // 2  # Centrado en pantalla
         bar_y = 150  # Más abajo para estar por encima del tileset
