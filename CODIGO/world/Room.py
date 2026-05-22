@@ -746,6 +746,10 @@ class Room:
             self.no_spawn = True
             self.no_combat = True
             self.locked = False
+        elif self.type == "boss":
+            # Sala del boss: activar boss si existe
+            if hasattr(self, "boss") and self.boss is not None:
+                self.boss.activar()
         else:
             # Poblar enemigos SOLO una vez (si no es shop)
             if not self._populated_once and not self.no_spawn:

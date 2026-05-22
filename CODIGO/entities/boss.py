@@ -36,18 +36,18 @@ def cargar_boss_idle(ruta: str) -> list[pygame.Surface]:
     frame_w, frame_h = 736, 400
     frames = []
 
-    # Extraer exactamente 12 frames (4 cols x 3 filas) - nunca más
+    # Extraer exactamente 11 frames (primeros 11 del spritesheet 4x3)
     frame_count = 0
     for row in range(3):
         for col in range(4):
-            if frame_count >= 12:  # Límite duro: máximo 12 frames
+            if frame_count >= 11:  # Límite duro: máximo 11 frames
                 break
             x = col * frame_w
             y = row * frame_h
             frame = img.subsurface(pygame.Rect(x, y, frame_w, frame_h))
             frames.append(frame.copy())
             frame_count += 1
-        if frame_count >= 12:
+        if frame_count >= 11:
             break
 
     print(f"[BOSS] Cargados {len(frames)} frames de {ruta}")
@@ -153,35 +153,44 @@ class Boss:
         """Placeholder visible si falta el PNG."""
         self.render_w = 200
         self.render_h = 80
-        surf = pygame.Surface((self.render_w, self.render_h), pygame.SRCALPHA)
-        surf.fill((120, 0, 0, 200))
-        pygame.draw.rect(surf, (200, 0, 0), (0, 0, self.render_w, self.render_h), 2)
 
-        # Texto "BOSS" centrado
-        try:
-            font = pygame.font.SysFont("monospace", 20, bold=True)
-            txt = font.render("BOSS", False, (255, 100, 100))
-            surf.blit(txt, (
-                self.render_w // 2 - txt.get_width() // 2,
-                self.render_h // 2 - txt.get_height() // 2
-            ))
-        except Exception:
-            pass
+        # Crear múltiples frames idénticos para que la animación funcione
+        # aunque el PNG no esté disponible
+        placeholder_frames = []
 
-        self.frames = [surf]
-        print("[BOSS] Usando placeholder (PNG no encontrado)")
+        for frame_idx in range(11):  # 11 frames como en el spritesheet real
+            surf = pygame.Surface((self.render_w, self.render_h), pygame.SRCALPHA)
+            surf.fill((120, 0, 0, 200))
+            pygame.draw.rect(surf, (200, 0, 0), (0, 0, self.render_w, self.render_h), 2)
+
+            # Texto "BOSS" centrado
+            try:
+                font = pygame.font.SysFont("monospace", 20, bold=True)
+                txt = font.render(f"BOSS [{frame_idx+1}]", False, (255, 100, 100))
+                surf.blit(txt, (
+                    self.render_w // 2 - txt.get_width() // 2,
+                    self.render_h // 2 - txt.get_height() // 2
+                ))
+            except Exception:
+                pass
+
+            placeholder_frames.append(surf)
+
+        self.frames = placeholder_frames
+        print(f"[BOSS] Usando placeholder con {len(self.frames)} frames (PNG no encontrado)")
 
     def _calcular_posicion_inicial(self) -> None:
         """
         Posiciona el boss centrado en la pared superior.
         El sprite comienza un poco abajo de la pared superior.
+        Se sube 64 píxeles para el posicionamiento correcto.
         """
         # X: centrado en la sala al inicio
         self.x = float(self.sala_rect.centerx - self.render_w // 2)
 
         # Y: posicionado un poco más abajo de la pared superior
-        # en lugar de colgar encima
-        self.y = float(self.pared_y)
+        # en lugar de colgar encima. Se sube 64 píxeles.
+        self.y = float(self.pared_y - 64)
 
         print(f"[BOSS] Posición inicial: ({self.x:.0f}, {self.y:.0f})")
 
@@ -192,8 +201,9 @@ class Boss:
         limite_der = self.sala_rect.right - self.render_w - self.MARGIN
         rango_movimiento = limite_der - limite_izq
 
-        print(f"\n[BOSS] [OK] ACTIVADO")
+        print(f"\n[BOSS] [OK] BOSS ACTIVADO - LISTO PARA ACTUALIZAR Y RENDERIZAR")
         print(f"      Posición inicial: ({self.x:.0f}, {self.y:.0f})")
+        print(f"      Frames cargados: {len(self.frames)}")
         print(f"      Sala rect: left={self.sala_rect.left}, right={self.sala_rect.right}, "
               f"width={self.sala_rect.width}")
         print(f"      Límites de movimiento: izq={limite_izq:.0f}, der={limite_der:.0f}, "
@@ -206,12 +216,14 @@ class Boss:
         self._debug_frame_counter += 1
 
         if not self.activo or not self.vivo:
+            if self._debug_frame_counter % 60 == 0 and self._debug_frame_counter < 120:
+                print(f"[BOSS] UPDATE BLOQUEADO: activo={self.activo}, vivo={self.vivo}")
             return
 
         # Debug: mostrar estado cada 30 frames
         if self._debug_frame_counter % 30 == 0:
-            print(f"[BOSS] UPDATE: x={self.x:.1f}, vel={self.velocidad_x}, dt={dt:.4f}, "
-                  f"sala_rect=({self.sala_rect.left}, {self.sala_rect.right})")
+            print(f"[BOSS] UPDATE ACTIVO: x={self.x:.1f}, vel={self.velocidad_x}, dt={dt:.4f}, "
+                  f"frame={self.frame_actual}/{len(self.frames)}, sala_rect=({self.sala_rect.left}, {self.sala_rect.right})")
 
         # Actualizar animación idle
         self.timer_frame += dt
