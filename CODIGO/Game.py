@@ -49,7 +49,8 @@ from dev.debug_console import DebugConsole
 # --- Sistemas de efectos ---
 from systems.death_effect import DeathEffectManager
 from systems.power_effects import power_effect_manager
-# from systems.player_spawn_effect import SpawnEffectManager  # Ahora manejado internamente en Player
+from systems.spawn_effect import SpawnEffectManager
+from systems.minigame_papers import MinijuegoPapers
 
 
 class RemoteProjectile:
@@ -305,8 +306,8 @@ class Game:
         from entities.Enemy import Enemy
         Enemy._death_effect_manager_global = self.death_effect_manager
 
-        # Gestor de efectos de spawn del jugador (ahora manejado internamente en Player)
-        # self.spawn_effect_manager = SpawnEffectManager()
+        # Gestor de efectos de spawn del jugador
+        self.spawn_effect_manager = SpawnEffectManager()
 
         # ---------- Fondo matrix ----------
         self.matrix_bg = MatrixBackground(cfg.SCREEN_W, cfg.SCREEN_H)
@@ -593,6 +594,11 @@ class Game:
         # Entrar "formalmente" a la sala inicial (dispara on_enter/Shop si aplica)
         if hasattr(self.dungeon, "enter_initial_room"):
             self.dungeon.enter_initial_room(self.player, self.cfg, ShopkeeperCls=Shopkeeper)
+
+        # Minijuego: variables de control
+        self.minijuego_activo = False
+        self.minijuego: MinijuegoPapers | None = None
+        self.ultima_sala_fue_boss = False
 
         self._run_start_time = perf_counter()
 
@@ -953,10 +959,6 @@ class Game:
             self._spawn_room_enemies(room)
         self._update_room_lock(room)
 
-        # Activar boss si la sala es del tipo boss
-        if hasattr(room, "boss") and room.boss:
-            room.boss.activar()
-
     def _handle_remote_enemy_death(self, ev: EventoRed) -> None:
         """
         Procesa la muerte de un enemigo reportada por otro jugador.
@@ -971,6 +973,9 @@ class Game:
         pos_y = datos.get("pos_y")
         enemy_type = datos.get("enemy_type")
 
+        # [DIAG FANTASM] Log de entrada
+        log_game.warning(f"[FANTASM_MUERTE] Recibido muerte: tipo={enemy_type}, pos=({pos_x}, {pos_y})")
+
         # Solo procesar si el enemigo murió en la sala actual
         sala_actual = (self.dungeon.i, self.dungeon.j)
         if sala_remota != sala_actual:
@@ -979,7 +984,7 @@ class Game:
 
         # Validate that room exists (dungeon may have different sizes between clients)
         try:
-            room = self.dungeon.rooms[sala_remota]
+            room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
         except (KeyError, IndexError, TypeError) as e:
             log_net.warning(f"Sala {sala_remota} no existe en este dungeon: {e}")
             return
@@ -988,32 +993,32 @@ class Game:
             return
 
         try:
+            # [DIAG FANTASM] Estado antes de buscar
+            enemigos_antes = len(room.enemies)
+            log_game.warning(f"[FANTASM_MUERTE] Buscando en {enemigos_antes} enemigos de sala {sala_remota}")
+
             # Buscar enemigo que coincida con posición y tipo
             # Usar tolerancia para diferencias por interpolación cliente
             tolerance = 5.0  # píxeles
 
-            # [DIAGNÓSTICO] Registrar búsqueda
-            log_game.info(f"[DEATH] Buscando {enemy_type} en ({pos_x:.1f}, {pos_y:.1f}) — {len(room.enemies)} enemigos en sala")
-
-            found = False
+            encontrado = False
             for i, enemy in enumerate(room.enemies):
                 dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
-                is_type_match = enemy.__class__.__name__ == enemy_type
-                is_pos_match = dist <= tolerance
+                log_game.debug(f"[FANTASM_MUERTE] → Enemigo[{i}]: {enemy.__class__.__name__} en ({enemy.x}, {enemy.y}), dist={dist:.1f}")
 
-                log_game.debug(f"[DEATH]   Enemigo {i}: {enemy.__class__.__name__} en ({enemy.x:.1f}, {enemy.y:.1f}) dist={dist:.1f} type_ok={is_type_match} pos_ok={is_pos_match}")
-
-                if is_pos_match and is_type_match:
+                if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
                     # Encontrado enemigo que coincide — removerlo
-                    log_game.info(f"[DEATH] ✓ Removiendo {enemy_type} en posición ({pos_x:.1f}, {pos_y:.1f})")
+                    log_game.warning(f"[FANTASM_MUERTE] ✓ ENCONTRADO en índice {i}. Eliminando...")
                     room.enemies.pop(i)
-                    found = True
+                    encontrado = True
                     break
 
-            if not found:
-                log_game.warning(
-                    f"[DEATH] ✗ No encontré {enemy_type} en ({pos_x:.1f}, {pos_y:.1f}) sala {sala_remota} — {len(room.enemies)} enemigos"
-                )
+            if encontrado:
+                log_game.warning(f"[FANTASM_MUERTE] ✓ Eliminado. Quedan: {len(room.enemies)} enemigos")
+            else:
+                log_game.warning(f"[FANTASM_MUERTE] ✗ NO ENCONTRADO {enemy_type} en ({pos_x}, {pos_y}) (tol={tolerance})")
+                log_game.warning(f"[FANTASM_MUERTE]   Enemigos actuales en sala: {[(e.__class__.__name__, e.x, e.y) for e in room.enemies]}")
+
         except Exception as e:
             log_game.error(f"ERROR buscando/removiendo enemigo: {e}", exc_info=True)
 
@@ -1069,7 +1074,7 @@ class Game:
 
         # Validate that room exists
         try:
-            room = self.dungeon.rooms[sala_remota]
+            room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
         except (KeyError, IndexError, TypeError) as e:
             log_net.warning(f"Sala {sala_remota} no existe en este dungeon: {e}")
             return
@@ -1157,8 +1162,6 @@ class Game:
         ids_a_eliminar = []
         ids_muertos = set()  # [FIX SYNC] Rastrear enemigos que el servidor envía como muertos
 
-        log_game.debug(f"[ENEMIES_STATE] PASO 2: Verificando {len(room.enemies)} enemigos locales vs {len(server_enemies_by_id)} del servidor")
-
         for i, enemy in enumerate(room.enemies):
             enemy_id = getattr(enemy, "enemy_id", None)
             if not enemy_id:
@@ -1168,7 +1171,7 @@ class Game:
             if enemy_id not in server_enemies_by_id:
                 # [FANTASMA] No está en servidor → eliminar
                 ids_a_eliminar.append(i)
-                log_game.info(f"[ENEMIES_STATE] FANTASMA: {enemy_id} no está en servidor")
+                log_game.info(f"[SYNC] Eliminando enemigo fantasma {enemy_id} (no en servidor)")
             else:
                 # [FIX SYNC] ¿El servidor dice que está muerto?
                 server_vivo = server_enemies_by_id[enemy_id].get("vivo", True)
@@ -1176,13 +1179,10 @@ class Game:
                     # [MUERTO] Servidor envía vivo=False → eliminar INMEDIATAMENTE
                     ids_a_eliminar.append(i)
                     ids_muertos.add(enemy_id)
-                    log_game.warning(f"[ENEMIES_STATE] MUERTO (vivo=False): {enemy_id} será eliminado")
+                    log_game.info(f"[SYNC] Enemigo {enemy_id} MUERTO en servidor — eliminación inmediata")
 
         # Eliminar en orden inverso para mantener índices
-        log_game.debug(f"[ENEMIES_STATE] Eliminando {len(ids_a_eliminar)} enemigos (fantasmas={len(ids_a_eliminar)-len(ids_muertos)}, muertos={len(ids_muertos)})")
         for i in sorted(ids_a_eliminar, reverse=True):
-            removed_id = getattr(room.enemies[i], "enemy_id", "unknown")
-            log_game.debug(f"[ENEMIES_STATE] Eliminando índice {i}: {removed_id}")
             room.enemies.pop(i)
 
         # PASO 3: Actualizar/crear enemigos del servidor
@@ -1194,11 +1194,11 @@ class Game:
 
         # [DIAG] Verificar qué recibe del servidor
         muertos_recibidos = sum(1 for e in enemies_list if not e.get("vivo", True))
-        log_game.info(f"[ENEMIES_STATE] Cliente recibió: {len(enemies_list)} enemigos, {muertos_recibidos} muertos, sala {room_id}")
+        log_game.warning(f"[DIAG_CLIENTE] Recibido enemies_state: {len(enemies_list)} enemigos, {muertos_recibidos} muertos")
         if muertos_recibidos > 0:
             for e in enemies_list:
                 if not e.get("vivo", True):
-                    log_game.warning(f"[ENEMIES_STATE] → Enemigo MUERTO en servidor: {e.get('id')} en ({e.get('x', 0):.1f}, {e.get('y', 0):.1f})")
+                    log_game.warning(f"[DIAG_CLIENTE] → Enemigo MUERTO: {e.get('id')} (vivo={e.get('vivo')})")
 
         for server_id, server_data in server_enemies_by_id.items():
             # [FIX SYNC] Saltar enemigos que ya fueron eliminados por estar muertos
@@ -1376,7 +1376,6 @@ class Game:
                         enemy.__class__.__name__,
                         (self.dungeon.i, self.dungeon.j)
                     )
-                    log_game.info(f"[DEATH_BULLET] Enviando muerte desde _process_client_bullet: {enemy.enemy_id} en ({enemy.x:.1f}, {enemy.y:.1f}) _is_dying={getattr(enemy, '_is_dying', False)}")
                     self.net.enviar(evento_muerte)
                 break
 
@@ -1550,8 +1549,40 @@ class Game:
                 self._apply_ibarra_pending_effects(prof, room)
                 return
 
-        # --- Trigger transiciones de zona (PRIMERO, antes de spawnar enemigos) ---
-        self._check_zone_transitions()
+        # --- Minijuego Papers: bloquear gameplay antes del boss ---
+        # Detectar entrada a sala del boss y activar minijuego
+        if getattr(room, "type", "") == "boss" and not self.ultima_sala_fue_boss:
+            # Primera vez que entra a la sala del boss
+            self.minijuego_activo = True
+            self.minijuego = MinijuegoPapers(self.cfg.SCREEN_W, self.cfg.SCREEN_H)
+            self.ultima_sala_fue_boss = True
+            return
+
+        # Si el minijuego está activo, procesarlo y no actualizar el resto del juego
+        if self.minijuego_activo and self.minijuego:
+            for event in events:
+                # Convertir coordenadas de mouse a coordenadas lógicas (sin escala)
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    event.pos = (
+                        event.pos[0] // self.cfg.SCREEN_SCALE,
+                        event.pos[1] // self.cfg.SCREEN_SCALE
+                    )
+                self.minijuego.handle_event(event)
+            self.minijuego.update(dt)
+
+            # Si el minijuego terminó
+            if self.minijuego.terminado:
+                if not self.minijuego.aprobado:
+                    # No aprobó - reiniciar la partida
+                    self._stats_pending_reason = "minigame_failed"
+                    self.start_new_run(seed=self.current_seed)
+                else:
+                    # Aprobó - desactivar minijuego y continuar en la sala del boss
+                    self.minijuego_activo = False
+                    self.minijuego = None
+            else:
+                # El minijuego sigue activo
+                return
 
         self._update_player(dt, room)
         # [FIX SYNC] Cliente NO crea enemigos — los recibe del servidor
@@ -1571,6 +1602,7 @@ class Game:
         self._sync_enemy_projectiles_to_client(room)  # Sincronizar balas de enemigos
         self._update_projectiles(dt, room)
         self.death_effect_manager.update(dt)
+        self.spawn_effect_manager.update(dt)  # Actualizar efectos de spawn del jugador
         power_effect_manager.update(dt)  # Actualizar efectos de poderes (EMP, invulnerabilidad, cura)
         room.update_obstacles(dt)  # Actualizar animaciones de obstáculos
         player_died = self._handle_collisions(room)
@@ -1579,6 +1611,9 @@ class Game:
         self._update_pickups(dt, room)
         self._handle_room_transition(room)
         self._update_shop(events)
+
+        # --- Trigger transiciones de zona ---
+        self._check_zone_transitions()
 
         # --- Trigger entrada a sala del boss (banner temporal) ---
         self._check_boss_room_entry(room)
@@ -1617,7 +1652,7 @@ class Game:
             if hasattr(self.dungeon, "main_path"):
                 on_main_path = 1 if pos in self.dungeon.main_path else 0
             difficulty = 1 + depth + branch_factor + (depth // 3) + on_main_path
-            room.ensure_spawn(difficulty=difficulty, zone=self._current_zone, dungeon=self.dungeon)
+            room.ensure_spawn(difficulty=difficulty)
 
     def _get_closest_player_for_enemy(self, enemy, room_pos=None) -> object:
         """
@@ -1785,10 +1820,6 @@ class Game:
             if fired and callable(notify):
                 notify()
 
-        # Actualizar boss si existe en la sala
-        if hasattr(room, "boss") and room.boss:
-            room.boss.update(dt)
-
     def _update_remote_enemies(self, dt: float) -> None:
         """
         Actualiza los enemigos remotos (animaciones, timers, sincronización).
@@ -1858,7 +1889,7 @@ class Game:
                         on_main_path = 1 if pos in self.dungeon.main_path else 0
                     difficulty = 1 + depth + branch_factor + (depth // 3) + on_main_path
 
-                    room.ensure_spawn(difficulty=difficulty, zone=self._current_zone, dungeon=self.dungeon)
+                    room.ensure_spawn(difficulty=difficulty)
                     log_game.debug(f"[SERVIDOR] Sala remota {room_pos} spawned enemigos (difficulty={difficulty})")
 
                 # Simular enemigos en esta sala (pasar room_pos para targeting correcto)
@@ -2059,18 +2090,6 @@ class Game:
                 r_proj = projectile.rect()
                 for enemy in room.enemies:
                     if r_proj.colliderect(enemy.rect()):
-                        # [FIX] No permitir que un enemigo se dañe con sus propios proyectiles
-                        enemy_id = getattr(enemy, "enemy_id", None)
-                        projectile_owner = getattr(projectile, "owner_id", None)
-
-                        # [DIAG] Log de colisión
-                        log_game.info(f"[COLLISION] Proj owner={projectile_owner}, Enemy={enemy_id}, Type={type(enemy).__name__}")
-
-                        if projectile_owner and enemy_id == projectile_owner:
-                            # Este es el enemigo que disparó el proyectil — ignorar
-                            log_game.warning(f"[COLLISION] BLOCKED: {enemy_id} hit by own projectile")
-                            continue
-
                         if hasattr(enemy, "take_damage"):
                             enemy.take_damage(1, (projectile.dx, projectile.dy))
                         else:
@@ -2086,17 +2105,6 @@ class Game:
             r_proj = projectile.rect()
             for enemy in room.enemies:
                 if r_proj.colliderect(enemy.rect()):
-                    # [FIX] No permitir que un enemigo se dañe con sus propios proyectiles (incluso remotos)
-                    enemy_id = getattr(enemy, "enemy_id", None)
-                    projectile_owner = getattr(projectile, "owner_id", None)
-
-                    log_game.info(f"[COLLISION_REMOTE] Proj owner={projectile_owner}, Enemy={enemy_id}, Type={type(enemy).__name__}")
-
-                    if projectile_owner and enemy_id == projectile_owner:
-                        # Este es el enemigo que disparó el proyectil — ignorar
-                        log_game.warning(f"[COLLISION_REMOTE] BLOCKED: {enemy_id} hit by own projectile")
-                        continue
-
                     if hasattr(enemy, "take_damage"):
                         enemy.take_damage(1, (projectile.dx, projectile.dy))
                     else:
@@ -2170,7 +2178,6 @@ class Game:
                         tipo=enemy_type,
                         sala=sala
                     )
-                    log_game.info(f"[DEATH_READY] Enviando muerte desde update (ready_to_remove): {enemy.enemy_id} en ({enemy.x:.1f}, {enemy.y:.1f})")
                     self.net.enviar(event_msg)
 
                 continue
@@ -2389,7 +2396,20 @@ class Game:
                     self.player.x = px - self.player.w / 2
                     self.player.y = py - self.player.h / 2
 
-                # Efecto de spawn manejado internamente en Player._iniciar_revival()
+                # Iniciar efecto de spawn con silueta del sprite idle
+                try:
+                    if hasattr(self.player, "_animations") and "idle" in self.player._animations:
+                        idle_sprite = self.player._animations["idle"].current_frame()
+                        self.spawn_effect_manager.spawn(
+                            self.player.x,
+                            self.player.y,
+                            idle_sprite,
+                            lifetime=0.5,
+                            num_particles=25
+                        )
+                except Exception as e:
+                    log_game.warning(f"Error al iniciar spawn effect: {e}")
+
                 self.projectiles.clear()
                 self.enemy_projectiles.clear()
                 self.door_cooldown = 0.25
@@ -2802,6 +2822,19 @@ class Game:
 
 
     def _render(self) -> None:
+        # Si el minijuego está activo, renderizar solo el minijuego
+        if self.minijuego_activo and self.minijuego:
+            self.minijuego.render(self.world)
+            # Escalar y mostrar la pantalla
+            scaled = pygame.transform.scale(
+                self.world,
+                (self.cfg.SCREEN_W * self.cfg.SCREEN_SCALE,
+                 self.cfg.SCREEN_H * self.cfg.SCREEN_SCALE)
+            )
+            self.screen.blit(scaled, (0, 0))
+            pygame.display.flip()
+            return
+
         self._render_world()
         self._render_ui()
 
@@ -2822,19 +2855,17 @@ class Game:
                 self._diag_render_counter = 0
             self._diag_render_counter += 1
 
-            if self._diag_render_counter % 60 == 0:
+            # [DIAG FANTASM] Logs más frecuentes cuando hay pocos enemigos
+            if self._diag_render_counter % 10 == 0 or len(room.enemies) <= 2:
                 muertos_en_lista = sum(1 for e in room.enemies if getattr(e, "_is_dying", False))
-                log_game.warning(f"[DIAG_CLIENTE_RENDER] room.enemies={len(room.enemies)}, muertos={muertos_en_lista}")
-                for enemy in room.enemies:
+                log_game.warning(f"[FANTASM_RENDER] room.enemies={len(room.enemies)}, muertos={muertos_en_lista}")
+                for i, enemy in enumerate(room.enemies):
                     dying = getattr(enemy, "_is_dying", False)
-                    log_game.warning(f"[DIAG_CLIENTE_RENDER] → {enemy.enemy_id} (_is_dying={dying})")
+                    enemy_id = getattr(enemy, "enemy_id", "?")
+                    log_game.warning(f"[FANTASM_RENDER]   [{i}] {enemy_id} ({enemy.__class__.__name__}) _is_dying={dying}")
 
             for enemy in room.enemies:
                 enemy.draw(self.world)
-
-        # Renderizar boss si existe
-        if hasattr(room, "boss") and room.boss:
-            room.boss.render(self.world)
 
         # Renderizar efectos de muerte
         self.death_effect_manager.render(self.world)
@@ -2842,10 +2873,12 @@ class Game:
         # Renderizar efectos de poderes (EMP, invulnerabilidad, cura)
         power_effect_manager.render(self.world, camera_offset=(0, 0))
 
+        # Renderizar efecto de spawn (antes del jugador, para que aparezca detrás)
+        self.spawn_effect_manager.render(self.world)
+
         for pickup in getattr(room, "pickups", ()):
             pickup.draw(self.world)
 
-        # Flash effect ahora manejado internamente en Player._render_revival()
         self.player.draw(self.world)
 
         # --- Dibujar jugadores remotos (cubo negro) ---
@@ -2995,14 +3028,16 @@ class Game:
         except Exception:
             pass
 
-        # Mostrar/ocultar cursor según estado de interfaz
-        # El cursor debe estar visible en: tienda, interacción con Profesor Ibarra, menú de pausa
-        shop_active = getattr(self.shop, "active", False)
-        should_show_cursor = _ibarra_interacting or shop_active
+        # Cambiar cursor solo cuando cambia el estado de interacción con Profesor Ibarra
+        if not hasattr(self, "_prev_ibarra_interacting"):
+            self._prev_ibarra_interacting = False
 
-        # Siempre establecer el estado correcto del cursor cada frame
-        # para evitar desincronización cuando el menú de pausa oculta/muestra el cursor
-        pygame.mouse.set_visible(should_show_cursor)
+        if _ibarra_interacting != self._prev_ibarra_interacting:
+            pygame.mouse.set_visible(_ibarra_interacting)
+            self._prev_ibarra_interacting = _ibarra_interacting
+        elif not _ibarra_interacting:
+            # Asegurar que está oculto durante gameplay normal
+            pygame.mouse.set_visible(False)
 
         # Banner de cambio de zona / sala del boss (encima de todo el HUD)
         self._draw_zone_banner()
