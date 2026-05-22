@@ -142,7 +142,7 @@ def patch_start_menu():
     )
     
     START_MENU.write_text(content, encoding='utf-8')
-    print("✓ StartMenu.py patched")
+    print("[DONE] StartMenu.py patched")
 
 def patch_main():
     """Simplify Main.py to use default initialization."""
@@ -153,10 +153,10 @@ if __name__ == "__main__":
     Game(CFG).run()
 '''
     MAIN.write_text(content, encoding='utf-8')
-    print("✓ Main.py patched")
+    print("[DONE] Main.py patched")
 
 if __name__ == "__main__":
     print("Applying skins patches...")
     patch_start_menu()
     patch_main()
-    print("\\n✓ All patches applied! You can now run Main.py")
+    print("\\n[DONE] All patches applied! You can now run Main.py")

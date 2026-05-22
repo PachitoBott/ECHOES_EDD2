@@ -605,13 +605,13 @@ class CinematicSystem:
 
         if image_file.exists():
             try:
-                log_cinematics.debug(f"✓ Imagen encontrada: {image_file}")
+                log_cinematics.debug(f"[DONE] Imagen encontrada: {image_file}")
                 return pygame.image.load(image_file.as_posix()).convert()
             except Exception as e:
                 log_cinematics.warning(f"Error cargando imagen {image_file}: {e}")
                 pass
         else:
-            log_cinematics.warning(f"✗ Archivo no encontrado: {image_file}")
+            log_cinematics.warning(f"[FAIL] Archivo no encontrado: {image_file}")
 
         return None
 

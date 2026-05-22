@@ -40,10 +40,13 @@ class Dungeon:
         attempt = 0
         current_seed = seed
 
+        print(f"[DUNGEON] Iniciando generación de dungeon con seed base {seed}")
+
         while attempt < max_attempts:
             attempt += 1
             current_seed = (seed + attempt - 1) % (10**9)
             random.seed(current_seed)
+            print(f"[DUNGEON] Intento {attempt}/{max_attempts} con seed {current_seed}")
 
             # Inicializar estructuras de dungeon
             self.grid_w, self.grid_h = grid_w, grid_h
@@ -128,6 +131,9 @@ class Dungeon:
 
             # VALIDAR: Boss room debe tener al menos una entrada que NO sea por el norte
             if self._has_valid_boss_entrance():
+                # Guardar seed ANTES de usar self.seed en otros métodos
+                self.seed = current_seed
+
                 # Bloquear la entrada norte del boss
                 self._enforce_no_north_boss_entrance()
 
@@ -140,8 +146,6 @@ class Dungeon:
                 # marcar inicial como explorado
                 self.explored.add((self.i, self.j))
 
-                # Dungeon válido - guardar seed final
-                self.seed = current_seed
                 return  # Éxito, dungeon generado correctamente
             else:
                 # Dungeon inválido - reintentar con nuevo seed
@@ -149,7 +153,7 @@ class Dungeon:
                       f"Intentando seed {(seed + attempt) % (10**9)} (intento {attempt+1}/{max_attempts})...")
 
         # Si llegamos aquí, no se logró generar un dungeon válido después de max_attempts
-        print(f"[DUNGEON] ⚠️ ADVERTENCIA: No se pudo generar dungeon válido en {max_attempts} intentos. "
+        print(f"[DUNGEON] [WARNING] No se pudo generar dungeon valido en {max_attempts} intentos. "
               f"Usando seed {current_seed} aunque tiene boss solo accesible por norte.")
         self.seed = current_seed
         self.explored.add((self.i, self.j))
@@ -472,24 +476,29 @@ class Dungeon:
         Retorna False si la única entrada es por el norte (seed inválida).
         """
         if not hasattr(self, "boss_pos"):
+            print(f"[DUNGEON] _has_valid_boss_entrance: No boss_pos")
             return False
 
         boss_room = self.rooms.get(self.boss_pos)
         if boss_room is None:
+            print(f"[DUNGEON] _has_valid_boss_entrance: boss_room is None")
             return False
 
         # Contar entradas disponibles (excepto norte)
         has_south = boss_room.doors.get("S", False)
         has_east = boss_room.doors.get("E", False)
         has_west = boss_room.doors.get("W", False)
+        has_north = boss_room.doors.get("N", False)
 
         # Válido si tiene al menos una entrada lateral o por abajo
         is_valid = has_south or has_east or has_west
+        entrances = sum([has_south, has_east, has_west])
 
         if is_valid:
-            entrances = sum([has_south, has_east, has_west])
-            print(f"[DUNGEON] Boss room válido: {entrances} entrada(s) disponible(s) "
+            print(f"[DUNGEON] [OK] Boss room VALIDO: {entrances} entrada(s) "
                   f"(S={has_south}, E={has_east}, W={has_west})")
+        else:
+            print(f"[DUNGEON] [FAIL] Boss room INVALIDO: SOLO norte={has_north} disponible")
 
         return is_valid
 
@@ -508,7 +517,7 @@ class Dungeon:
 
         # Bloquear norte de forma incondicional
         boss_room.doors["N"] = False
-        print(f"[DUNGEON] ✓ Entrada norte del boss bloqueada. "
+        print(f"[DUNGEON] [BLOCKED] Entrada norte del boss bloqueada. "
               f"Acceso por: "
               f"{'Sur ' if boss_room.doors.get('S') else ''}"
               f"{'Este ' if boss_room.doors.get('E') else ''}"
