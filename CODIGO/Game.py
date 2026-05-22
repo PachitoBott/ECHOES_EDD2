@@ -55,7 +55,7 @@ from systems.power_effects import power_effect_manager
 class RemoteProjectile:
     """Representación simple de un proyectil sincronizado del servidor."""
 
-    def __init__(self, remote_id: int, x: float, y: float, dx: float = 0, dy: float = 0):
+    def __init__(self, remote_id: int, x: float, y: float, dx: float = 0, dy: float = 0, owner_id: str | None = None):
         self._remote_id = remote_id
         self.x = x
         self.y = y
@@ -64,6 +64,7 @@ class RemoteProjectile:
         self.alive = True
         self.radius = 4
         self.color = (255, 230, 140)  # Color de bala de enemigo
+        self.owner_id = owner_id  # [FIX] Para prevenir que un enemigo se dañe a sí mismo con sus propios proyectiles
 
     def rect(self):
         r = self.radius
@@ -1321,6 +1322,7 @@ class Game:
                         proj_data.get("y", 0),
                         proj_data.get("dx", 0),
                         proj_data.get("dy", 0),
+                        owner_id=proj_data.get("owner_id"),  # [FIX] Pasar el owner_id para proteger enemigos
                     )
                     self.remote_projectiles.append(remote_proj)
 
@@ -2017,6 +2019,7 @@ class Game:
                     "dx": round(proj.dx, 2),
                     "dy": round(proj.dy, 2),
                     "vivo": True,
+                    "owner_id": getattr(proj, "owner_id", None),  # [FIX] Incluir owner_id para prevenir daño a enemigo propio
                 })
 
         # Enviar sincronización (solo si hay balas)
@@ -2082,13 +2085,9 @@ class Game:
                     enemy_id = getattr(enemy, "enemy_id", None)
                     projectile_owner = getattr(projectile, "owner_id", None)
 
-                    log_game.info(f"[COLLISION_REMOTE] Proj owner={projectile_owner}, Enemy={enemy_id}, Type={type(enemy).__name__}")
-
                     if projectile_owner and enemy_id == projectile_owner:
                         # Este es el enemigo que disparó el proyectil — ignorar
-                        log_game.warning(f"[COLLISION_REMOTE] BLOCKED: {enemy_id} hit by own projectile")
                         continue
-
                     if hasattr(enemy, "take_damage"):
                         enemy.take_damage(1, (projectile.dx, projectile.dy))
                     else:
