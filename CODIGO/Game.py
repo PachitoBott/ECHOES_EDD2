@@ -1820,6 +1820,10 @@ class Game:
             if fired and callable(notify):
                 notify()
 
+        # Actualizar boss si existe en la sala
+        if hasattr(room, "boss") and room.boss:
+            room.boss.update(dt)
+
     def _update_remote_enemies(self, dt: float) -> None:
         """
         Actualiza los enemigos remotos (animaciones, timers, sincronización).
@@ -2756,6 +2760,10 @@ class Game:
         self._boss_banner_shown = True
         self._show_zone_banner("SALA DEL BOSS", "¿Estás listo?")
 
+        # Activar boss si existe en la sala
+        if hasattr(room, "boss") and room.boss:
+            room.boss.activar()
+
     def _show_zone_banner(self, title: str, subtitle: str = "") -> None:
         """Activa el banner de zona con el texto dado."""
         self._zone_banner_text = title
@@ -2866,6 +2874,10 @@ class Game:
 
             for enemy in room.enemies:
                 enemy.draw(self.world)
+
+        # Renderizar boss si existe
+        if hasattr(room, "boss") and room.boss:
+            room.boss.render(self.world)
 
         # Renderizar efectos de muerte
         self.death_effect_manager.render(self.world)
