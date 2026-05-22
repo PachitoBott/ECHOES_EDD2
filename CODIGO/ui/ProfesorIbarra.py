@@ -14,6 +14,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 import pygame
+from narrative.text_renderer import TextRenderer
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +207,10 @@ class ProfesorIbarra:
         self._idle_anim_timer: float = 0.0
         self._IDLE_FRAME_SPEED: float = 0.20  # segundos por frame (idle más lento)
 
+        # --- Typewriter effect para feedback ---
+        self._text_renderer: TextRenderer | None = None
+        self._typewriter_fps: int = 30  # caracteres por segundo
+
     # ------------------------------------------------------------------
     # Interacción
     # ------------------------------------------------------------------
@@ -241,6 +246,16 @@ class ProfesorIbarra:
         lines.append("(Presiona E, Enter o Espacio para abrir la tienda)")
 
         self._feedback_lines   = lines
+
+        # Crear TextRenderer para el efecto typewriter
+        # Unir líneas con saltos de línea para renderización
+        feedback_text = "\n".join(lines)
+        self._text_renderer = TextRenderer(
+            feedback_text,
+            typewriter_fps=self._typewriter_fps,
+            typewriter_sound_path=None  # Sin sonido para feedback
+        )
+
         self.pregunta_respondida = True
         self.estado              = self.FEEDBACK
 
@@ -363,7 +378,12 @@ class ProfesorIbarra:
 
         elif self.estado == self.FEEDBACK:
             if ev.key in (pygame.K_e, pygame.K_RETURN, pygame.K_SPACE):
-                self.estado = self.TIENDA
+                # Si el typewriter aún está en progreso, completarlo
+                if self._text_renderer and not self._text_renderer.is_finished():
+                    self._text_renderer.force_finish()
+                else:
+                    # Si ya terminó, pasar a la tienda
+                    self.estado = self.TIENDA
 
         elif self.estado == self.TIENDA:
             self.handle_tienda_event(ev, player)
@@ -385,6 +405,10 @@ class ProfesorIbarra:
         # Avanzar animación de hablar en estados de conversación
         if self.estado in (self.PREGUNTA, self.FEEDBACK):
             self._tick_talk_anim(real_dt)
+
+        # Actualizar typewriter effect en estado FEEDBACK
+        if self.estado == self.FEEDBACK and self._text_renderer:
+            self._text_renderer.update(real_dt)
 
         # Avanzar animación idle siempre
         if self._idle_frames:
@@ -683,14 +707,31 @@ class ProfesorIbarra:
                          (text_x + text_w, py + 8 + lh + 1), 1)
 
         y = py + 8 + lh + 10
-        for line in self._feedback_lines:
+
+        # Obtener el texto visible del renderer
+        if self._text_renderer:
+            visible_text = self._text_renderer.current_text()
+            visible_lines = visible_text.split("\n")
+        else:
+            visible_lines = self._feedback_lines
+
+        # Renderizar las líneas visibles con sus colores apropiados
+        for line_idx, line in enumerate(visible_lines):
+            # Determinar color basado en el contenido de la línea
             if line.startswith("+"):
-                color = (100, 255, 140)
+                color = (100, 255, 140)  # Verde para recompensa
             elif "incorrecto" in line.lower() or "no " in line.lower():
-                color = (255, 160, 100)
+                color = (255, 160, 100)  # Naranja para incorrecto
             else:
-                color = (180, 225, 255)
-            surface.blit(font.render(line, True, color), (text_x, y)); y += lh
+                color = (180, 225, 255)  # Azul claro para normal
+
+            surface.blit(font.render(line, True, color), (text_x, y))
+            y += lh
+
+        # Mostrar indicador de continuar cuando el typewriter termina
+        if self._text_renderer and self._text_renderer.is_finished():
+            continue_text = font.render("[Presiona E, Enter o Espacio para continuar]", True, (140, 170, 200))
+            surface.blit(continue_text, (text_x, y + 8))
 
 
     # --- tienda carousel ---
