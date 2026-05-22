@@ -544,6 +544,7 @@ class ShooterEnemy(Enemy):
                 radius=4,
                 color=(200, 70, 180),
                 damage=getattr(self, "projectile_damage", 1),
+                owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
             )
             if hasattr(out_bullets, "add"):
                 out_bullets.add(bullet)
@@ -627,6 +628,7 @@ class BasicEnemy(Enemy):
                 radius=3,
                 color=(120, 230, 140),
                 damage=getattr(self, "projectile_damage", 1),
+                owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
             )
             if hasattr(out_bullets, "add"):
                 out_bullets.add(bullet)
@@ -799,6 +801,7 @@ class TankEnemy(Enemy):
                 radius=4,
                 color=(255, 120, 90),
                 damage=getattr(self, "projectile_damage", 1),
+                owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
             )
             fired_any = True
             if hasattr(out_bullets, "add"):
@@ -824,6 +827,7 @@ class TankEnemy(Enemy):
                     radius=4,
                     color=(255, 160, 120),
                     damage=getattr(self, "projectile_damage", 1),
+                    owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
                 )
                 if hasattr(out_bullets, "add"):
                     out_bullets.add(bullet)
@@ -1014,6 +1018,7 @@ class TelefonoEnemy(Enemy):
                 radius=4,
                 color=(200, 70, 180),
                 damage=getattr(self, "projectile_damage", 1),
+                owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
             )
             if hasattr(out_bullets, "add"):
                 out_bullets.add(bullet)
@@ -1122,6 +1127,7 @@ class EmojiEnemy(Enemy):
                 radius=3,
                 color=(120, 230, 140),
                 damage=getattr(self, "projectile_damage", 1),
+                owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
             )
             if hasattr(out_bullets, "add"):
                 out_bullets.add(bullet)
