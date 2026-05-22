@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -912,6 +913,27 @@ class Room:
     # ------------------------------------------------------------------ #
     # Spawning de enemigos (una sola vez por cuarto)
     # ------------------------------------------------------------------ #
+    def _mark_enemy_buffer_zone(self, enemy: Enemy, used_tiles: set[tuple[int, int]]) -> None:
+        """Marca el buffer zone de un enemigo basado en su tamaño actual."""
+        ts = CFG.TILE_SIZE
+        center_x = enemy.x + enemy.w / 2.0
+        center_y = enemy.y + enemy.h / 2.0
+
+        # Calcular cuántas baldosas ocupa el enemigo
+        tiles_wide = math.ceil(enemy.w / ts)
+        tiles_high = math.ceil(enemy.h / ts)
+
+        # Centro en tiles
+        center_tx = int(center_x // ts)
+        center_ty = int(center_y // ts)
+
+        # Marcar todas las baldosas que ocupa el enemigo
+        half_w = tiles_wide // 2
+        half_h = tiles_high // 2
+        for dy in range(-half_h, half_h + 1):
+            for dx in range(-half_w, half_w + 1):
+                used_tiles.add((center_tx + dx, center_ty + dy))
+
     def ensure_spawn(self, difficulty: int = 1, zone: int = 1, dungeon=None) -> None:
         if self._spawn_done or self.bounds is None or self.no_spawn:
             return
@@ -930,10 +952,12 @@ class Room:
                 ty = random.randint(ry + 1, ry + rh - 2)
                 if (tx, ty) in used_tiles:
                     continue
-                used_tiles.add((tx, ty))
                 px = tx * ts + ts // 2 - 6
                 py = ty * ts + ts // 2 - 6
                 enemy = factory(px, py)
+
+                # Marcar buffer zone dinámico basado en el tamaño del enemigo
+                self._mark_enemy_buffer_zone(enemy, used_tiles)
 
                 # Variar encuentros: algunos enemigos comienzan patrullando
                 if random.random() < 0.35:
@@ -951,7 +975,6 @@ class Room:
                 ty = random.randint(ry + 1, ry + rh - 2)
                 if (tx, ty) in used_tiles:
                     continue
-                used_tiles.add((tx, ty))
                 px = tx * ts + ts // 2 - 6
                 py = ty * ts + ts // 2 - 6
 
@@ -968,6 +991,9 @@ class Room:
                     # Zona 1: FastChaserEnemy por defecto
                     bonus = FastChaserEnemy(px, py)
 
+                # Marcar buffer zone dinámico del enemigo extra
+                self._mark_enemy_buffer_zone(bonus, used_tiles)
+
                 bonus._pick_wander()
                 bonus.state = enemy_mod.WANDER
                 self.enemies.append(bonus)
@@ -976,7 +1002,7 @@ class Room:
         if self.enemies:
             self.locked = True
             self.cleared = False
-         
+
         self._spawn_done = True
 
     def _pick_encounter(self, difficulty: int, zone: int = 1, dungeon=None) -> list[Type[Enemy]]:
