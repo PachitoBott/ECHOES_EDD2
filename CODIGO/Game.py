@@ -846,11 +846,22 @@ class Game:
         elif ev.tipo == "estado":
             # Estado remoto del otro jugador — guardar para renderizar
             origen = ev.origen
-            if origen and origen != self.net.rol:  # No guardar nuestro propio estado
+            my_rol = self.net.rol if self.net else None
+
+            # Defensive checks to prevent self-state from being treated as remote
+            if not origen:
+                log_game.warning("[ESTADO] Recibido estado sin origen - ignorando")
+            elif not self.net:
+                log_game.warning("[ESTADO] Recibido estado pero self.net es None - ignorando")
+            elif not my_rol:
+                log_game.warning("[ESTADO] Recibido estado pero self.net.rol no está set - ignorando")
+            elif origen == my_rol:
+                log_game.debug(f"[ESTADO] Ignorando nuestro propio estado ({origen})")
+            else:
+                # Valid remote player state
                 self.remote_players[origen] = ev.datos
-                # [DEBUG] Log para ver qué sala tiene el jugador remoto
                 sala_remota = ev.datos.get("sala", [0, 0])
-                log_game.debug(f"[ESTADO_REMOTO] {origen} está en sala {sala_remota}, pos=({ev.datos.get('pos_x')}, {ev.datos.get('pos_y')})")
+                log_game.debug(f"[ESTADO_REMOTO] {origen} está en sala {sala_remota}")
 
         elif ev.tipo == "enemigo_muerto":
             # Enemigo fue eliminado por otro jugador
