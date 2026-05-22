@@ -805,13 +805,13 @@ class AtaqueFanout(AtaqueBoss):
 
     N_PROYECTILES = 6
     ANGULO_TOTAL = 120  # grados del abanico
-    VELOCIDAD_PADRE = 400  # px/segundo (aumentado de 300)
-    VELOCIDAD_HIJO = 500   # px/segundo (aumentado de 400)
+    VELOCIDAD_PADRE = 200  # px/segundo (reducido de 400 para más lentitud)
+    VELOCIDAD_HIJO = 250   # px/segundo (reducido de 500 para más lentitud)
     DAÑO_PADRE = 1
     DAÑO_HIJO = 1
     RADIO_PADRE = 10
     RADIO_HIJO = 6
-    TIEMPO_EXPLOSION = 0.6  # segundos antes de pausarse (viaja más lejos)
+    TIEMPO_EXPLOSION = 1.2  # segundos antes de pausarse (aumentado de 0.6 para mantener rango)
 
     def __init__(self, boca_x: float, boca_y: float,
                  jugador, lista_proyectiles: list):
@@ -996,7 +996,7 @@ class AtaqueZigzag(AtaqueBoss):
 
     N_BALAS = 12
     INTERVALO = 0.08  # segundos entre disparos
-    VELOCIDAD_Y = 250  # px/segundo hacia abajo
+    VELOCIDAD_Y = 125  # px/segundo hacia abajo (reducido de 250 para más lentitud)
     DAÑO = 1
     RADIO = 8
     TELEGRAPH = 0.3  # segundos de aviso visual
@@ -1294,8 +1294,8 @@ class ProyectilEMP:
         self.cx = cx
         self.cy = cy
         self.radio = radio_inicial
-        self.radio_max = 600  # muy grande, llena pantalla
-        self.velocidad_expansion = 80  # muy lento
+        self.radio_max = 1200  # muy grande (aumentado de 600 para mantener rango)
+        self.velocidad_expansion = 40  # muy lento (reducido de 80 para más lentitud)
         self.activo = True
         self.dañado = set()  # jugadores ya dañados
         self.color = (100, 200, 255)  # azul cian
