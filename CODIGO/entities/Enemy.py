@@ -224,7 +224,10 @@ class Enemy(Entity):
         if self._is_dying:
             return False
         if amount > 0:
+            hp_antes = self.hp
             self.hp -= amount
+            # [DIAG] Log de daño recibido
+            log_enemy.warning(f"[DAMAGE] {self.enemy_id} recibió {amount} daño en ({self.x:.0f},{self.y:.0f}). HP: {hp_antes} -> {self.hp}")
             self.hit_flash_timer = max(self.hit_flash_timer, self._hit_flash_duration)
             # Reproducir sonido de daño
             if self._damage_sound:
@@ -240,6 +243,7 @@ class Enemy(Entity):
                     self._knockback_dir = (nx / mag, ny / mag)
                     self._knockback_speed = max(self._knockback_speed, knockback_strength)
         else:
+            log_enemy.warning(f"[DEATH] {self.enemy_id} muere en ({self.x:.0f},{self.y:.0f}). HP final: {self.hp}")
             self._begin_death()
         return self._is_dying
 
@@ -533,7 +537,7 @@ class ShooterEnemy(Enemy):
             return False
 
         # [DIAG] El enemigo está disparando
-        log_enemy.warning(f"[SHOOT] {self.enemy_id} disparando, owner_id={self.enemy_id}")
+        log_enemy.warning(f"[SHOOT] {self.enemy_id} disparando desde ({ex:.0f},{ey:.0f}) hacia jugador en ({px:.0f},{py:.0f}), dist={dist:.1f}, owner_id={self.enemy_id}")
 
         # Normaliza y dispara ráfagas en abanico
         if dist > 0:

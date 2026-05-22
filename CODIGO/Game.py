@@ -859,8 +859,13 @@ class Game:
                 log_game.debug(f"[ESTADO] Ignorando nuestro propio estado ({origen})")
             else:
                 # Valid remote player state
-                self.remote_players[origen] = ev.datos
+                pos_data = ev.datos.get("pos", [0, 0])
                 sala_remota = ev.datos.get("sala", [0, 0])
+                # [DIAG] Log de estado remoto
+                log_game.warning(f"[ESTADO_REMOTO_NUEVA] {origen} pos=({pos_data[0]:.0f},{pos_data[1]:.0f}) sala={sala_remota}")
+                # [FIX B] Marcar posición como válida cuando se recibe estado real del cliente
+                ev.datos["posicion_valida"] = True
+                self.remote_players[origen] = ev.datos
                 log_game.debug(f"[ESTADO_REMOTO] {origen} está en sala {sala_remota}")
 
         elif ev.tipo == "enemigo_muerto":
@@ -1158,6 +1163,8 @@ class Game:
                 dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
                 if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
                     # Aplica el daño PERO sin enviar otro evento (para evitar loops infinitos)
+                    # [DIAG] Log de daño remoto aplicado
+                    log_game.warning(f"[DAÑO_REMOTO_APLICADO] {enemy.enemy_id} recibe {damage} daño (evento DAÑO_REMOTO desde otro jugador)")
                     if hasattr(enemy, "take_damage"):
                         enemy.take_damage(damage, None)
                     else:
@@ -1421,6 +1428,12 @@ class Game:
         dir_y = datos.get("dir_y", 1)
         damage = datos.get("damage", 1)
 
+        # [FIX] Ignorar disparos desde (0,0) que pueden ser falsos
+        # durante la inicialización del cliente
+        if x == 0 and y == 0:
+            log_game.warning(f"[DISPARO_CLIENTE] [FILTRADO] Disparo sospechoso desde (0,0) - IGNORADO")
+            return
+
         # [DIAG] Log del disparo del cliente
         import time
         ts = time.time()
@@ -1442,7 +1455,7 @@ class Game:
             if bullet_rect.colliderect(enemy_rect):
                 # [DIAG] Colisión detectada
                 hp_antes = getattr(enemy, "hp", -1)
-                log_game.debug(f"[DISPARO_CLIENTE] [HIT] Enemigo[{i}] ({enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}), HP={hp_antes})")
+                log_game.warning(f"[DISPARO_CLIENTE] [HIT] Enemigo[{i}] {enemy.enemy_id} ({enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}), HP={hp_antes}) - IMPACTADO POR BALA DESDE ({x:.0f},{y:.0f})")
 
                 # Enemigo golpeado - aplicar daño
                 if hasattr(enemy, "take_damage"):
@@ -1779,12 +1792,19 @@ class Game:
         local_y = self.player.y + self.player.h / 2
         local_dist = math.hypot(local_x - ex, local_y - ey)
 
-        # Distancia al jugador remoto (si existe)
+        # Distancia al jugador remoto (si existe y tiene posición válida)
         remote_dist = float('inf')
         remote_pos = None
 
         if self.remote_players:
             for rol, datos in self.remote_players.items():
+                # [FIX B] Solo considerar jugadores remotos con posición válida
+                # Esto previene targeting incorrecto mientras se sincroniza la posición inicial
+                posicion_valida = datos.get("posicion_valida", True)
+                if not posicion_valida:
+                    log_game.debug(f"[TARGETING] Ignorando {rol}: posición aún no validada")
+                    continue
+
                 sala_list = datos.get("sala", [0, 0])
                 sala_remota = (
                     (sala_list[0], sala_list[1])
@@ -1804,6 +1824,11 @@ class Game:
                         remote_x = float(datos.get("pos_x", 0))
                         remote_y = float(datos.get("pos_y", 0))
 
+                    # [FIX B] Ignorar posiciones en (0,0) que son inválidas
+                    if remote_x == 0 and remote_y == 0:
+                        log_game.debug(f"[TARGETING] Ignorando {rol}: posición (0,0) sospechosa")
+                        continue
+
                     remote_dist = math.hypot(
                         (remote_x + 9) - ex,
                         (remote_y + 12) - ey
@@ -1822,12 +1847,12 @@ class Game:
                     self.h = 24
 
             # [DEBUG] Log de targeting
-            log_game.debug(f"[TARGETING] {enemy.enemy_id} local_dist={local_dist:.1f} remote_dist={remote_dist:.1f} REMOTE ({remote_pos[0]:.0f},{remote_pos[1]:.0f}) en sala {room_pos}")
+            log_game.warning(f"[TARGETING] {enemy.enemy_id} APUNTA A REMOTO: local_dist={local_dist:.1f} remote_dist={remote_dist:.1f} pos_remota=({remote_pos[0]:.0f},{remote_pos[1]:.0f}) sala={room_pos}")
             return RemotePlayer(remote_pos[0], remote_pos[1])
         else:
             # [DEBUG] Log de targeting
             if hasattr(self, 'remote_players') and self.remote_players:
-                log_game.debug(f"[TARGETING] {enemy.enemy_id} local_dist={local_dist:.1f} remote_players={len(self.remote_players)} pero no en sala {room_pos}")
+                log_game.warning(f"[TARGETING] {enemy.enemy_id} APUNTA A LOCAL: dist={local_dist:.1f} remoto_dist={remote_dist:.1f} remoto_existe={len(self.remote_players)>0} remoto_en_sala={remote_pos is not None}")
             return self.player
 
     def _update_enemies(self, dt: float, room) -> None:
@@ -2282,6 +2307,8 @@ class Game:
             if getattr(enemy, "hp", 1) > 0:
                 survivors.append(enemy)
             else:
+                # [DIAG] Enemigo muere por HP <= 0
+                log_game.warning(f"[ENEMIES_CLEANUP] {enemy.enemy_id} eliminado: hp={enemy.hp}, dying={callable(dying_fn) and dying_fn()}, ready_to_remove={callable(ready_fn) and ready_fn()}")
                 self._drop_enemy_coins(enemy, room)
         defeated_enemies = max(0, initial_enemy_count - len(survivors))
         if defeated_enemies:
