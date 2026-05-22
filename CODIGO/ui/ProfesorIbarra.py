@@ -332,10 +332,9 @@ class ProfesorIbarra:
         self.rect = pygame.Rect(cx - 16, cy - 30, 32, 60)
         self.interact_radius = 28
 
-        # Seleccionar pregunta aleatoria (no repetir en este run)
+        # La pregunta se selecciona cuando inicia la interacción
         self.pregunta: dict = {}
         self._pregunta_idx: int = -1
-        self._seleccionar_pregunta_aleatoria()
 
         self.estado              = self.IDLE
         self.pregunta_respondida = False
@@ -410,11 +409,13 @@ class ProfesorIbarra:
         return area.colliderect(player_rect)
 
     def iniciar_interaccion(self) -> None:
+        """Inicia interacción: hace nueva pregunta o abre tienda si ya respondió."""
         if self.pregunta_respondida:
             # Ya respondió esta pregunta, ir directamente a tienda
             self.estado = self.TIENDA
         else:
-            # Primera vez que interactúa en esta sala, hacer pregunta
+            # Primera vez o nueva pregunta: seleccionar pregunta aleatoria
+            self._seleccionar_pregunta_aleatoria()
             self.estado = self.PREGUNTA
 
     def responder(self, opcion_idx: int, player) -> None:
@@ -457,10 +458,13 @@ class ProfesorIbarra:
         self.estado = self.TIENDA
 
     def cerrar_tienda(self) -> None:
-        """Cierra la tienda y vuelve a LISTO."""
+        """Cierra la tienda y vuelve a LISTO.
+        Permite hacer una nueva pregunta si se interactúa de nuevo."""
         self.estado = self.LISTO
         self._last_msg = ""
         self._msg_timer = 0.0
+        # Resetear para permitir nueva pregunta en próxima interacción
+        self.pregunta_respondida = False
 
     # ------------------------------------------------------------------
     # Manejo de eventos de la tienda carousel
