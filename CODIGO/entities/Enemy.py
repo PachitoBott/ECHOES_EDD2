@@ -113,6 +113,35 @@ class Enemy(Entity):
     def _center(self):
         return (self.x + self.w/2, self.y + self.h/2)
 
+    def move(self, dx: float, dy: float, dt: float, room) -> None:
+        """Movimiento inteligente: intenta deslizarse en obstáculos."""
+        step_x = dx * self.speed * dt
+        step_y = dy * self.speed * dt
+
+        # Intentar movimiento en X
+        if step_x != 0:
+            self.x += step_x
+            if self._collides(room):
+                self.x -= step_x
+                # Si colisiona, no se mueve en X pero intenta Y
+            else:
+                # Chequear proximidad a obstáculos - si está muy cerca, detener movimiento en X
+                dist, axis = self._get_proximity_distance_to_obstacles(room)
+                if dist < self._proximity_threshold and axis == 'x':
+                    self.x -= step_x
+
+        # Intentar movimiento en Y
+        if step_y != 0:
+            self.y += step_y
+            if self._collides(room):
+                self.y -= step_y
+                # Si colisiona, no se mueve en Y pero intenta X
+            else:
+                # Chequear proximidad a obstáculos - si está muy cerca, detener movimiento en Y
+                dist, axis = self._get_proximity_distance_to_obstacles(room)
+                if dist < self._proximity_threshold and axis == 'y':
+                    self.y -= step_y
+
     # ---------- loop ----------
     def update(self, dt: float, player, room) -> None:
         if self._is_dying:
