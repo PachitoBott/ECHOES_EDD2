@@ -582,6 +582,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
     # --- Caso especial: yellow_shooter usa spritesheets para las animaciones ---
     elif variant_slug == "yellow_shooter":
         # Cargar animación "walk" desde yellow_walk.png - 5 columnas, 22 frames
+        # Frames de 96x96 en el spritesheet, pero escalados a 64x64 en el juego
         walk_frames = cargar_spritesheet_cuadricula(
             ruta="assets/yellow_walk.png",
             frame_w=96,
@@ -589,7 +590,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             cols=5,
             frames_a_usar=22,
             flip_horizontal=False,
-            tamaño_logico=96  # Mantener tamaño original, no escalar
+            tamaño_logico=64  # Escalar a 64x64 para mostrar en el juego
         )
         if walk_frames:
             # idle y walk comparten la misma animación (sin copiar, misma referencia)
@@ -600,6 +601,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             frames["run"] = _load_state_frames(base_dir, "run", 4, color)
 
         # Cargar animación "shoot" desde yellow_attack.png - 4 columnas, 16 frames
+        # Frames de 96x96 en el spritesheet, pero escalados a 64x64 en el juego
         shoot_frames = cargar_spritesheet_cuadricula(
             ruta="assets/yellow_attack.png",
             frame_w=96,
@@ -607,7 +609,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             cols=4,
             frames_a_usar=16,
             flip_horizontal=False,
-            tamaño_logico=96  # Mantener tamaño original, no escalar
+            tamaño_logico=64  # Escalar a 64x64 para mostrar en el juego
         )
         if shoot_frames:
             frames["shoot"] = shoot_frames
