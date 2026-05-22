@@ -407,8 +407,13 @@ class Player(Entity):
                     direction = direction.normalize()
                 self.on_shoot((bullet.x, bullet.y), (direction.x, direction.y))
 
-    def draw(self, surf):
-        """Dibuja al jugador en la pantalla."""
+    def draw(self, surf, flash_alpha: int = 0):
+        """Dibuja al jugador en la pantalla.
+
+        Args:
+            surf: Superficie pygame donde dibujar
+            flash_alpha: Alpha del flash blanco del respawn (0-255, 0 = sin flash)
+        """
         self._draw_dash_trail(surf)
 
         if self._current_animation not in self._animations:
@@ -416,10 +421,17 @@ class Player(Entity):
 
         animation = self._animations[self._current_animation]
         sprite = self._prepare_sprite(animation.current_frame())
+
         sprite_rect = sprite.get_rect()
         sprite_rect.centerx = int(round(self.x + self.w / 2))
         sprite_rect.centery = int(round(self.y + self.h / 2 - PLAYER_SPRITE_CENTER_OFFSET_Y))
         surf.blit(sprite, sprite_rect)
+
+        # Aplicar flash blanco ENCIMA si hay alpha
+        if flash_alpha > 0:
+            flash_surf = pygame.Surface((sprite.get_width(), sprite.get_height()), pygame.SRCALPHA)
+            flash_surf.fill((255, 255, 255, flash_alpha))
+            surf.blit(flash_surf, sprite_rect)
 
     def _prepare_sprite(self, base_sprite: pygame.Surface) -> pygame.Surface:
         """Aplica transformaciones al sprite (flip horizontal si mira izquierda)."""
