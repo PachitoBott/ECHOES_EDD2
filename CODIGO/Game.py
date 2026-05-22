@@ -2054,8 +2054,13 @@ class Game:
                         # [FIX] No permitir que un enemigo se dañe con sus propios proyectiles
                         enemy_id = getattr(enemy, "enemy_id", None)
                         projectile_owner = getattr(projectile, "owner_id", None)
+
+                        # [DIAG] Log de colisión
+                        log_game.debug(f"[COLLISION] Proj owner={projectile_owner}, Enemy={enemy_id}, Type={type(enemy).__name__}")
+
                         if projectile_owner and enemy_id == projectile_owner:
                             # Este es el enemigo que disparó el proyectil — ignorar
+                            log_game.info(f"[COLLISION] BLOCKED: {enemy_id} hit by own projectile")
                             continue
 
                         if hasattr(enemy, "take_damage"):
