@@ -117,6 +117,8 @@ class PostsPool:
         Returns:
             Lista de 5 dicts de posts listos para usar
         """
+        import copy
+
         # Separar en acoso y no-acoso
         # Preferir posts no vistos en este run
         pool_acoso = [p for p in self.todos_los_posts
@@ -140,19 +142,20 @@ class PostsPool:
         n_acoso = random.randint(self.MIN_ACOSO, self.MAX_ACOSO)
         n_no_acoso = self.POSTS_POR_PARTIDA - n_acoso
 
-        # Selección aleatoria sin repetición
-        seleccionados_acoso = random.sample(
+        # Selección aleatoria sin repetición (usando copias profundas)
+        seleccionados_acoso = [copy.deepcopy(p) for p in random.sample(
             pool_acoso, min(n_acoso, len(pool_acoso))
-        )
-        seleccionados_no_acoso = random.sample(
+        )]
+        seleccionados_no_acoso = [copy.deepcopy(p) for p in random.sample(
             pool_no_acoso, min(n_no_acoso, len(pool_no_acoso))
-        )
+        )]
 
         seleccion = seleccionados_acoso + seleccionados_no_acoso
 
         # Completar si faltan posts (caso extremo)
         if len(seleccion) < self.POSTS_POR_PARTIDA:
-            restantes = [p for p in self.todos_los_posts if p not in seleccion]
+            restantes = [copy.deepcopy(p) for p in self.todos_los_posts
+                        if p["id"] not in [s["id"] for s in seleccion]]
             faltan = self.POSTS_POR_PARTIDA - len(seleccion)
             seleccion += random.sample(restantes, min(faltan, len(restantes)))
 
@@ -160,6 +163,7 @@ class PostsPool:
         seleccion.sort(key=lambda p: p["nivel_actividad"])
 
         # Asignar porcentajes: 20%, 40%, 60%, 80%, 100%
+        # (esto no afecta los posts originales porque son copias profundas)
         porcentajes = [20, 40, 60, 80, 100]
         for i, post in enumerate(seleccion):
             post["porcentaje"] = porcentajes[i]
@@ -169,7 +173,7 @@ class PostsPool:
             self.historial_run.add(post["id"])
 
         ids_seleccionados = [p["id"] for p in seleccion]
-        print(f"[POSTS POOL] Seleccionados: {ids_seleccionados} "
+        print(f"[POSTS POOL] Seleccionados ALEATORIOS: {ids_seleccionados} "
               f"(acoso: {n_acoso}, no-acoso: {n_no_acoso})")
 
         return seleccion
