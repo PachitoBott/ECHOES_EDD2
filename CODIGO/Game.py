@@ -1322,6 +1322,8 @@ class Game:
     def _handle_player_death(self, room) -> None:
         log_player.warning("Jugador murió — lives=%s", getattr(self.player, "lives", "?"))
         can_continue = False
+        should_do_respawn = False
+
         if hasattr(self.player, "lose_life"):
             try:
                 can_continue = bool(self.player.lose_life())
@@ -1329,24 +1331,41 @@ class Game:
                 can_continue = False
 
         if can_continue:
-            if hasattr(self.player, "respawn"):
-                self.player.respawn()
+            # Check if a complete corazón was lost (should_respawn)
+            if hasattr(self.player, "should_respawn"):
+                should_do_respawn = bool(self.player.should_respawn())
+
+            # ONLY respawn and reset position if a complete corazón was lost
+            if should_do_respawn:
+                if hasattr(self.player, "respawn"):
+                    self.player.respawn()
+                else:
+                    max_hp = getattr(self.player, "max_hp", 1)
+                    self.player.hp = max_hp
+                    invuln = getattr(self.player, "respawn_invulnerability", 2.0)
+                    self.player.invulnerable_timer = max(
+                        getattr(self.player, "invulnerable_timer", 0.0), invuln
+                    )
+
+                # Reset position to room center ONLY when complete corazón lost
+                if hasattr(room, "center_px"):
+                    px, py = room.center_px()
+                    self.player.x = px - self.player.w / 2
+                    self.player.y = py - self.player.h / 2
+
+                self.projectiles.clear()
+                self.enemy_projectiles.clear()
+                self.door_cooldown = 0.25
             else:
+                # Solo recuperar HP cuando se pierde una vida (no un corazón completo)
                 max_hp = getattr(self.player, "max_hp", 1)
                 self.player.hp = max_hp
-                invuln = getattr(self.player, "post_hit_invulnerability", 0.0)
+                invuln = getattr(self.player, "post_hit_invulnerability", 0.45)
                 self.player.invulnerable_timer = max(
                     getattr(self.player, "invulnerable_timer", 0.0), invuln
                 )
-
-            if hasattr(room, "center_px"):
-                px, py = room.center_px()
-                self.player.x = px - self.player.w / 2
-                self.player.y = py - self.player.h / 2
-
-            self.projectiles.clear()
-            self.enemy_projectiles.clear()
-            self.door_cooldown = 0.25
+                self.projectiles.clear()
+                self.enemy_projectiles.clear()
             return
 
         summary = self._collect_run_summary()
