@@ -616,6 +616,47 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
         else:
             frames["shoot"] = _load_state_frames(base_dir, "shoot", 4, color)
 
+    # --- Caso especial: faker usa spritesheets desde enemigos2 ---
+    elif variant_slug == "faker":
+        # Cargar animación "idle" desde assets/enemigos/enemigos2/faker idle&walk.png
+        # Spritesheet: 256x256 = 4 cols × 4 rows de 64x64 (16 frames disponibles, usar primeros 4)
+        idle_frames = cargar_spritesheet_cuadricula(
+            ruta="assets/enemigos/enemigos2/faker idle&walk.png",
+            frame_w=64,
+            frame_h=64,
+            cols=4,
+            frames_a_usar=4,
+            flip_horizontal=False,
+            tamaño_logico=64
+        )
+        if idle_frames:
+            frames["idle"] = idle_frames
+        else:
+            frames["idle"] = _load_state_frames(base_dir, "idle", 4, color)
+
+        # Cargar animación "run" desde el mismo spritesheet que idle
+        # (el idle es la misma animación de movimiento)
+        if idle_frames:
+            frames["run"] = idle_frames
+        else:
+            frames["run"] = _load_state_frames(base_dir, "run", 4, color)
+
+        # Cargar animación "attack" desde assets/enemigos/enemigos2/Faker attack.png
+        # Spritesheet: 256x256 = 4 cols × 4 rows de 64x64 (16 frames disponibles, usar primeros 4)
+        attack_frames = cargar_spritesheet_cuadricula(
+            ruta="assets/enemigos/enemigos2/Faker attack.png",
+            frame_w=64,
+            frame_h=64,
+            cols=4,
+            frames_a_usar=4,
+            flip_horizontal=False,
+            tamaño_logico=64
+        )
+        if attack_frames:
+            frames["attack"] = attack_frames
+        else:
+            frames["attack"] = _load_state_frames(base_dir, "attack", 4, color)
+
     # --- Caso especial: telefono usa spritesheets desde enemigos2 ---
     elif variant_slug == "telefono":
         # Cargar animación "idle" desde assets/enemigos/enemigos2/enemigo telefono idle.png
