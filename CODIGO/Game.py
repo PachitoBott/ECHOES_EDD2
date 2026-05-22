@@ -50,7 +50,7 @@ from dev.debug_console import DebugConsole
 from systems.death_effect import DeathEffectManager
 from systems.power_effects import power_effect_manager
 from systems.spawn_effect import SpawnEffectManager
-from systems.minigame_papers import MinijuegoPapers
+from systems.minigame_papers import MinijuegoPapers, posts_pool
 
 
 class RemoteProjectile:
@@ -533,6 +533,9 @@ class Game:
         finalize_reason = self._stats_pending_reason or "restart"
         self._finalize_run_statistics(finalize_reason)
         self._stats_pending_reason = None
+
+        # Resetear el pool de posts para el nuevo run
+        posts_pool.reset_run()
 
         params = self.cfg.dungeon_params()
         if dungeon_params:
