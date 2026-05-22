@@ -3094,6 +3094,11 @@ class Game:
         )
         self.screen.blit(scaled, (0, 0))
 
+        # Renderizar barra de vida del boss si existe en la sala actual
+        room = self.dungeon.current_room
+        if hasattr(room, "boss") and room.boss is not None and room.boss.vivo:
+            self._render_boss_health_bar()
+
         # --- Dibujar cinemáticas si están activas ---
         if self.cinematics.activo:
             # Llenar pantalla de negro para ocultar el juego de fondo
@@ -3436,6 +3441,88 @@ class Game:
 
         # Munición eliminada: el jugador dispara infinitamente con cadencia fija
         return icon_rect
+
+    def _render_boss_health_bar(self) -> None:
+        """Renderiza la barra de vida del boss decorada en el centro superior de la pantalla."""
+        room = self.dungeon.current_room
+        if not (hasattr(room, "boss") and room.boss is not None):
+            return
+
+        boss = room.boss
+
+        # Dimensiones y posición de la barra
+        bar_width = 300
+        bar_height = 24
+        bar_x = (self.cfg.SCREEN_W * self.cfg.SCREEN_SCALE - bar_width) // 2
+        bar_y = 30
+        padding = 4
+
+        # --- Fondo decorativo ---
+        # Sombra exterior
+        pygame.draw.rect(self.screen, (0, 0, 0), (bar_x - 2, bar_y - 2, bar_width + 4, bar_height + 4))
+
+        # Fondo principal (gris oscuro)
+        pygame.draw.rect(self.screen, (30, 30, 40), (bar_x, bar_y, bar_width, bar_height))
+
+        # Borde dorado/amarillo
+        pygame.draw.rect(self.screen, (200, 160, 60), (bar_x, bar_y, bar_width, bar_height), 2)
+
+        # Borde interior más sutil
+        pygame.draw.rect(self.screen, (100, 80, 30), (bar_x + 1, bar_y + 1, bar_width - 2, bar_height - 2), 1)
+
+        # --- Barra de vida ---
+        if boss.max_hp > 0:
+            hp_ratio = max(0.0, boss.hp / boss.max_hp)
+            health_width = int((bar_width - 2 * padding) * hp_ratio)
+
+            # Color: rojo si HP bajo, amarillo si medio, verde si alto
+            if hp_ratio > 0.5:
+                color = (0, 200, 80)  # Verde
+            elif hp_ratio > 0.25:
+                color = (200, 180, 0)  # Amarillo
+            else:
+                color = (200, 40, 40)  # Rojo
+
+            # Fondo de la barra
+            bar_bg_rect = pygame.Rect(bar_x + padding, bar_y + padding, bar_width - 2 * padding, bar_height - 2 * padding)
+            pygame.draw.rect(self.screen, (20, 20, 25), bar_bg_rect)
+
+            # Barra de vida
+            if health_width > 0:
+                health_rect = pygame.Rect(bar_x + padding, bar_y + padding, health_width, bar_height - 2 * padding)
+                pygame.draw.rect(self.screen, color, health_rect)
+
+                # Efecto de brillo en la barra
+                pygame.draw.line(self.screen, (255, 255, 255),
+                                (bar_x + padding, bar_y + padding),
+                                (bar_x + padding + health_width, bar_y + padding), 1)
+
+        # --- Nombre del boss: ECHO ---
+        try:
+            title_font = pygame.font.SysFont("arial", 18, bold=True)
+            echo_text = title_font.render("ECHO", True, (200, 160, 60))
+            echo_rect = echo_text.get_rect()
+            echo_rect.center = (bar_x + bar_width // 2, bar_y - 18)
+
+            # Sombra del texto
+            shadow_text = title_font.render("ECHO", True, (0, 0, 0))
+            shadow_rect = shadow_text.get_rect(center=(echo_rect.centerx + 1, echo_rect.centery + 1))
+            self.screen.blit(shadow_text, shadow_rect)
+
+            # Texto principal
+            self.screen.blit(echo_text, echo_rect)
+        except Exception:
+            pass
+
+        # --- Texto de HP (opcional) ---
+        try:
+            hp_font = pygame.font.SysFont("arial", 10)
+            hp_text = hp_font.render(f"{int(boss.hp)} / {int(boss.max_hp)}", True, (200, 200, 200))
+            hp_text_rect = hp_text.get_rect()
+            hp_text_rect.center = (bar_x + bar_width // 2, bar_y + bar_height // 2 - 1)
+            self.screen.blit(hp_text, hp_text_rect)
+        except Exception:
+            pass
 
     # MÉTODOS DE BATERÍAS REMOVIDOS - Reemplazados con sistema de corazones en HUDPanel
     # - _load_battery_states()

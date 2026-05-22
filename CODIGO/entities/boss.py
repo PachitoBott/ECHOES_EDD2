@@ -278,7 +278,7 @@ class Boss:
                   f"vel→{self.velocidad_x}")
 
     def render(self, surface: pygame.Surface) -> None:
-        """Renderiza el boss en la pantalla con titilar blanco y barra de vida."""
+        """Renderiza el boss en la pantalla con titilar blanco."""
         if not self.frames:
             return
 
@@ -296,44 +296,6 @@ class Boss:
             surface.blit(frame_white, (pos_x, pos_y))
         else:
             surface.blit(frame, (pos_x, pos_y))
-
-        # Renderizar barra de vida 16 píxeles por encima del boss
-        self._render_health_bar(surface, pos_x, pos_y - 16)
-
-    def _render_health_bar(self, surface: pygame.Surface, boss_x: int, bar_y: int) -> None:
-        """Renderiza la barra de vida del boss."""
-        # Dimensiones de la barra
-        bar_width = self.render_w  # Mismo ancho que el sprite del boss
-        bar_height = 10
-        bar_x = boss_x
-
-        # Fondo negro
-        pygame.draw.rect(surface, (40, 40, 40), (bar_x, bar_y, bar_width, bar_height))
-        pygame.draw.rect(surface, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height), 1)
-
-        # Barra de vida (rojo a verde dependiendo del HP)
-        if self.max_hp > 0:
-            hp_ratio = max(0.0, self.hp / self.max_hp)
-            health_width = int(bar_width * hp_ratio)
-
-            # Color: rojo si HP bajo, amarillo si medio, verde si alto
-            if hp_ratio > 0.5:
-                color = (0, 200, 0)  # Verde
-            elif hp_ratio > 0.25:
-                color = (200, 200, 0)  # Amarillo
-            else:
-                color = (200, 0, 0)  # Rojo
-
-            if health_width > 0:
-                pygame.draw.rect(surface, color, (bar_x, bar_y, health_width, bar_height))
-
-        # Texto HP (opcional, comentado para no saturar)
-        # try:
-        #     font = pygame.font.SysFont("monospace", 8)
-        #     hp_text = font.render(f"{int(self.hp)}/{int(self.max_hp)}", False, (255, 255, 255))
-        #     surface.blit(hp_text, (bar_x + 2, bar_y - 8))
-        # except Exception:
-        #     pass
 
     @property
     def rect(self) -> pygame.Rect:
