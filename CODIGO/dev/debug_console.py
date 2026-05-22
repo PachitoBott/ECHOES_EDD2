@@ -186,6 +186,7 @@ class DebugConsole:
             "seed":     self._cmd_seed,
             "rooms":    self._cmd_rooms,
             "log":      self._cmd_log,
+            "boss":     self._cmd_boss,
         }
 
     # ------------------------------------------------------------------ #
@@ -198,6 +199,7 @@ class DebugConsole:
             "  spawn <tipo>          spawnea enemigo  (basic|fast|shooter|tank|faker|telefono|emoji)",
             "  set hp/gold/lives/speed <n>  modifica atributo del jugador",
             "  teleport <i> <j>      teletransporta a sala (i,j)  [alias: tp]",
+            "  boss                  teletransporta directamente a la sala del boss",
             "  clear                 elimina enemigos de la sala actual",
             "  god                   toggle invulnerabilidad",
             "  hitboxes              toggle visualización de hitboxes de enemigos",
@@ -303,6 +305,37 @@ class DebugConsole:
         depth = dungeon.depth_map.get((i, j), -1)
         log_debug.info(f"Teletransportado a ({i},{j}) profundidad={depth}")
         return f"OK — sala ({i},{j})  profundidad={depth}"
+
+    def _cmd_boss(self, args: list[str]) -> str:
+        """Teletransporta directamente a la sala del boss."""
+        dungeon = self._game.dungeon
+
+        # Buscar la sala del tipo "boss"
+        boss_pos = None
+        for pos, room in dungeon.rooms.items():
+            if getattr(room, "type", "") == "boss":
+                boss_pos = pos
+                break
+
+        if boss_pos is None:
+            return "ERROR — no se encontró sala del boss"
+
+        i, j = boss_pos
+        dungeon.i, dungeon.j = i, j
+        dungeon.explored.add((i, j))
+
+        room = dungeon.current_room
+        cx, cy = room.center_px()
+        player = self._game.player
+        player.x = float(cx) - player.w / 2.0
+        player.y = float(cy) - player.h / 2.0
+
+        self._game.projectiles.clear()
+        self._game.enemy_projectiles.clear()
+
+        depth = dungeon.depth_map.get((i, j), -1)
+        log_debug.info(f"Teletransportado a sala del BOSS ({i},{j}) profundidad={depth}")
+        return f"OK — sala del BOSS en ({i},{j})  profundidad={depth}"
 
     def _cmd_clear(self, args: list[str]) -> str:
         room  = self._game.dungeon.current_room

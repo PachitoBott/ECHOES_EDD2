@@ -15,8 +15,9 @@ from entities.Enemy import (
 import entities.Enemy as enemy_mod  # <- para usar enemy_mod.WANDER
 from core.asset_paths import assets_dir
 
-# Plantillas de encuentros por umbral de dificultad.
-ENCOUNTER_TABLE: list[tuple[int, list[list[Type[Enemy]]]]] = [
+# Plantillas de encuentros por umbral de dificultad para ZONA 1.
+# Solo: BasicEnemy, FastChaserEnemy, TankEnemy, ShooterEnemy
+ENCOUNTER_TABLE_ZONE1: list[tuple[int, list[list[Type[Enemy]]]]] = [
     (
         2,
         [
@@ -25,8 +26,6 @@ ENCOUNTER_TABLE: list[tuple[int, list[list[Type[Enemy]]]]] = [
             [FastChaserEnemy],
             [BasicEnemy, FastChaserEnemy],
             [BasicEnemy, BasicEnemy, FastChaserEnemy],
-            [EmojiEnemy],
-            [FakerEnemy],
         ],
     ),
     (
@@ -36,8 +35,6 @@ ENCOUNTER_TABLE: list[tuple[int, list[list[Type[Enemy]]]]] = [
             [FastChaserEnemy, FastChaserEnemy],
             [BasicEnemy, FastChaserEnemy, FastChaserEnemy],
             [BasicEnemy, BasicEnemy, BasicEnemy],
-            [EmojiEnemy, FakerEnemy],
-            [TelefonoEnemy],
         ],
     ),
     (
@@ -47,8 +44,6 @@ ENCOUNTER_TABLE: list[tuple[int, list[list[Type[Enemy]]]]] = [
             [TankEnemy, BasicEnemy],
             [TankEnemy, FastChaserEnemy],
             [BasicEnemy, BasicEnemy, TankEnemy],
-            [EmojiEnemy, TankEnemy],
-            [TelefonoEnemy, FastChaserEnemy],
         ],
     ),
     (
@@ -58,8 +53,6 @@ ENCOUNTER_TABLE: list[tuple[int, list[list[Type[Enemy]]]]] = [
             [TankEnemy, FastChaserEnemy, FastChaserEnemy],
             [TankEnemy, BasicEnemy, FastChaserEnemy],
             [TankEnemy, TankEnemy, BasicEnemy],
-            [TelefonoEnemy, TankEnemy, FakerEnemy],
-            [EmojiEnemy, TelefonoEnemy, TankEnemy],
         ],
     ),
     (
@@ -70,11 +63,121 @@ ENCOUNTER_TABLE: list[tuple[int, list[list[Type[Enemy]]]]] = [
             [ShooterEnemy, ShooterEnemy, TankEnemy],
             [ShooterEnemy, BasicEnemy, TankEnemy, FastChaserEnemy],
             [ShooterEnemy, ShooterEnemy, FastChaserEnemy, FastChaserEnemy],
-            [TelefonoEnemy, ShooterEnemy, TankEnemy],
-            [EmojiEnemy, TelefonoEnemy, FakerEnemy],
         ],
     ),
 ]
+
+# Plantillas de encuentros para ZONA 2 - Solo Emoji, Faker y Telefono
+ENCOUNTER_TABLE_ZONE2: list[tuple[int, list[list[Type[Enemy]]]]] = [
+    (
+        10,
+        [
+            [EmojiEnemy],
+            [FakerEnemy],
+            [TelefonoEnemy],
+            [EmojiEnemy, FakerEnemy],
+            [EmojiEnemy, TelefonoEnemy],
+            [FakerEnemy, TelefonoEnemy],
+            [EmojiEnemy, FakerEnemy, TelefonoEnemy],
+        ],
+    ),
+]
+
+# Plantillas de transición - Zona 1 con posibilidad de zona 2 (a menos de 2 salas de distancia)
+ENCOUNTER_TABLE_TRANSITION_ZONE1: list[tuple[int, list[list[Type[Enemy]]]]] = [
+    (
+        2,
+        [
+            [BasicEnemy],
+            [BasicEnemy, BasicEnemy],
+            [FastChaserEnemy],
+            [BasicEnemy, FastChaserEnemy],
+            [BasicEnemy, BasicEnemy, FastChaserEnemy],
+            [BasicEnemy],  # Repetición para baja probabilidad
+            [FastChaserEnemy],  # Repetición para baja probabilidad
+            [EmojiEnemy],  # Baja probabilidad de zona 2 (1 de 8)
+        ],
+    ),
+    (
+        4,
+        [
+            [BasicEnemy, BasicEnemy, FastChaserEnemy],
+            [FastChaserEnemy, FastChaserEnemy],
+            [BasicEnemy, FastChaserEnemy, FastChaserEnemy],
+            [BasicEnemy, BasicEnemy, BasicEnemy],
+            [BasicEnemy, BasicEnemy, FastChaserEnemy],  # Repetición
+            [FastChaserEnemy, FastChaserEnemy],  # Repetición
+            [BasicEnemy, BasicEnemy, BasicEnemy],  # Repetición
+            [EmojiEnemy, FakerEnemy],  # Baja probabilidad de zona 2 (1 de 8)
+        ],
+    ),
+    (
+        6,
+        [
+            [TankEnemy],
+            [TankEnemy, BasicEnemy],
+            [TankEnemy, FastChaserEnemy],
+            [BasicEnemy, BasicEnemy, TankEnemy],
+            [TankEnemy],  # Repetición
+            [TankEnemy, BasicEnemy],  # Repetición
+            [TankEnemy, FastChaserEnemy],  # Repetición
+            [EmojiEnemy, TankEnemy],  # Baja probabilidad de zona 2 (1 de 8)
+        ],
+    ),
+    (
+        8,
+        [
+            [TankEnemy, TankEnemy],
+            [TankEnemy, FastChaserEnemy, FastChaserEnemy],
+            [TankEnemy, BasicEnemy, FastChaserEnemy],
+            [TankEnemy, TankEnemy, BasicEnemy],
+            [TankEnemy, TankEnemy],  # Repetición
+            [TankEnemy, FastChaserEnemy, FastChaserEnemy],  # Repetición
+            [TankEnemy, BasicEnemy, FastChaserEnemy],  # Repetición
+            [EmojiEnemy, TelefonoEnemy, TankEnemy],  # Baja probabilidad de zona 2 (1 de 8)
+        ],
+    ),
+    (
+        10,
+        [
+            [ShooterEnemy, ShooterEnemy, FastChaserEnemy],
+            [ShooterEnemy, TankEnemy, FastChaserEnemy],
+            [ShooterEnemy, ShooterEnemy, TankEnemy],
+            [ShooterEnemy, BasicEnemy, TankEnemy, FastChaserEnemy],
+            [ShooterEnemy, ShooterEnemy, FastChaserEnemy, FastChaserEnemy],
+            [ShooterEnemy, ShooterEnemy, FastChaserEnemy],  # Repetición
+            [ShooterEnemy, TankEnemy, FastChaserEnemy],  # Repetición
+            [EmojiEnemy, TelefonoEnemy, FakerEnemy],  # Baja probabilidad de zona 2 (1 de 8)
+        ],
+    ),
+]
+
+# Plantillas de transición - Zona 2 con posibilidad de zona 1 (a menos de 2 salas de distancia)
+# Enemigos de zona 1 tienen baja probabilidad (~17%)
+ENCOUNTER_TABLE_TRANSITION_ZONE2: list[tuple[int, list[list[Type[Enemy]]]]] = [
+    (
+        10,
+        [
+            [EmojiEnemy],
+            [FakerEnemy],
+            [TelefonoEnemy],
+            [EmojiEnemy, FakerEnemy],
+            [EmojiEnemy, TelefonoEnemy],
+            [FakerEnemy, TelefonoEnemy],
+            [EmojiEnemy, FakerEnemy, TelefonoEnemy],
+            [EmojiEnemy],  # Repetición
+            [FakerEnemy],  # Repetición
+            [TelefonoEnemy],  # Repetición
+            [EmojiEnemy, FakerEnemy],  # Repetición
+            [EmojiEnemy, TelefonoEnemy],  # Repetición
+            [FastChaserEnemy],  # Baja probabilidad de zona 1 (1 de 13)
+            [TankEnemy],  # Baja probabilidad de zona 1 (1 de 13)
+        ],
+    ),
+]
+
+# Mantener alias para compatibilidad
+ENCOUNTER_TABLE = ENCOUNTER_TABLE_ZONE1
 
 
 _OBSTACLE_ASSET_DIR = assets_dir("obstacles")
@@ -330,6 +433,9 @@ class Room:
 
         self.obstacles: list[dict] = []
         self._obstacle_tiles: set[tuple[int, int]] = set()
+
+        # --- BOSS ---
+        self.boss = None  # Se crea cuando se inicializa como sala del boss
 
 
     # ------------------------------------------------------------------ #
@@ -806,13 +912,13 @@ class Room:
     # ------------------------------------------------------------------ #
     # Spawning de enemigos (una sola vez por cuarto)
     # ------------------------------------------------------------------ #
-    def ensure_spawn(self, difficulty: int = 1) -> None:
+    def ensure_spawn(self, difficulty: int = 1, zone: int = 1, dungeon=None) -> None:
         if self._spawn_done or self.bounds is None or self.no_spawn:
             return
         rx, ry, rw, rh = self.bounds
         ts = CFG.TILE_SIZE
 
-        encounter_factories = self._pick_encounter(difficulty)
+        encounter_factories = self._pick_encounter(difficulty, zone, dungeon)
         if not encounter_factories:
             self._spawn_done = True
             return
@@ -848,7 +954,20 @@ class Room:
                 used_tiles.add((tx, ty))
                 px = tx * ts + ts // 2 - 6
                 py = ty * ts + ts // 2 - 6
-                bonus = FastChaserEnemy(px, py)
+
+                # Seleccionar enemigo extra según la zona
+                if zone >= 2:
+                    # Zona 2: seleccionar un enemigo de la tabla de zona 2
+                    bonus_factories = self._pick_encounter(difficulty, zone, dungeon)
+                    if bonus_factories:
+                        bonus_factory = random.choice(bonus_factories)
+                        bonus = bonus_factory(px, py)
+                    else:
+                        continue
+                else:
+                    # Zona 1: FastChaserEnemy por defecto
+                    bonus = FastChaserEnemy(px, py)
+
                 bonus._pick_wander()
                 bonus.state = enemy_mod.WANDER
                 self.enemies.append(bonus)
@@ -860,13 +979,73 @@ class Room:
          
         self._spawn_done = True
 
-    def _pick_encounter(self, difficulty: int) -> list[Type[Enemy]]:
-        """Selecciona una combinación de enemigos según la dificultad."""
+    def _pick_encounter(self, difficulty: int, zone: int = 1, dungeon=None) -> list[Type[Enemy]]:
+        """Selecciona una combinación de enemigos según la dificultad, la zona y la proximidad a otras zonas."""
+
+        # Calcular distancia a la zona adyacente
+        distance_to_adjacent_zone = 999
+        if dungeon is not None:
+            distance_to_adjacent_zone = self._calculate_distance_to_adjacent_zone(dungeon, zone)
+
+        # Seleccionar la tabla según la zona y la proximidad
+        if zone >= 2:
+            # Zona 2: usar tabla de transición si está a menos de 2 salas de zona 1
+            if distance_to_adjacent_zone <= 2:
+                encounter_table = ENCOUNTER_TABLE_TRANSITION_ZONE2
+            else:
+                encounter_table = ENCOUNTER_TABLE_ZONE2
+        else:
+            # Zona 1: usar tabla de transición si está a menos de 2 salas de zona 2
+            if distance_to_adjacent_zone <= 2:
+                encounter_table = ENCOUNTER_TABLE_TRANSITION_ZONE1
+            else:
+                encounter_table = ENCOUNTER_TABLE_ZONE1
+
         tier = max(1, min(10, difficulty))
-        for threshold, templates in ENCOUNTER_TABLE:
+        for threshold, templates in encounter_table:
             if tier <= threshold:
                 return random.choice(templates)
-        return random.choice(ENCOUNTER_TABLE[-1][1]) if ENCOUNTER_TABLE else []
+        return random.choice(encounter_table[-1][1]) if encounter_table else []
+
+    def _calculate_distance_to_adjacent_zone(self, dungeon, current_zone: int) -> int:
+        """Calcula la distancia mínima a la zona adyacente usando BFS."""
+        from collections import deque
+
+        if dungeon is None or not hasattr(dungeon, 'zones'):
+            return 999
+
+        current_pos = (dungeon.i, dungeon.j)
+        target_zone = 3 - current_zone if current_zone in (1, 2) else -1  # Cambiar entre zona 1 y 2
+
+        # BFS para encontrar la distancia más corta a una sala de la zona adyacente
+        queue = deque([(current_pos, 0)])
+        visited = {current_pos}
+
+        while queue:
+            (x, y), dist = queue.popleft()
+
+            # Verificar salas adyacentes (N, S, E, W)
+            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                nx, ny = x + dx, y + dy
+
+                # Verificar si está dentro de los límites
+                if not (0 <= nx < dungeon.grid_w and 0 <= ny < dungeon.grid_h):
+                    continue
+
+                if (nx, ny) in visited:
+                    continue
+
+                visited.add((nx, ny))
+
+                # Verificar si esta sala es de la zona adyacente
+                room_zone = dungeon.zones.get((nx, ny), 1)
+                if room_zone == target_zone:
+                    return dist + 1
+
+                # Continuar búsqueda
+                queue.append(((nx, ny), dist + 1))
+
+        return 999  # No encontró zona adyacente
 
 
     # ------------------------------------------------------------------ #
@@ -1186,6 +1365,38 @@ class Room:
         # corredores después para que las puertas sigan siendo accesibles.
         self.build_centered(CFG.BOSS_ROOM_W, CFG.BOSS_ROOM_H)
         self.carve_corridors(width_tiles=2, length_tiles=3)
+
+        # Inicializar el boss después de que la sala esté lista
+        self.inicializar_boss()
+
+    def inicializar_boss(self) -> None:
+        """
+        Crea el boss en la sala si es de tipo boss.
+        Se llama automáticamente en make_boss_room().
+        """
+        if self.type != "boss" or self.bounds is None:
+            return
+
+        from entities.boss import Boss
+
+        # Calcular sala_rect en píxeles
+        rx, ry, rw, rh = self.bounds
+        ts = CFG.TILE_SIZE
+
+        sala_rect = pygame.Rect(
+            rx * ts,
+            ry * ts,
+            rw * ts,
+            rh * ts
+        )
+
+        # pared_y: donde termina la primera fila de tiles (pared superior)
+        # El boss se posiciona un tile abajo del inicio de la sala
+        pared_y = ry * ts + ts
+
+        # Crear el boss
+        self.boss = Boss(sala_rect, pared_y)
+        print(f"[SALA] Boss creado en sala tipo 'boss'")
 
     def _handle_treasure_events(self, events, player) -> None:
         if not self.treasure:

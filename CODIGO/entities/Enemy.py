@@ -2,11 +2,14 @@
 import math
 import random
 import pygame
+import logging
 from pathlib import Path
 
 from core.Entity import Entity
 from Config import CFG
 from core.Projectile import Projectile
+
+log_enemy = logging.getLogger("ENEMY_FIRE")
 from entities.enemy_sprites import (
     EnemyAnimator,
     load_enemy_animation_set,
@@ -500,6 +503,9 @@ class ShooterEnemy(Enemy):
         if not room.has_line_of_sight(ex, ey, px, py):
             return False
 
+        # [DIAG] El enemigo está disparando
+        log_enemy.warning(f"[SHOOT] {self.enemy_id} disparando, owner_id={self.enemy_id}")
+
         # Normaliza y dispara ráfagas en abanico
         if dist > 0:
             dx, dy = dx/dist, dy/dist
@@ -522,6 +528,7 @@ class ShooterEnemy(Enemy):
                     radius=3,
                     color=(255, 90, 90),
                     damage=getattr(self, "projectile_damage", 1),
+                    owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
                 )
             if hasattr(out_bullets, "add"):
                 out_bullets.add(bullet)
@@ -543,6 +550,7 @@ class ShooterEnemy(Enemy):
                 radius=4,
                 color=(200, 70, 180),
                 damage=getattr(self, "projectile_damage", 1),
+                owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
             )
             if hasattr(out_bullets, "add"):
                 out_bullets.add(bullet)
@@ -626,6 +634,7 @@ class BasicEnemy(Enemy):
                 radius=3,
                 color=(120, 230, 140),
                 damage=getattr(self, "projectile_damage", 1),
+                owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
             )
             if hasattr(out_bullets, "add"):
                 out_bullets.add(bullet)
@@ -798,6 +807,7 @@ class TankEnemy(Enemy):
                 radius=4,
                 color=(255, 120, 90),
                 damage=getattr(self, "projectile_damage", 1),
+                owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
             )
             fired_any = True
             if hasattr(out_bullets, "add"):
@@ -823,6 +833,7 @@ class TankEnemy(Enemy):
                     radius=4,
                     color=(255, 160, 120),
                     damage=getattr(self, "projectile_damage", 1),
+                    owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
                 )
                 if hasattr(out_bullets, "add"):
                     out_bullets.add(bullet)
@@ -861,8 +872,8 @@ class FakerEnemy(Enemy):
         super().__init__(x, y, hp=4, gold_reward=7)
 
         cx, cy = self.x + self.w / 2.0, self.y + self.h / 2.0
-        self.w = 96
-        self.h = 96
+        self.w = 64
+        self.h = 64
         self.x = cx - self.w / 2.0
         self.y = cy - self.h / 2.0
 
@@ -877,6 +888,9 @@ class FakerEnemy(Enemy):
         self._attack_timer = 0.0
         self.attack_duration = 0.5
         self._attack_fired = False
+
+        # Ralentizar animación de ataque
+        self.animator.fps_overrides["attack"] = 8.0
 
     def update(self, dt, player, room):
         self._attack_timer = max(0.0, self._attack_timer - dt)
@@ -989,6 +1003,7 @@ class TelefonoEnemy(Enemy):
                     radius=3,
                     color=(255, 90, 90),
                     damage=getattr(self, "projectile_damage", 1),
+                    owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
                 )
             if hasattr(out_bullets, "add"):
                 out_bullets.add(bullet)
@@ -1009,6 +1024,7 @@ class TelefonoEnemy(Enemy):
                 radius=4,
                 color=(200, 70, 180),
                 damage=getattr(self, "projectile_damage", 1),
+                owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
             )
             if hasattr(out_bullets, "add"):
                 out_bullets.add(bullet)
@@ -1117,6 +1133,7 @@ class EmojiEnemy(Enemy):
                 radius=3,
                 color=(120, 230, 140),
                 damage=getattr(self, "projectile_damage", 1),
+                owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
             )
             if hasattr(out_bullets, "add"):
                 out_bullets.add(bullet)
