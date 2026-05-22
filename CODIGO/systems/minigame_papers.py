@@ -770,7 +770,7 @@ class MinijuegoPapers:
         surface.blit(hint_i, (self.rect_btn_ignorar.x + 5, self.rect_btn_ignorar.y + 5))
 
     def _render_progreso(self, surface):
-        """Indicador de progreso — muestra porcentaje de la publicación actual."""
+        """Indicador de progreso — barra horizontal clara."""
         pub = PUBLICACIONES[min(self.pub_actual, len(PUBLICACIONES) - 1)]
         porcentaje = pub["porcentaje"]
         actual = self.pub_actual + 1
@@ -782,33 +782,27 @@ class MinijuegoPapers:
         )
         surface.blit(txt, (self.lw - txt.get_width() - 20, self.lh - 30))
 
-        # Puntos de progreso con contraste claro
-        DOT_SIZE = 12
-        DOT_GAP = 18
-        total_w = total * (DOT_SIZE + DOT_GAP)
-        start_x = (self.lw - total_w) // 2
-        dot_y = self.lh - 28
+        # Barra de progreso horizontal clara
+        BAR_WIDTH = 400
+        BAR_HEIGHT = 20
+        BAR_X = (self.lw - BAR_WIDTH) // 2
+        BAR_Y = self.lh - 55
 
-        for i in range(total):
-            # Puntos llenos: verde brillante | Puntos vacíos: gris oscuro
-            if i < actual:
-                color_fill = (0, 220, 100)  # Verde neón brillante
-                color_border = (0, 255, 120)
-            else:
-                color_fill = (30, 25, 45)  # Gris oscuro casi negro
-                color_border = (60, 50, 80)
+        # Fondo de la barra (gris oscuro)
+        pygame.draw.rect(surface, (40, 35, 60), (BAR_X, BAR_Y, BAR_WIDTH, BAR_HEIGHT))
 
-            pygame.draw.rect(
-                surface,
-                color_fill,
-                (start_x + i * (DOT_SIZE + DOT_GAP), dot_y, DOT_SIZE, DOT_SIZE),
-            )
-            pygame.draw.rect(
-                surface,
-                color_border,
-                (start_x + i * (DOT_SIZE + DOT_GAP), dot_y, DOT_SIZE, DOT_SIZE),
-                2,
-            )
+        # Barra llena (verde neón brillante)
+        fill_width = int(BAR_WIDTH * (porcentaje / 100.0))
+        pygame.draw.rect(surface, (0, 255, 100), (BAR_X, BAR_Y, fill_width, BAR_HEIGHT))
+
+        # Borde de la barra (púrpura)
+        pygame.draw.rect(surface, (120, 80, 180), (BAR_X, BAR_Y, BAR_WIDTH, BAR_HEIGHT), 3)
+
+        # Texto del porcentaje en el centro de la barra
+        pct_txt = self.font_stats.render(f"{porcentaje}%", False, (255, 255, 255))
+        pct_x = BAR_X + (BAR_WIDTH - pct_txt.get_width()) // 2
+        pct_y = BAR_Y + (BAR_HEIGHT - pct_txt.get_height()) // 2
+        surface.blit(pct_txt, (pct_x, pct_y))
 
     def _render_feedback(self, surface, pub):
         """Panel de feedback educativo."""
