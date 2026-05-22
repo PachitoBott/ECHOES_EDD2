@@ -581,9 +581,9 @@ class HUDPanel:
             surface: superficie donde dibujar
             es_p2: True si es panel P2 (mostrar placeholder si no hay sprites)
         """
-        # Tamaño del sprite (64x64 como en el juego)
-        SPRITE_SIZE = 64
-        SPRITE_MARGIN = 30  # Margen desde el borde izquierdo del panel (más separado)
+        # Tamaño del sprite (128x128 - 2x más grande)
+        SPRITE_SIZE = 128
+        SPRITE_MARGIN = 40  # Margen desde el borde izquierdo del panel (+10px)
 
         # Posición X (izquierda-centro del panel)
         x = self.rect.x + SPRITE_MARGIN
@@ -632,16 +632,16 @@ class HUDPanel:
             if not hasattr(self, '_moneda_icon_cached'):
                 moneda_path = "assets/ui/chip_moneda.png"
                 moneda_img = pygame.image.load(moneda_path).convert_alpha()
-                # Escalar a 32x32 píxeles (más visible)
-                self._moneda_icon_cached = pygame.transform.scale(moneda_img, (32, 32))
+                # Escalar a 48x48 píxeles (mucho más visible)
+                self._moneda_icon_cached = pygame.transform.scale(moneda_img, (48, 48))
         except Exception as e:
             self._moneda_icon_cached = None
 
         # Parámetros de posicionamiento
-        ICON_SIZE = 32
+        ICON_SIZE = 48  # Más grande
         MARGEN_INF = 12  # Margen desde el borde inferior del panel (dentro del panel)
-        MARGEN_IZQ = 100  # Offset X desde el borde izquierdo (no solapa con Daniel 64px)
-        TEXT_MARGIN_LEFT = 10  # Espacio entre icono y número
+        MARGEN_IZQ = 130  # Offset X desde el borde izquierdo (+30px a la derecha)
+        TEXT_MARGIN_LEFT = 12  # Espacio entre icono y número
 
         # Calcular Y desde el FONDO del panel hacia arriba
         # Esto garantiza que siempre esté dentro del panel, sin importar la altura
@@ -660,8 +660,8 @@ class HUDPanel:
 
         # Dibujar cantidad de monedas (texto) con fuente más grande
         try:
-            # Fuente más grande (28pt en lugar de 24pt) para mejor legibilidad
-            font = pygame.font.SysFont(None, 28)
+            # Fuente mucho más grande (36pt) para mejor legibilidad
+            font = pygame.font.SysFont(None, 36)
             coins_text = font.render(str(coins), True, (230, 220, 200))
 
             # Posición del texto (a la derecha del icono, centrado verticalmente)
@@ -669,7 +669,7 @@ class HUDPanel:
             text_y = icon_y + (ICON_SIZE - coins_text.get_height()) // 2
 
             # Dibujar sombra (mejora la legibilidad sobre fondo oscuro)
-            shadow_font = pygame.font.SysFont(None, 28)
+            shadow_font = pygame.font.SysFont(None, 36)
             shadow_text = shadow_font.render(str(coins), True, (0, 0, 0))
             surface.blit(shadow_text, (text_x + 1, text_y + 1))
 
