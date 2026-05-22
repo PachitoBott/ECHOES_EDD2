@@ -344,6 +344,125 @@ def msg_enemigo_danado(
     )
 
 
+def msg_enemies_state(enemies_list: list[dict], room_id: tuple[int, int]) -> Mensaje:
+    """
+    Sincronización continua: Estado de todos los enemigos en una sala.
+
+    El host envía esto periódicamente (cada ~50ms) para que el cliente
+    mantenga las posiciones de enemigos sincronizadas.
+
+    Args:
+        enemies_list: Lista de dicts con: {
+            "id": str (enemy_id único),
+            "tipo": str (nombre de clase),
+            "x": float,
+            "y": float,
+            "health": int,
+            "vivo": bool,
+            "animator_state": str (estado actual del animator: "idle", "run", "shoot", "attack"),
+            "facing_right": bool (dirección del sprite),
+        }
+        room_id: Tupla (i, j) de la sala actual
+    """
+    return Mensaje(
+        TipoMensaje.EVENTO,
+        {
+            "evento": "enemies_state",
+            "enemies": enemies_list,
+            "room_id": list(room_id),
+        },
+        origen=Rol.SERVIDOR,
+    )
+
+
+def msg_bullet_fired_by_client(
+    player_id: int,
+    x: float,
+    y: float,
+    dir_x: float,
+    dir_y: float,
+    damage: int,
+) -> Mensaje:
+    """
+    Disparo del cliente: Enviado para que el servidor procese colisiones.
+
+    Args:
+        player_id: ID del jugador que dispara (2 para ALIADO)
+        x, y: Posición inicial de la bala
+        dir_x, dir_y: Dirección normalizada
+        damage: Daño de la bala
+    """
+    return Mensaje(
+        TipoMensaje.EVENTO,
+        {
+            "evento": "bullet_fired_by_client",
+            "player_id": player_id,
+            "x": x,
+            "y": y,
+            "dir_x": dir_x,
+            "dir_y": dir_y,
+            "damage": damage,
+        },
+        origen=Rol.ALIADO,
+    )
+
+
+def msg_enemy_projectiles_state(projectiles_list: list[dict], room_id: tuple[int, int]) -> Mensaje:
+    """
+    Sincronización continua: Estado de todas las balas de enemigos.
+
+    El host envía esto periódicamente para que el cliente vea los proyectiles enemigas.
+
+    Args:
+        projectiles_list: Lista de dicts con: {
+            "id": str (identificador único),
+            "x": float,
+            "y": float,
+            "dx": float (dirección X normalizada),
+            "dy": float (dirección Y normalizada),
+            "vivo": bool,
+        }
+        room_id: Tupla (i, j) de la sala actual
+    """
+    return Mensaje(
+        TipoMensaje.EVENTO,
+        {
+            "evento": "enemy_projectiles_state",
+            "projectiles": projectiles_list,
+            "room_id": list(room_id),
+        },
+        origen=Rol.SERVIDOR,
+    )
+
+
+def msg_transicion_completada(
+    sala_nueva: tuple[int, int],
+    pos_victima: tuple[float, float],
+    pos_aliado: tuple[float, float],
+) -> Mensaje:
+    """
+    Evento: Transición de sala completada.
+
+    El servidor notifica al cliente que la transición se completó y ambos
+    jugadores están en la nueva sala.
+
+    Args:
+        sala_nueva: Tupla (i, j) de la nueva sala
+        pos_victima: Posición (x, y) donde aparece el VICTIMA
+        pos_aliado: Posición (x, y) donde aparece el ALIADO
+    """
+    return Mensaje(
+        TipoMensaje.EVENTO,
+        {
+            "evento": "transicion_completada",
+            "sala_nueva": list(sala_nueva),
+            "pos_victima": list(pos_victima),
+            "pos_aliado": list(pos_aliado),
+        },
+        origen=Rol.SERVIDOR,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Validación básica (usada por servidor para sanear mensajes entrantes)
 # ---------------------------------------------------------------------------

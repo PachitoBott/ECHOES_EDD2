@@ -68,6 +68,9 @@ _VARIANT_COLORS: dict[str, tuple[int, int, int]] = {
     "green_chaser": (126, 232, 170),
     "blue_shooter": (120, 188, 255),
     "tank": (200, 116, 116),
+    "faker": (200, 120, 200),
+    "emoji": (255, 180, 100),
+    "telefono": (150, 150, 255),
     "default": (210, 210, 210),
 }
 
@@ -180,6 +183,9 @@ class EnemyAnimator:
     def current_surface(self) -> pygame.Surface:
         frames = self.animations.get(self.state)
         if not frames:
+            # [DEBUG] Log cuando falta animación para un estado
+            from dev.logger import log_game
+            log_game.debug(f"[ANIMATOR_BUG] No frames for state='{self.state}' (available: {list(self.animations.keys())})")
             return self.animations.fallback
         index = min(self.frame_index, len(frames) - 1)
         return frames[index]
