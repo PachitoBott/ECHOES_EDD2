@@ -891,14 +891,49 @@ class StartMenu:
             overlay_rect.center = (width // 2, height // 2)
 
             overlay_surface = pygame.Surface(overlay_rect.size, pygame.SRCALPHA)
-            overlay_surface.fill((10, 10, 20, 230))
 
+            # ── CAPA 1: FONDO (IMAGEN O COLOR SÓLIDO) ──
+            # Para estadísticas, cargar panel_estadisticas.png si existe
+            stats_bg_image = None
+            if self.overlay_key == "statistics":
+                stats_bg_image = self._load_image("panel_estadisticas.png")
+
+            if stats_bg_image:
+                # Escalar imagen al tamaño del overlay
+                scaled_bg = pygame.transform.smoothscale(stats_bg_image, overlay_rect.size)
+                scaled_bg.set_alpha(255)  # Completamente opaco
+                overlay_surface.blit(scaled_bg, (0, 0))
+            else:
+                # Fallback: color sólido si no carga la imagen
+                overlay_surface.fill((10, 10, 20, 230))
+
+            # ── CAPA 2: TEXTO CON SOMBRAS ──
             text_start = 60
             lines = self.overlay_lines or ("",)
             for i, line in enumerate(lines):
-                surf = self.button_font.render(line, True, self.COLOR_TEXT_WHITE)
+                # Primera línea: título (más grande y rojo)
+                if i == 0:
+                    font = self.title_font
+                    text_color = self.COLOR_CRIMSON
+                    line_y = text_start - 20
+                    line_spacing = 80
+                else:
+                    font = self.button_font
+                    text_color = self.COLOR_TEXT_WHITE
+                    line_y = text_start + (i - 1) * 40 + 50
+                    line_spacing = 40
+
+                # Sombra oscura para mejor legibilidad
+                shadow_surf = font.render(line, True, (20, 10, 15))
+                shadow_rect = shadow_surf.get_rect(
+                    center=(overlay_rect.width // 2 + 2, line_y + 2)
+                )
+                overlay_surface.blit(shadow_surf, shadow_rect)
+
+                # Texto principal
+                surf = font.render(line, True, text_color)
                 rect = surf.get_rect(
-                    center=(overlay_rect.width // 2, text_start + i * 40)
+                    center=(overlay_rect.width // 2, line_y)
                 )
                 overlay_surface.blit(surf, rect)
 
