@@ -26,14 +26,14 @@
       },
       {
         "image": "brochachino_man.png",
-        "texto": "Algo los jalaba desde adentro. Como si la Red los hubiera estado esperando a los dos.",
+        "texto": "Algo los jalaba desde adentro. La Red los esperaba a los dos.",
         "duracion": 3.0,
         "fade_in": 1.0,
         "fade_out": 0.8
       },
       {
         "image": "brotato_chippers.png",
-        "texto": "Bienvenidos a la Red. Aquí todo lo que se dijo vive. Y todo lo que vivió... ataca.",
+        "texto": "Aquí todo lo que se dijo vive y ataca.",
         "duracion": 3.0,
         "fade_in": 1.0,
         "fade_out": 0.8
