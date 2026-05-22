@@ -1417,9 +1417,9 @@ class AtaqueEMP(AtaqueBoss):
                 if pulso.verificar_colision(jugador):
                     jugador.take_damage(self.DAÑO)
 
-        # Limpiar pulsos inactivos
+        # Limpiar pulsos inactivos (no modificar self.lista_proyectiles,
+        # ya que el boss es responsable de limpiarla)
         self.pulsos_activos = [p for p in self.pulsos_activos if p.activo]
-        self.lista_proyectiles = [p for p in self.lista_proyectiles if p.activo]
 
         # Terminar cuando todos los pulsos se disiparon
         if (self.pulsos_creados >= self.N_ONDAS and
