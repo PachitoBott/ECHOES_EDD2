@@ -63,7 +63,7 @@ class Boss:
 
     # Escala de render — el sprite es muy grande (736x400)
     # Escalar para que se vea proporcional a la sala
-    RENDER_SCALE = 0.5  # 50% → 368x200px en pantalla
+    RENDER_SCALE = 0.25  # 25% → 184x100px en pantalla
 
     def __init__(
         self,
@@ -96,6 +96,7 @@ class Boss:
 
         # Movimiento lateral
         self.velocidad_x = self.SPEED  # positivo = derecha
+        self._debug_frame_counter = 0
 
         self._cargar_sprites()
         self._calcular_posicion_inicial()
@@ -167,26 +168,44 @@ class Boss:
     def _calcular_posicion_inicial(self) -> None:
         """
         Posiciona el boss centrado en la pared superior.
-        El sprite se ancla con su borde inferior en pared_y.
+        El sprite comienza un poco abajo de la pared superior.
         """
         # X: centrado en la sala al inicio
         self.x = float(self.sala_rect.centerx - self.render_w // 2)
 
-        # Y: el sprite cuelga desde la pared superior
-        # La parte inferior del sprite toca pared_y
-        self.y = float(self.pared_y - self.render_h)
+        # Y: posicionado un poco más abajo de la pared superior
+        # en lugar de colgar encima
+        self.y = float(self.pared_y)
 
         print(f"[BOSS] Posición inicial: ({self.x:.0f}, {self.y:.0f})")
 
     def activar(self) -> None:
         """Llamar cuando el jugador entra a la sala."""
         self.activo = True
-        print("[BOSS] Activado")
+        limite_izq = self.sala_rect.left + self.MARGIN
+        limite_der = self.sala_rect.right - self.render_w - self.MARGIN
+        rango_movimiento = limite_der - limite_izq
+
+        print(f"\n[BOSS] ✅ ACTIVADO")
+        print(f"      Posición inicial: ({self.x:.0f}, {self.y:.0f})")
+        print(f"      Sala rect: left={self.sala_rect.left}, right={self.sala_rect.right}, "
+              f"width={self.sala_rect.width}")
+        print(f"      Límites de movimiento: izq={limite_izq:.0f}, der={limite_der:.0f}, "
+              f"rango={rango_movimiento:.0f}px")
+        print(f"      Sprite: render_w={self.render_w}, render_h={self.render_h}")
+        print(f"      Parámetros: SPEED={self.SPEED} px/sec, MARGIN={self.MARGIN}px\n")
 
     def update(self, dt: float) -> None:
         """Actualiza animación y movimiento lateral."""
+        self._debug_frame_counter += 1
+
         if not self.activo or not self.vivo:
             return
+
+        # Debug: mostrar estado cada 30 frames
+        if self._debug_frame_counter % 30 == 0:
+            print(f"[BOSS] UPDATE: x={self.x:.1f}, vel={self.velocidad_x}, dt={dt:.4f}, "
+                  f"sala_rect=({self.sala_rect.left}, {self.sala_rect.right})")
 
         # Actualizar animación idle
         self.timer_frame += dt
@@ -195,6 +214,7 @@ class Boss:
             self.frame_actual = (self.frame_actual + 1) % len(self.frames)
 
         # Movimiento lateral
+        x_anterior = self.x
         self.x += self.velocidad_x * dt
 
         # Límites laterales de la sala
@@ -204,10 +224,14 @@ class Boss:
         if self.x <= limite_izq:
             self.x = float(limite_izq)
             self.velocidad_x = abs(self.velocidad_x)  # ir derecha
+            print(f"[BOSS] ⬅️ Rebotó en límite izquierdo: x={x_anterior:.1f}→{self.x:.0f}, "
+                  f"vel→{self.velocidad_x}")
 
         elif self.x >= limite_der:
             self.x = float(limite_der)
             self.velocidad_x = -abs(self.velocidad_x)  # ir izquierda
+            print(f"[BOSS] ➡️ Rebotó en límite derecho: x={x_anterior:.1f}→{self.x:.0f}, "
+                  f"vel→{self.velocidad_x}")
 
     def render(self, surface: pygame.Surface) -> None:
         """Renderiza el boss en la pantalla."""
