@@ -812,70 +812,21 @@ class Room:
         rx, ry, rw, rh = self.bounds
         ts = CFG.TILE_SIZE
 
-        # Buffer de píxeles alrededor de cada enemigo para evitar sobreposición
-        # y buffer de píxeles alrededor de obstáculos
-        ENEMY_SPAWN_BUFFER = 70  # píxeles de distancia mínima entre enemigos
-        OBSTACLE_BUFFER = 40     # píxeles de distancia mínima entre enemigo y obstáculo
-
         encounter_factories = self._pick_encounter(difficulty)
         if not encounter_factories:
             self._spawn_done = True
             return
-
-        # Mantener lista de posiciones ocupadas por enemigos (con buffer)
-        occupied_positions: list[tuple[float, float]] = []
         used_tiles: set[tuple[int, int]] = set(self._obstacle_tiles)
-
         for factory in encounter_factories:
-            # Intentar encontrar una posición válida para ubicar al enemigo
-            for attempt in range(20):
+            # Intentar encontrar una baldosa libre para ubicar al enemigo
+            for _ in range(12):
                 tx = random.randint(rx + 1, rx + rw - 2)
                 ty = random.randint(ry + 1, ry + rh - 2)
-
-                # Verificar que el tile principal no esté ocupado
                 if (tx, ty) in used_tiles:
                     continue
-
+                used_tiles.add((tx, ty))
                 px = tx * ts + ts // 2 - 6
                 py = ty * ts + ts // 2 - 6
-
-                # Verificar buffer alrededor de obstáculos
-                enemy_rect = pygame.Rect(
-                    int(px - OBSTACLE_BUFFER),
-                    int(py - OBSTACLE_BUFFER),
-                    int(OBSTACLE_BUFFER * 2 + 12),  # ancho con buffer
-                    int(OBSTACLE_BUFFER * 2 + 12)   # alto con buffer
-                )
-
-                obstacle_collision = False
-                check_x0 = enemy_rect.left // ts
-                check_y0 = enemy_rect.top // ts
-                check_x1 = (enemy_rect.right - 1) // ts
-                check_y1 = (enemy_rect.bottom - 1) // ts
-
-                for check_ty in range(check_y0, check_y1 + 1):
-                    for check_tx in range(check_x0, check_x1 + 1):
-                        if self.is_blocked(check_tx, check_ty):
-                            obstacle_collision = True
-                            break
-                    if obstacle_collision:
-                        break
-
-                if obstacle_collision:
-                    continue
-
-                # Verificar distancia a otros enemigos spawneados
-                too_close = False
-                for ex, ey in occupied_positions:
-                    dist = ((px - ex) ** 2 + (py - ey) ** 2) ** 0.5
-                    if dist < ENEMY_SPAWN_BUFFER:
-                        too_close = True
-                        break
-
-                if too_close:
-                    continue
-
-                # Posición válida encontrada
                 enemy = factory(px, py)
 
                 # Variar encuentros: algunos enemigos comienzan patrullando
@@ -884,91 +835,29 @@ class Room:
                     enemy.state = enemy_mod.WANDER
 
                 self.enemies.append(enemy)
-                occupied_positions.append((px, py))
-
-                # Marcar tiles ocupados (incluyendo buffer)
-                buffer_tx0 = max(rx + 1, (int(px) - ENEMY_SPAWN_BUFFER) // ts)
-                buffer_ty0 = max(ry + 1, (int(py) - ENEMY_SPAWN_BUFFER) // ts)
-                buffer_tx1 = min(rx + rw - 1, (int(px) + ENEMY_SPAWN_BUFFER) // ts)
-                buffer_ty1 = min(ry + rh - 1, (int(py) + ENEMY_SPAWN_BUFFER) // ts)
-
-                for mark_ty in range(buffer_ty0, buffer_ty1 + 1):
-                    for mark_tx in range(buffer_tx0, buffer_tx1 + 1):
-                        used_tiles.add((mark_tx, mark_ty))
-
                 break
 
         # Escalado adicional: probabilidad de sumar un perseguidor extra
         extra_chance = min(0.1 * max(0, difficulty - 1), 0.5)
         if random.random() < extra_chance:
-            for attempt in range(20):
+            for _ in range(12):
                 tx = random.randint(rx + 1, rx + rw - 2)
                 ty = random.randint(ry + 1, ry + rh - 2)
-
                 if (tx, ty) in used_tiles:
                     continue
-
+                used_tiles.add((tx, ty))
                 px = tx * ts + ts // 2 - 6
                 py = ty * ts + ts // 2 - 6
-
-                # Verificar buffer alrededor de obstáculos
-                enemy_rect = pygame.Rect(
-                    int(px - OBSTACLE_BUFFER),
-                    int(py - OBSTACLE_BUFFER),
-                    int(OBSTACLE_BUFFER * 2 + 12),
-                    int(OBSTACLE_BUFFER * 2 + 12)
-                )
-
-                obstacle_collision = False
-                check_x0 = enemy_rect.left // ts
-                check_y0 = enemy_rect.top // ts
-                check_x1 = (enemy_rect.right - 1) // ts
-                check_y1 = (enemy_rect.bottom - 1) // ts
-
-                for check_ty in range(check_y0, check_y1 + 1):
-                    for check_tx in range(check_x0, check_x1 + 1):
-                        if self.is_blocked(check_tx, check_ty):
-                            obstacle_collision = True
-                            break
-                    if obstacle_collision:
-                        break
-
-                if obstacle_collision:
-                    continue
-
-                # Verificar distancia a otros enemigos
-                too_close = False
-                for ex, ey in occupied_positions:
-                    dist = ((px - ex) ** 2 + (py - ey) ** 2) ** 0.5
-                    if dist < ENEMY_SPAWN_BUFFER:
-                        too_close = True
-                        break
-
-                if too_close:
-                    continue
-
                 bonus = FastChaserEnemy(px, py)
                 bonus._pick_wander()
                 bonus.state = enemy_mod.WANDER
                 self.enemies.append(bonus)
-                occupied_positions.append((px, py))
-
-                # Marcar tiles ocupados
-                buffer_tx0 = max(rx + 1, (int(px) - ENEMY_SPAWN_BUFFER) // ts)
-                buffer_ty0 = max(ry + 1, (int(py) - ENEMY_SPAWN_BUFFER) // ts)
-                buffer_tx1 = min(rx + rw - 1, (int(px) + ENEMY_SPAWN_BUFFER) // ts)
-                buffer_ty1 = min(ry + rh - 1, (int(py) + ENEMY_SPAWN_BUFFER) // ts)
-
-                for mark_ty in range(buffer_ty0, buffer_ty1 + 1):
-                    for mark_tx in range(buffer_tx0, buffer_tx1 + 1):
-                        used_tiles.add((mark_tx, mark_ty))
-
                 break
 
         if self.enemies:
             self.locked = True
             self.cleared = False
-
+         
         self._spawn_done = True
 
     def _pick_encounter(self, difficulty: int) -> list[Type[Enemy]]:
