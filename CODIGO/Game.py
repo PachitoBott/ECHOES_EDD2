@@ -1010,7 +1010,7 @@ class Game:
         # [DIAG] Log de entrada detallado para diagnóstico
         import time
         ts = time.time()
-        log_game.warning(f"[MUERTE_REMOTA] t={ts:.3f} ENTRADA: tipo={enemy_type}, pos=({pos_x}, {pos_y}), killer={killer}, en_dict_antes=???")
+        log_game.debug(f"[MUERTE_REMOTA] t={ts:.3f} ENTRADA: tipo={enemy_type}, pos=({pos_x}, {pos_y}), killer={killer}, en_dict_antes=???")
 
         # Solo procesar si el enemigo murió en la sala actual
         sala_actual = (self.dungeon.i, self.dungeon.j)
@@ -1022,7 +1022,7 @@ class Game:
         try:
             room = self.dungeon.rooms.get(sala_remota)
             if room is None:
-                log_game.warning(f"[MUERTE_REMOTA] Sala {sala_remota} no existe en dungeon.rooms")
+                log_game.debug(f"[MUERTE_REMOTA] Sala {sala_remota} no existe en dungeon.rooms")
                 return
         except Exception as e:
             log_game.error(f"[MUERTE_REMOTA] ERROR accediendo a rooms: {e}", exc_info=True)
@@ -1032,7 +1032,7 @@ class Game:
             # [DIAG] Estado ANTES de cualquier operación
             enemigos_antes = len(room.enemies)
             muertos_visibles = sum(1 for e in room.enemies if getattr(e, '_is_dying', False))
-            log_game.warning(f"[MUERTE_REMOTA] ANTES: {enemigos_antes} enemigos en lista ({muertos_visibles} muriendo), buscando {enemy_type}")
+            log_game.debug(f"[MUERTE_REMOTA] ANTES: {enemigos_antes} enemigos en lista ({muertos_visibles} muriendo), buscando {enemy_type}")
 
             # Buscar enemigo que coincida con posición y tipo
             # Usar tolerancia para diferencias por interpolación cliente
@@ -1050,7 +1050,7 @@ class Game:
 
                 if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
                     # Encontrado enemigo que coincide
-                    log_game.warning(f"[MUERTE_REMOTA] [MATCH] Encontrado en índice {i}: {enemy.__class__.__name__}")
+                    log_game.debug(f"[MUERTE_REMOTA] [MATCH] Encontrado en índice {i}: {enemy.__class__.__name__}")
                     enemy_encontrado = enemy
                     indice_encontrado = i
                     encontrado = True
@@ -1058,7 +1058,7 @@ class Game:
 
             if encontrado:
                 # [DIAG] Disparar efecto ANTES de eliminar
-                log_game.warning(f"[MUERTE_REMOTA] [EFFECT] Disparando efecto de muerte en ({enemy_encontrado.x}, {enemy_encontrado.y})")
+                log_game.debug(f"[MUERTE_REMOTA] [EFFECT] Disparando efecto de muerte en ({enemy_encontrado.x}, {enemy_encontrado.y})")
                 try:
                     # Obtener frame actual para el efecto
                     if hasattr(enemy_encontrado, '_get_frame_actual'):
@@ -1069,24 +1069,24 @@ class Game:
                     if frame:
                         self.death_effect_manager.spawn(enemy_encontrado.x, enemy_encontrado.y, frame)
                 except Exception as e:
-                    log_game.warning(f"[MUERTE_REMOTA] Error al disparar efecto: {e}")
+                    log_game.debug(f"[MUERTE_REMOTA] Error al disparar efecto: {e}")
 
                 # [DIAG] ELIMINAR del dict
-                log_game.warning(f"[MUERTE_REMOTA] [DELETE] Eliminando índice {indice_encontrado}...")
+                log_game.debug(f"[MUERTE_REMOTA] [DELETE] Eliminando índice {indice_encontrado}...")
                 room.enemies.pop(indice_encontrado)
                 enemigos_despues = len(room.enemies)
-                log_game.warning(f"[MUERTE_REMOTA] [DONE] ELIMINADO. Antes={enemigos_antes}, Después={enemigos_despues}")
+                log_game.debug(f"[MUERTE_REMOTA] [DONE] ELIMINADO. Antes={enemigos_antes}, Después={enemigos_despues}")
 
                 # Verificar si la sala quedó limpia
                 if enemigos_despues == 0:
-                    log_game.warning(f"[MUERTE_REMOTA] [CLEAR] ¡SALA LIMPIA! (era el último)")
+                    log_game.debug(f"[MUERTE_REMOTA] [CLEAR] ¡SALA LIMPIA! (era el último)")
             else:
-                log_game.warning(f"[MUERTE_REMOTA] [NOTFOUND] NO ENCONTRADO {enemy_type} @ ({pos_x}, {pos_y}) (tol={tolerance})")
+                log_game.debug(f"[MUERTE_REMOTA] [NOTFOUND] NO ENCONTRADO {enemy_type} @ ({pos_x}, {pos_y}) (tol={tolerance})")
                 # [DIAG] Mostrar qué había
                 if room.enemies:
-                    log_game.warning(f"[MUERTE_REMOTA] Enemigos en sala: {[(e.__class__.__name__, f'({e.x:.0f},{e.y:.0f})', getattr(e, 'hp', '?')) for e in room.enemies]}")
+                    log_game.debug(f"[MUERTE_REMOTA] Enemigos en sala: {[(e.__class__.__name__, f'({e.x:.0f},{e.y:.0f})', getattr(e, 'hp', '?')) for e in room.enemies]}")
                 else:
-                    log_game.warning(f"[MUERTE_REMOTA] Sala está vacía (0 enemigos)")
+                    log_game.debug(f"[MUERTE_REMOTA] Sala está vacía (0 enemigos)")
 
         except Exception as e:
             log_game.error(f"[MUERTE_REMOTA] ERROR CRÍTICO: {e}", exc_info=True)
@@ -1424,15 +1424,15 @@ class Game:
         # [DIAG] Log del disparo del cliente
         import time
         ts = time.time()
-        log_game.warning(f"[DISPARO_CLIENTE] t={ts:.3f} Disparo desde cliente @ ({x:.1f}, {y:.1f}) dir=({dir_x:.2f}, {dir_y:.2f}) daño={damage}")
+        log_game.debug(f"[DISPARO_CLIENTE] t={ts:.3f} Disparo desde cliente @ ({x:.1f}, {y:.1f}) dir=({dir_x:.2f}, {dir_y:.2f}) daño={damage}")
 
         room = self.dungeon.current_room
         if not hasattr(room, "enemies"):
-            log_game.warning(f"[DISPARO_CLIENTE] Sala no tiene atributo 'enemies'")
+            log_game.debug(f"[DISPARO_CLIENTE] Sala no tiene atributo 'enemies'")
             return
 
         enemigos_antes = len(room.enemies)
-        log_game.warning(f"[DISPARO_CLIENTE] Buscando colisión entre {enemigos_antes} enemigos")
+        log_game.debug(f"[DISPARO_CLIENTE] Buscando colisión entre {enemigos_antes} enemigos")
 
         # Buscar colisión simple en posición inicial
         # (En una versión más sofisticada, simularíamos la trayectoria)
@@ -1442,7 +1442,7 @@ class Game:
             if bullet_rect.colliderect(enemy_rect):
                 # [DIAG] Colisión detectada
                 hp_antes = getattr(enemy, "hp", -1)
-                log_game.warning(f"[DISPARO_CLIENTE] [HIT] Enemigo[{i}] ({enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}), HP={hp_antes})")
+                log_game.debug(f"[DISPARO_CLIENTE] [HIT] Enemigo[{i}] ({enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}), HP={hp_antes})")
 
                 # Enemigo golpeado - aplicar daño
                 if hasattr(enemy, "take_damage"):
@@ -1451,11 +1451,11 @@ class Game:
                     enemy.hp -= damage
 
                 hp_despues = getattr(enemy, "hp", -1)
-                log_game.warning(f"[DISPARO_CLIENTE] Daño aplicado: HP {hp_antes} -> {hp_despues}")
+                log_game.debug(f"[DISPARO_CLIENTE] Daño aplicado: HP {hp_antes} -> {hp_despues}")
 
                 # Si el enemigo muere, enviar evento
                 if enemy.hp <= 0:
-                    log_game.warning(f"[DISPARO_CLIENTE] [DEATH] Enemigo muere. Enviando evento enemigo_muerto...")
+                    log_game.debug(f"[DISPARO_CLIENTE] [DEATH] Enemigo muere. Enviando evento enemigo_muerto...")
                     from network.protocol import msg_enemigo_muerto
                     evento_muerte = msg_enemigo_muerto(
                         enemy.x, enemy.y,
@@ -1463,7 +1463,7 @@ class Game:
                         (self.dungeon.i, self.dungeon.j)
                     )
                     self.net.enviar(evento_muerte)
-                    log_game.warning(f"[DISPARO_CLIENTE] [DEATH] Evento enviado. Quedarán {enemigos_antes - 1} enemigos")
+                    log_game.debug(f"[DISPARO_CLIENTE] [DEATH] Evento enviado. Quedarán {enemigos_antes - 1} enemigos")
                 else:
                     log_game.debug(f"[DISPARO_CLIENTE] Enemigo sobrevivió (HP={hp_despues})")
                 break
@@ -2965,13 +2965,13 @@ class Game:
             if self._diag_render_counter % 10 == 0 or total_enemigos <= 2:
                 muertos_en_lista = sum(1 for e in room.enemies if getattr(e, "_is_dying", False))
                 vivos = total_enemigos - muertos_en_lista
-                log_game.warning(f"[RENDER] room.enemies={total_enemigos} (vivos={vivos}, muriendo={muertos_en_lista})")
+                log_game.debug(f"[RENDER] room.enemies={total_enemigos} (vivos={vivos}, muriendo={muertos_en_lista})")
                 for i, enemy in enumerate(room.enemies):
                     dying = getattr(enemy, "_is_dying", False)
                     hp = getattr(enemy, "hp", "?")
                     enemy_id = getattr(enemy, "enemy_id", "?")
                     pos = f"({enemy.x:.0f},{enemy.y:.0f})"
-                    log_game.warning(f"[RENDER]   [{i}] {enemy_id} {enemy.__class__.__name__} @ {pos} hp={hp} dying={dying}")
+                    log_game.debug(f"[RENDER]   [{i}] {enemy_id} {enemy.__class__.__name__} @ {pos} hp={hp} dying={dying}")
 
             # Renderizar cada enemigo
             for i, enemy in enumerate(room.enemies):
