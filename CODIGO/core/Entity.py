@@ -29,12 +29,6 @@ class Entity:
                 if room.is_blocked(tx, ty): return True
         return False
 
-    def _collides_obstacle_buffer(self, room) -> bool:
-        """Verifica colisión con buffer zone de obstáculos."""
-        if not hasattr(room, 'has_obstacle_collision_with_buffer'):
-            return False
-        return room.has_obstacle_collision_with_buffer(self.rect(), buffer_pixels=16.0)
-
     def _resolve_axis(self, room, axis: str, positive: bool) -> float:
         r = self.rect()
         x0, y0 = r.left // CFG.TILE_SIZE, r.top // CFG.TILE_SIZE
