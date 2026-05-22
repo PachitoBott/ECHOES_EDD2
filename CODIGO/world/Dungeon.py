@@ -117,8 +117,8 @@ class Dungeon:
         # <<< NUEVO: sala del boss en el extremo más lejano de Zona 2
         self._place_boss_room()
 
-        # Limpiar corredor norte de la sala del boss (fue tallado antes de ser designada como boss)
-        self._clean_boss_north_corridor()
+        # Eliminar cualquier sala que esté directamente arriba del boss
+        self._remove_room_north_of_boss()
 
         # <<< NUEVO: sala del Profesor Ibarra en Zona 1
         self._place_profesor_ibarra_rooms()
@@ -441,38 +441,21 @@ class Dungeon:
         room.setup_boss_room()
         self.boss_pos = boss_pos
 
-    def _clean_boss_north_corridor(self) -> None:
+    def _remove_room_north_of_boss(self) -> None:
         """
-        Limpia (rellena) el corredor norte de la sala del boss.
-        El corredor fue tallado en _link_neighbors_and_carve() ANTES de que
-        se designara como sala del boss. Aquí lo rellenamos de tiles sólidos.
+        Elimina la sala que está directamente arriba (norte) de la sala del boss.
+        Esto previene completamente cualquier entrada por arriba.
         """
         if not hasattr(self, "boss_pos"):
             return
 
-        boss_room = self.rooms.get(self.boss_pos)
-        if boss_room is None or boss_room.bounds is None:
-            return
+        boss_x, boss_y = self.boss_pos
+        room_north = (boss_x, boss_y - 1)
 
-        rx, ry, rw, rh = boss_room.bounds
-        ts = CFG.TILE_SIZE
-        length_tiles = 3  # Coincide con carve_corridors
-
-        # Rellenar los tiles del corredor norte
-        # El corredor se talla desde ry - length_tiles hasta ry
-        for y in range(ry - length_tiles, ry):
-            if 0 <= y < CFG.MAP_H:
-                # Calcular x del corredor (centrado igual que en carve_corridors)
-                W = 2  # _door_width_tiles
-                center_tx2 = rx * 2 + rw
-                left_tile = (center_tx2 - W) // 2
-
-                for x in range(left_tile, left_tile + W):
-                    if 0 <= x < CFG.MAP_W:
-                        # Rellenar con tile sólido (1 = pared)
-                        boss_room.tiles[y][x] = 1
-
-        print(f"[DUNGEON] Corredor norte bloqueado en sala del boss {self.boss_pos}")
+        # Si existe una sala al norte del boss, eliminarla
+        if room_north in self.rooms:
+            del self.rooms[room_north]
+            print(f"[DUNGEON] Sala al norte del boss {room_north} eliminada para prevenir entrada superior")
 
     def _populate_hostile_obstacles(self) -> None:
         if not self.rooms:
