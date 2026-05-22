@@ -180,6 +180,9 @@ class EnemyAnimator:
     def current_surface(self) -> pygame.Surface:
         frames = self.animations.get(self.state)
         if not frames:
+            # [DEBUG] Log cuando falta animación para un estado
+            from dev.logger import log_game
+            log_game.debug(f"[ANIMATOR_BUG] No frames for state='{self.state}' (available: {list(self.animations.keys())})")
             return self.animations.fallback
         index = min(self.frame_index, len(frames) - 1)
         return frames[index]

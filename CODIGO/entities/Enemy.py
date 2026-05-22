@@ -17,6 +17,15 @@ ENEMY_PROJECTILE_SPEED_SCALE = 4.0 / 5.0
 
 IDLE, WANDER, CHASE = 0, 1, 2
 
+# Contador global para generar IDs únicos de enemigos
+_ENEMY_COUNTER = 0
+
+def _generar_enemy_id() -> str:
+    """Genera un ID único para cada enemigo instanciado."""
+    global _ENEMY_COUNTER
+    _ENEMY_COUNTER += 1
+    return f"enemy_{_ENEMY_COUNTER:06d}"
+
 class Enemy(Entity):
     """Base con FSM + LoS. Subclases cambian stats/comportamientos."""
 
@@ -28,6 +37,9 @@ class Enemy(Entity):
         super().__init__(x, y, w=12, h=12, speed=40.0)
         self.hp = hp
         self.gold_reward = gold_reward
+
+        # ID único para sincronización en multijugador
+        self.enemy_id = _generar_enemy_id()
 
         # Estados y radios
         self.state = IDLE
@@ -274,6 +286,21 @@ class Enemy(Entity):
 
     def draw(self, surf: pygame.Surface) -> None:
         frame = self.animator.current_surface()
+
+        # [DIAGNOSTICO] Log para detectar frames None o inválidos
+        from dev.logger import log_game
+        anim_state = getattr(self.animator, "state", "?")
+        oneshot_state = getattr(self.animator, "oneshot_state", None)
+        if frame is None:
+            log_game.warning(f"[DIAGNOSTICO] {self.enemy_id} current_surface() devolvió None! "
+                           f"animator.state={anim_state} oneshot_state={oneshot_state}")
+        elif frame.get_size() == (0, 0):
+            log_game.warning(f"[DIAGNOSTICO] {self.enemy_id} frame con size ZERO "
+                           f"animator.state={anim_state} oneshot_state={oneshot_state}")
+
+        if not frame:
+            return  # No dibujar si no hay frame válido
+
         if not self._facing_right:
             frame = pygame.transform.flip(frame, True, False)
         if self.hit_flash_timer > 0.0:
@@ -281,6 +308,7 @@ class Enemy(Entity):
             flash_overlay = pygame.Surface(frame.get_size(), pygame.SRCALPHA)
             flash_overlay.fill((255, 255, 255, 220))
             frame.blit(flash_overlay, (0, 0), special_flags=pygame.BLEND_ADD)
+
         dest = frame.get_rect(center=self.rect().center)
         surf.blit(frame, dest)
 
