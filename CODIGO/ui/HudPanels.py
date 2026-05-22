@@ -509,8 +509,9 @@ class HUDPanel:
         if not hasattr(self, '_corazones_cargados'):
             global _CORAZONES_CACHE
             if '_CORAZONES_CACHE' not in globals():
+                # Usar ruta relativa desde CODIGO/
                 _CORAZONES_CACHE = cargar_corazones(
-                    "CODIGO/assets/ui/Hearts_sprite_sheet.png",
+                    "assets/ui/Hearts_sprite_sheet.png",
                     render_size=64
                 )
             self._corazones_cargados = _CORAZONES_CACHE
