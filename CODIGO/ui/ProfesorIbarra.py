@@ -852,7 +852,8 @@ class ProfesorIbarra:
         if iid == "red_apoyo":
             # Se guarda para usar con Z (restaura FULL HP cuando se activa)
             # NO se aplica efecto inmediato - el jugador decide cuándo usarlo
-            player._ibarra_red_apoyo = True
+            # Acumula múltiples usos (contador)
+            player._ibarra_red_apoyo = getattr(player, "_ibarra_red_apoyo", 0) + 1
 
         elif iid == "modo_privado":
             # Se guarda para usar con R

@@ -762,22 +762,23 @@ class HUDPanel:
         Args:
             surface: superficie donde dibujar
             powers: dict con estado de poderes {
-                "red_apoyo": bool,
+                "red_apoyo": int (cantidad de curaciones acumuladas),
                 "modo_privado": bool,
                 "emp": bool,
                 "eco_señal": bool
             }
 
-        Los iconos aparecen solo si el poder correspondiente es True (jugador ha comprado el item).
+        Los iconos aparecen solo si el poder correspondiente tiene un valor positivo o True (jugador ha comprado el item).
         Se apilan verticalmente en el lado derecho del panel, con margen pequeño.
+        Para red_apoyo, muestra un número pequeño en la esquina inferior derecha indicando cantidad.
         """
         if not self._iconos_poderes:
             return  # Sin iconos cargados, no renderizar
 
         # Parámetros de posicionamiento
         ICON_SIZE = 28  # Tamaño de cada icono (ya escalado en cargar_iconos_poderes)
-        MARGEN_DERECHO = 52  # Margen desde el borde derecho del panel (40px más a la izquierda)
-        MARGEN_SUPERIOR = 50  # Margen desde el borde superior del panel (20px más arriba)
+        MARGEN_DERECHO = 102  # Margen desde el borde derecho del panel
+        MARGEN_SUPERIOR = 45  # Margen desde el borde superior del panel
         GAP_VERTICAL = 4  # Separación entre iconos
 
         # Posición X (alineada al borde derecho del panel, con margen)
@@ -790,10 +791,35 @@ class HUDPanel:
         orden_iconos = ["red_apoyo", "modo_privado", "emp", "eco_señal"]
 
         for nombre_poder in orden_iconos:
-            # Solo renderizar si el jugador tiene este poder
-            if powers.get(nombre_poder, False) and nombre_poder in self._iconos_poderes:
+            # Obtener el valor del poder (puede ser int para red_apoyo, bool para otros)
+            poder_valor = powers.get(nombre_poder, 0 if nombre_poder == "red_apoyo" else False)
+
+            # Renderizar si tiene un valor positivo (red_apoyo) o True (otros)
+            render_icon = (nombre_poder == "red_apoyo" and poder_valor > 0) or (nombre_poder != "red_apoyo" and poder_valor)
+
+            if render_icon and nombre_poder in self._iconos_poderes:
                 icono = self._iconos_poderes[nombre_poder]
                 surface.blit(icono, (int(icon_x), int(icon_y)))
+
+                # Si es red_apoyo y tiene cantidad > 0, mostrar número pequeño en esquina inferior derecha
+                if nombre_poder == "red_apoyo" and poder_valor > 0:
+                    try:
+                        # Fuente pequeña para el contador
+                        font_contador = pygame.font.SysFont(None, 16)
+                        text_contador = font_contador.render(str(poder_valor), True, (255, 255, 255))
+
+                        # Posición: esquina inferior derecha del icono
+                        count_x = int(icon_x + ICON_SIZE - text_contador.get_width() - 2)
+                        count_y = int(icon_y + ICON_SIZE - text_contador.get_height() - 2)
+
+                        # Dibujar fondo oscuro para mejor legibilidad
+                        bg_rect = text_contador.get_rect(topleft=(count_x - 1, count_y - 1))
+                        pygame.draw.rect(surface, (0, 0, 0), bg_rect.inflate(4, 2))
+
+                        # Dibujar número
+                        surface.blit(text_contador, (count_x, count_y))
+                    except Exception:
+                        pass
 
                 # Mover hacia abajo para el siguiente icono
                 icon_y += ICON_SIZE + GAP_VERTICAL

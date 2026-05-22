@@ -26,6 +26,7 @@ class GameOverScreen:
     # Colores Cyberpunk
     COLOR_NEON_BLUE = (0, 255, 255)
     COLOR_NEON_PINK = (255, 0, 128)
+    COLOR_NEON_RED = (255, 10, 10)
     COLOR_NEON_GREEN = (50, 255, 50)
     COLOR_TEXT_WHITE = (240, 240, 255)
 
@@ -61,6 +62,15 @@ class GameOverScreen:
 
         # Cargar sonido de botón (busca en assets/audio)
         self.click_sound = self._load_sound("boton.mp3")
+
+        # Cargar fondo de Game Over (panel_de_muerte.png)
+        self.death_panel = self._load_image("panel_de_muerte.png")
+        self.death_panel_scaled: pygame.Surface | None = None
+        self.DEATH_PANEL_ALPHA = 255  # Completamente opaco
+
+        # Cargar sprites de botones (del menú)
+        self.btn_normal = self._load_image("Boton_normal.png")
+        self.btn_hover = self._load_image("Boton_hover.png")
 
         self._title_surface: pygame.Surface | None = None
         self._title_rect: pygame.Rect | None = None
@@ -108,6 +118,17 @@ class GameOverScreen:
                     return None
         
         print(f"Advertencia: Sonido '{filename}' no encontrado en assets/audio")
+        return None
+
+    def _load_image(self, filename: str) -> pygame.Surface | None:
+        """Carga una imagen desde assets/ui."""
+        path = self._resolve_ui_path(filename)
+        if path:
+            try:
+                return pygame.image.load(str(path)).convert_alpha()
+            except pygame.error as e:
+                print(f"Error cargando imagen {filename}: {e}")
+                return None
         return None
 
     def _get_font(self, font_name: str, size: int) -> pygame.font.Font:
@@ -167,6 +188,33 @@ class GameOverScreen:
         return max(max_label_width + self.BUTTON_PADDING_X * 2, 300)
 
     # ------------------------------------------------------------------
+    # Renderizado del fondo (panel_de_muerte.png)
+    # ------------------------------------------------------------------
+    def _scale_death_panel_if_needed(self, width: int, height: int) -> None:
+        """Escala panel_de_muerte.png a la resolución actual si es necesario."""
+        if not self.death_panel:
+            return
+
+        # Si ya está escalada al tamaño correcto, no hacer nada
+        if self.death_panel_scaled and self.death_panel_scaled.get_size() == (width, height):
+            return
+
+        # Escalar a la resolución completa
+        self.death_panel_scaled = pygame.transform.scale(self.death_panel, (width, height))
+
+    def _render_death_panel_background(self, surface: pygame.Surface) -> None:
+        """
+        Renderiza el panel_de_muerte.png como fondo semitransparente.
+        Cubre toda la pantalla permitiendo que el juego se vea detrás.
+        """
+        width, height = surface.get_size()
+
+        if self.death_panel_scaled:
+            # Aplicar alpha (transparencia)
+            self.death_panel_scaled.set_alpha(self.DEATH_PANEL_ALPHA)
+            surface.blit(self.death_panel_scaled, (0, 0))
+
+    # ------------------------------------------------------------------
     # Main loop
     # ------------------------------------------------------------------
     def run(
@@ -212,23 +260,28 @@ class GameOverScreen:
     # ------------------------------------------------------------------
     def _draw(self, background: pygame.Surface | None) -> None:
         width, height = self.screen.get_size()
-        
+
+        # CAPA 1: Fondo (último frame del juego)
         if background is not None:
             scaled_background = pygame.transform.smoothscale(background, (width, height))
             self.screen.blit(scaled_background, (0, 0))
-            overlay = pygame.Surface((width, height), pygame.SRCALPHA)
-            overlay.fill((20, 0, 10, 210))
-            self.screen.blit(overlay, (0, 0))
         else:
+            # Fallback: fondo negro si no hay background
             self.screen.fill((10, 0, 10))
+
+        # CAPA 2: panel_de_muerte.png (semitransparente)
+        self._scale_death_panel_if_needed(width, height)
+        self._render_death_panel_background(self.screen)
 
         title_text = "GAME OVER"
         if self._title_rect:
-            shadow_surf = self.title_font.render(title_text, True, self.COLOR_NEON_PINK)
+            # Shadow en rojo oscuro
+            shadow_surf = self.title_font.render(title_text, True, (80, 0, 0))
             shadow_rect = shadow_surf.get_rect(center=(self._title_rect.centerx + 5, self._title_rect.centery + 5))
             self.screen.blit(shadow_surf, shadow_rect)
-            
-            title_surf = self.title_font.render(title_text, True, self.COLOR_NEON_BLUE)
+
+            # Título en rojo neón
+            title_surf = self.title_font.render(title_text, True, self.COLOR_NEON_RED)
             self.screen.blit(title_surf, self._title_rect)
 
         for surface, rect in self._stats_surfaces:
@@ -238,16 +291,23 @@ class GameOverScreen:
 
         for button, rect in self._button_rects:
             hovered = rect.collidepoint(mouse_pos)
-            
-            bg_color = (0, 0, 0, 180) if not hovered else (60, 20, 40, 200)
-            border_color = self.COLOR_NEON_BLUE if not hovered else self.COLOR_NEON_PINK
-            
-            btn_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-            pygame.draw.rect(btn_surf, bg_color, btn_surf.get_rect(), border_radius=4)
-            pygame.draw.rect(btn_surf, border_color, btn_surf.get_rect(), 2, border_radius=4)
-            self.screen.blit(btn_surf, rect)
 
-            text_color = self.COLOR_TEXT_WHITE if not hovered else self.COLOR_NEON_BLUE
+            # ── SPRITE DEL BOTÓN ──
+            sprite = self.btn_hover if hovered else self.btn_normal
+            if sprite:
+                scaled = pygame.transform.smoothscale(sprite, (rect.width, rect.height))
+                self.screen.blit(scaled, rect.topleft)
+            else:
+                # Fallback: dibujar rectángulo si no carga la imagen
+                bg_color = (0, 0, 0, 180) if not hovered else (60, 20, 40, 200)
+                border_color = self.COLOR_NEON_BLUE if not hovered else self.COLOR_NEON_PINK
+                btn_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+                pygame.draw.rect(btn_surf, bg_color, btn_surf.get_rect(), border_radius=4)
+                pygame.draw.rect(btn_surf, border_color, btn_surf.get_rect(), 2, border_radius=4)
+                self.screen.blit(btn_surf, rect)
+
+            # ── TEXTO centrado sobre el sprite ──
+            text_color = self.COLOR_TEXT_WHITE if not hovered else self.COLOR_NEON_RED
             label_surface = self.button_font.render(button.label.upper(), True, text_color)
             label_rect = label_surface.get_rect(center=rect.center)
             self.screen.blit(label_surface, label_rect)
