@@ -1745,7 +1745,20 @@ class Game:
         self._update_enemies(dt, room)
         # Actualizar boss si existe en la sala
         if hasattr(room, "boss") and room.boss is not None:
-            room.boss.update(dt)
+            # Preparar lista de jugadores activos (local + remotos)
+            jugadores_activos = [self.player]
+
+            # Agregar jugadores remotos si existen
+            for remote_player in self.remote_players.values():
+                if hasattr(remote_player, 'x') and hasattr(remote_player, 'y'):
+                    jugadores_activos.append(remote_player)
+
+            # Actualizar boss con lista de jugadores
+            room.boss.update(dt, jugadores_activos)
+
+            # Verificar colisiones de ataques del boss con cada jugador
+            for jugador in jugadores_activos:
+                room.boss.verificar_colisiones_jugador(jugador)
 
         # En modo servidor: actualizar también enemigos en salas con jugadores remotos
         if self.net and self.net.es_servidor:
