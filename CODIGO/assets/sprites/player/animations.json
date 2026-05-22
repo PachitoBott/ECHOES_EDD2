@@ -28,28 +28,28 @@
       "total_frames": 10,
       "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
       "fps": 20,
-      "loop": false
+      "loop": true
     },
     "pistol_aim_run": {
       "file": "FutureSoldier_PistolAimRun.png",
       "total_frames": 8,
       "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7],
       "fps": 24,
-      "loop": false
+      "loop": true
     },
     "pistol_aim_run_up": {
       "file": "FutureSoldier_PistolAimRunUp.png",
       "total_frames": 8,
       "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7],
       "fps": 24,
-      "loop": false
+      "loop": true
     },
     "pistol_aim_run_down": {
       "file": "FutureSoldier_PistolAimRunDown.png",
       "total_frames": 8,
       "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7],
       "fps": 24,
-      "loop": false
+      "loop": true
     },
     "death": {
       "file": "FutureSoldier_Death.png",
