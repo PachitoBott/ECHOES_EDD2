@@ -1131,14 +1131,30 @@ class Game:
         # PASO 1: Crear mapa de IDs de enemigos del servidor
         server_enemies_by_id = {e.get("id"): e for e in enemies_list}
 
-        # PASO 2: Eliminar enemigos que NO envía el servidor
+        # PASO 2: Recolectar TODOS los IDs a eliminar (fantasmas + muertos)
         ids_a_eliminar = []
+        ids_muertos = set()  # [FIX SYNC] Rastrear enemigos que el servidor envía como muertos
+
         for i, enemy in enumerate(room.enemies):
             enemy_id = getattr(enemy, "enemy_id", None)
-            if enemy_id and enemy_id not in server_enemies_by_id:
+            if not enemy_id:
+                continue
+
+            # ¿El enemigo está en la lista del servidor?
+            if enemy_id not in server_enemies_by_id:
+                # [FANTASMA] No está en servidor → eliminar
                 ids_a_eliminar.append(i)
                 log_game.info(f"[SYNC] Eliminando enemigo fantasma {enemy_id} (no en servidor)")
+            else:
+                # [FIX SYNC] ¿El servidor dice que está muerto?
+                server_vivo = server_enemies_by_id[enemy_id].get("vivo", True)
+                if not server_vivo:
+                    # [MUERTO] Servidor envía vivo=False → eliminar INMEDIATAMENTE
+                    ids_a_eliminar.append(i)
+                    ids_muertos.add(enemy_id)
+                    log_game.info(f"[SYNC] Enemigo {enemy_id} MUERTO en servidor — eliminación inmediata")
 
+        # Eliminar en orden inverso para mantener índices
         for i in sorted(ids_a_eliminar, reverse=True):
             room.enemies.pop(i)
 
@@ -1150,16 +1166,23 @@ class Game:
         }
 
         for server_id, server_data in server_enemies_by_id.items():
+            # [FIX SYNC] Saltar enemigos que ya fueron eliminados por estar muertos
+            if server_id in ids_muertos:
+                continue
+
             if server_id in client_enemy_ids_por_id:
                 # Actualizar enemigo existente
                 enemy = client_enemy_ids_por_id[server_id]
                 server_vivo = server_data.get("vivo", True)
 
+                # [FIX SYNC] Este bloque ahora NO debería ejecutarse porque los muertos
+                # ya fueron eliminados en PASO 2, pero lo mantenemos como respaldo defensivo
                 if not server_vivo:
-                    # Marcar para muerte
+                    # Enemigo marcado como muerto por servidor
                     if not getattr(enemy, "_is_dying", False):
                         enemy._is_dying = True
                         enemy._ready_to_remove = True
+                        log_game.warning(f"[SYNC] RESPALDO: {server_id} marcado como muerto (ya debería estar eliminado)")
                 else:
                     # Limpiar banderas de muerte si el servidor dice que está vivo
                     if getattr(enemy, "_is_dying", False):
@@ -1221,7 +1244,10 @@ class Game:
         # [DIAGNOSTICO]
         client_ids = [getattr(e, "enemy_id", "?") for e in room.enemies]
         server_ids = list(server_enemies_by_id.keys())
-        log_game.debug(f"[SYNC] Reconciliación completada: cliente={len(client_ids)} enemigos, servidor={len(server_ids)}")
+        log_game.debug(
+            f"[SYNC] Reconciliación completada: cliente={len(client_ids)} enemigos, "
+            f"servidor={len(server_ids)}, muertos_eliminados={len(ids_muertos)}"
+        )
 
     def _handle_enemy_projectiles_state(self, ev: EventoRed) -> None:
         """
