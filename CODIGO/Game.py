@@ -1165,6 +1165,14 @@ class Game:
             if getattr(e, "enemy_id", None)
         }
 
+        # [DIAG] Verificar qué recibe del servidor
+        muertos_recibidos = sum(1 for e in enemies_list if not e.get("vivo", True))
+        log_game.warning(f"[DIAG_CLIENTE] Recibido enemies_state: {len(enemies_list)} enemigos, {muertos_recibidos} muertos")
+        if muertos_recibidos > 0:
+            for e in enemies_list:
+                if not e.get("vivo", True):
+                    log_game.warning(f"[DIAG_CLIENTE] → Enemigo MUERTO: {e.get('id')} (vivo={e.get('vivo')})")
+
         for server_id, server_data in server_enemies_by_id.items():
             # [FIX SYNC] Saltar enemigos que ya fueron eliminados por estar muertos
             if server_id in ids_muertos:
@@ -1864,6 +1872,7 @@ class Game:
 
         # Preparar lista de enemigos
         enemies_list = []
+        muertos_en_servidor = 0  # [DIAG] Contar enemigos muertos
         for enemy in room.enemies:
             # Obtener estado del animator
             animator_state = "idle"
@@ -1875,13 +1884,18 @@ class Game:
                 if animator_state in ("shoot", "attack") and getattr(enemy, "_is_dying", False):
                     animator_state = "death"
 
+            vivo = not getattr(enemy, "_is_dying", False)
+            if not vivo:
+                muertos_en_servidor += 1
+                log_game.warning(f"[DIAG_SERVIDOR] Enviando MUERTO: {enemy.enemy_id} (_is_dying={getattr(enemy, '_is_dying', False)})")
+
             enemies_list.append({
                 "id": enemy.enemy_id,
                 "tipo": enemy.__class__.__name__,
                 "x": round(enemy.x, 1),
                 "y": round(enemy.y, 1),
                 "health": enemy.hp,
-                "vivo": not getattr(enemy, "_is_dying", False),
+                "vivo": vivo,
                 "animator_state": animator_state,
                 "facing_right": getattr(enemy, "_facing_right", True),
             })
@@ -1891,6 +1905,7 @@ class Game:
             from network.protocol import msg_enemies_state
             msg = msg_enemies_state(enemies_list, (self.dungeon.i, self.dungeon.j))
             self.net.enviar(msg)
+            log_game.debug(f"[DIAG_SERVIDOR] Sync: {len(enemies_list)} enemigos, {muertos_en_servidor} muertos")
 
     def _sync_enemies_to_client_room(self, room, room_pos: tuple) -> None:
         """
@@ -2724,6 +2739,18 @@ class Game:
         room.draw(self.world, current_tileset)
 
         if hasattr(room, "enemies"):
+            # [DIAG] Log cada 60 frames para ver qué se renderiza
+            if not hasattr(self, '_diag_render_counter'):
+                self._diag_render_counter = 0
+            self._diag_render_counter += 1
+
+            if self._diag_render_counter % 60 == 0:
+                muertos_en_lista = sum(1 for e in room.enemies if getattr(e, "_is_dying", False))
+                log_game.warning(f"[DIAG_CLIENTE_RENDER] room.enemies={len(room.enemies)}, muertos={muertos_en_lista}")
+                for enemy in room.enemies:
+                    dying = getattr(enemy, "_is_dying", False)
+                    log_game.warning(f"[DIAG_CLIENTE_RENDER] → {enemy.enemy_id} (_is_dying={dying})")
+
             for enemy in room.enemies:
                 enemy.draw(self.world)
 
