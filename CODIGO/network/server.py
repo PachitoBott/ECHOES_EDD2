@@ -376,6 +376,12 @@ class ServidorEchoes:
                     conn.close()
                     return
 
+                # Verificar que el servidor tiene una seed válida
+                if self.seed is None:
+                    conn.sendall(msg_rechazado("Servidor no listo (sin seed)").serializar())
+                    conn.close()
+                    return
+
                 # Confirmar conexion
                 conn.settimeout(None)   # modo bloqueante normal
                 conn.sendall(msg_aceptado(rol, self.seed).serializar())

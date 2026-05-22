@@ -464,6 +464,10 @@ class NetworkManager:
 
     def _traducir(self, msg: Mensaje) -> Optional[EventoRed]:
         """Convierte un Mensaje crudo en un EventoRed normalizado."""
+        if msg.tipo == TipoMensaje.ACEPTADO:
+            # Cliente recibe confirmación de conexión con seed
+            return EventoRed("aceptado", msg.datos, msg.origen)
+
         if msg.tipo == TipoMensaje.ESTADO:
             return EventoRed("estado", msg.datos, msg.origen)
 

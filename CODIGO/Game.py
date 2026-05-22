@@ -14,6 +14,11 @@ from ui.StartMenu import StartMenu
 from core.Tileset import Tileset
 from core.TilesetManager import TilesetManager
 from entities.Player import Player
+from entities.Enemy import (
+    IDLE as ENEMY_IDLE,
+    FastChaserEnemy, ShooterEnemy, BasicEnemy, TankEnemy,
+    FakerEnemy, TelefonoEnemy, EmojiEnemy
+)
 from world.Dungeon import Dungeon
 from world.background import MatrixBackground
 from ui.Minimap import Minimap
@@ -43,6 +48,156 @@ from dev.debug_console import DebugConsole
 
 # --- Sistemas de efectos ---
 from systems.death_effect import DeathEffectManager
+
+
+class RemoteProjectile:
+    """Representación simple de un proyectil sincronizado del servidor."""
+
+    def __init__(self, remote_id: int, x: float, y: float, dx: float = 0, dy: float = 0):
+        self._remote_id = remote_id
+        self.x = x
+        self.y = y
+        self.dx = dx
+        self.dy = dy
+        self.alive = True
+        self.radius = 4
+        self.color = (255, 230, 140)  # Color de bala de enemigo
+
+    def rect(self):
+        r = self.radius
+        return pygame.Rect(int(self.x - r), int(self.y - r), r * 2, r * 2)
+
+    def draw(self, surf: pygame.Surface):
+        """Renderiza el proyectil."""
+        if not self.alive:
+            return
+        pygame.draw.circle(surf, self.color, (int(self.x), int(self.y)), self.radius)
+
+    def update(self, dt: float, room):
+        """Los proyectiles remotos son actualizados por sincronización, no localmente."""
+        pass
+
+
+class RemoteEnemy:
+    """
+    Representación de un enemigo remoto sincronizado del servidor.
+    Solo renderiza — sin lógica de actualización local.
+
+    Carga sprites y renderiza el enemigo remoto en pantalla.
+    """
+
+    def __init__(self, enemy_id: str, enemy_type: str, x: float, y: float):
+        self.enemy_id = enemy_id
+        self.tipo = enemy_type
+        self.x = x
+        self.y = y
+        self.health = 1
+        self.vivo = True
+        self.w = 48
+        self.h = 48
+        self.animator_state = "idle"
+        self.facing_right = True
+        self.frame_index = 0
+        self.frame_timer = 0.0
+        self.frame_speed = 0.1  # Segundos por frame
+
+        # Cargar sprites del enemigo
+        self._cargar_sprites()
+
+    def _cargar_sprites(self):
+        """Carga los sprites del enemigo según su tipo."""
+        try:
+            from entities.enemy_sprites import load_enemy_animation_set
+            self.animations = load_enemy_animation_set(self.tipo)
+            log_game.debug(f"[REMOTE_ENEMY] {self.enemy_id} cargó sprites para tipo '{self.tipo}'")
+        except Exception as e:
+            log_game.warning(f"[REMOTE_ENEMY] Error cargando sprites para {self.tipo}: {e}")
+            # Crear animaciones placeholder
+            placeholder = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
+            pygame.draw.rect(placeholder, (255, 100, 100), (0, 0, self.w, self.h))
+            pygame.draw.line(placeholder, (255, 255, 255), (0, 0), (self.w, self.h), 2)
+            self.animations = {
+                "idle": [placeholder],
+                "run": [placeholder],
+                "shoot": [placeholder],
+                "attack": [placeholder],
+                "death": [placeholder],
+            }
+
+    def actualizar_desde_red(self, data: dict):
+        """Actualiza posición, estado y animación desde el servidor."""
+        self.x = data.get("x", self.x)
+        self.y = data.get("y", self.y)
+        self.health = data.get("health", self.health)
+        self.vivo = data.get("vivo", True)
+
+        # Sincronizar estado de animación
+        nuevo_state = data.get("animator_state", "idle")
+        if nuevo_state != self.animator_state:
+            self.animator_state = nuevo_state
+            self.frame_index = 0
+            self.frame_timer = 0.0
+
+        # Sincronizar dirección
+        self.facing_right = data.get("facing_right", True)
+
+    def update(self, dt: float):
+        """Actualiza la animación del enemigo remoto."""
+        if not self.vivo:
+            self.animator_state = "death"
+
+        # Avanzar frame
+        self.frame_timer += dt
+        # EnemyAnimationSet.get() toma solo un argumento (el estado)
+        state_frames = self.animations.get(self.animator_state)
+
+        if state_frames and len(state_frames) > 0:
+            if self.frame_timer >= self.frame_speed:
+                self.frame_timer = 0.0
+                self.frame_index = (self.frame_index + 1) % len(state_frames)
+
+    def draw(self, surf: pygame.Surface):
+        """Renderiza el enemigo remoto en pantalla."""
+        if not self.vivo:
+            return
+
+        try:
+            # Obtener frame actual
+            # EnemyAnimationSet.get() toma solo un argumento
+            state_frames = self.animations.get(self.animator_state)
+            if not state_frames or len(state_frames) == 0:
+                state_frames = self.animations.get("idle")
+
+            if not state_frames:
+                log_game.warning(f"[REMOTE_ENEMY] {self.enemy_id} sin frames para estado '{self.animator_state}'")
+                return
+
+            # Obtener frame actual de forma segura
+            idx = min(self.frame_index, len(state_frames) - 1)
+            frame = state_frames[idx]
+
+            if frame is None or frame.get_size() == (0, 0):
+                log_game.warning(f"[REMOTE_ENEMY] {self.enemy_id} frame inválido para estado '{self.animator_state}'")
+                return
+
+            # Voltear si es necesario
+            if not self.facing_right:
+                frame = pygame.transform.flip(frame, True, False)
+
+            # Renderizar
+            rect = frame.get_rect(topleft=(int(self.x), int(self.y)))
+            surf.blit(frame, rect)
+
+        except Exception as e:
+            log_game.error(f"[REMOTE_ENEMY] Error renderizando {self.enemy_id}: {e}")
+
+    def rect(self):
+        """Retorna un rect para colisiones o renderizado."""
+        return pygame.Rect(self.x, self.y, self.w, self.h)
+
+    def _center(self):
+        """Centro del enemigo."""
+        return (self.x + self.w / 2, self.y + self.h / 2)
 
 
 class Game:
@@ -209,6 +364,7 @@ class Game:
         # ---------- Networking (Fase 3) ----------
         self.net: NetworkManager | None = None
         self.remote_players: dict = {}  # Almacena estado de jugadores remotos
+        self.remote_enemies: dict = {}  # Almacena enemigos remotos sincronizados del servidor
         self._send_state_interval = 0.1  # Enviar estado cada 100ms (~10 Hz)
         self._last_state_send = 0.0
         if self._net_mode == "server":
@@ -651,7 +807,15 @@ class Game:
         """
         log_net.info(f"[NET] Evento: {ev.tipo} desde {ev.origen}")
 
-        if ev.tipo == "jugador_unido":
+        if ev.tipo == "aceptado":
+            # Cliente: recibió confirmación de conexión con seed del servidor
+            seed = ev.datos.get("seed")
+            if seed is not None and self.current_seed is None:
+                # Usar la seed del servidor
+                log_net.info(f"✅ Usando seed del servidor: {seed}")
+                self.start_new_run(seed=seed)
+
+        elif ev.tipo == "jugador_unido":
             rol = ev.datos.get("rol")
             log_net.info(f"✅ Jugador {rol} se unió a la sesión")
 
@@ -668,7 +832,9 @@ class Game:
             origen = ev.origen
             if origen and origen != self.net.rol:  # No guardar nuestro propio estado
                 self.remote_players[origen] = ev.datos
-                # No loguear estado (demasiados logs por segundo)
+                # [DEBUG] Log para ver qué sala tiene el jugador remoto
+                sala_remota = ev.datos.get("sala", [0, 0])
+                log_game.debug(f"[ESTADO_REMOTO] {origen} está en sala {sala_remota}, pos=({ev.datos.get('pos_x')}, {ev.datos.get('pos_y')})")
 
         elif ev.tipo == "enemigo_muerto":
             # Enemigo fue eliminado por otro jugador
@@ -682,6 +848,28 @@ class Game:
             # Enemigo recibió daño de otro jugador
             self._handle_remote_damage(ev)
 
+        elif ev.tipo == "enemies_state":
+            # Sincronización de estado de todos los enemigos desde el servidor
+            self._handle_enemies_state(ev)
+
+        elif ev.tipo == "enemy_projectiles_state":
+            # Sincronización de balas de enemigos desde el servidor
+            self._handle_enemy_projectiles_state(ev)
+
+        elif ev.tipo == "bullet_fired_by_client":
+            # Servidor procesa disparo del cliente
+            if self.net and self.net.es_servidor:
+                self._process_client_bullet(ev)
+
+        elif ev.tipo == "room_clear":
+            # Sala se completó (todos los enemigos muertos)
+            room_id_raw = ev.datos.get("room_id")
+            room_id = tuple(room_id_raw) if isinstance(room_id_raw, (list, tuple)) else (0, 0)
+            if room_id == (self.dungeon.i, self.dungeon.j):
+                room = self.dungeon.current_room
+                if hasattr(room, "refresh_lock_state"):
+                    room.refresh_lock_state()
+
         elif ev.tipo == "apoyo_recibido":
             # Aliado envió un apoyo (curación, monedas, escudo, etc.)
             tipo_apoyo = ev.datos.get("apoyo")
@@ -692,8 +880,71 @@ class Game:
             descripcion = ev.datos.get("descripcion", "error desconocido")
             log_game.warning(f"⚠️ Error de red: {descripcion}")
 
+        elif ev.tipo == "accion_recibida":
+            # Acción enviada por el cliente (ej: solicitud de transición)
+            if self.net and self.net.es_servidor:
+                self._procesar_accion(ev)
+
+        elif ev.tipo == "transicion_completada":
+            # Notificación del servidor de que la transición se completó
+            if self.net and not self.net.es_servidor:
+                self._handle_transicion_completada(ev)
+
         else:
             log_net.debug(f"Evento de red no manejado: {ev.tipo}")
+
+    def _procesar_accion(self, ev: EventoRed) -> None:
+        """
+        Procesa acciones enviadas por el cliente al servidor.
+
+        Ejemplos: solicitud de transición de sala, etc.
+        """
+        accion = ev.datos.get("accion")
+        origen = ev.origen
+
+        if accion == "transicion":
+            # Cliente solicita transición en dirección
+            direccion = ev.datos.get("direccion")
+            if direccion:
+                log_game.info(f"[TRANSICION] Servidor procesando transición de {origen} en dirección {direccion}")
+                room = self.dungeon.current_room
+                if not getattr(room, "locked", False):
+                    self._procesar_transicion(direccion, room)
+
+    def _handle_transicion_completada(self, ev: EventoRed) -> None:
+        """
+        Recibe notificación de transición completada desde el servidor (cliente solo).
+
+        El servidor notifica que la transición se ejecutó y ambos jugadores están
+        en la nueva sala.
+        """
+        sala_nueva_raw = ev.datos.get("sala_nueva", [0, 0])
+        pos_aliado_raw = ev.datos.get("pos_aliado", [0, 0])
+
+        sala_nueva = tuple(sala_nueva_raw) if isinstance(sala_nueva_raw, (list, tuple)) else (0, 0)
+        pos_aliado = tuple(pos_aliado_raw) if isinstance(pos_aliado_raw, (list, tuple)) else (0.0, 0.0)
+
+        log_game.info(f"[TRANSICION] Cliente recibió transición completada a sala {sala_nueva}, pos={pos_aliado}")
+
+        # Mover a la nueva sala
+        self.dungeon.i, self.dungeon.j = sala_nueva
+
+        # Posicionar al jugador local (ALIADO)
+        self.player.x, self.player.y = pos_aliado
+
+        # Limpiar y actualizar
+        self.projectiles.clear()
+        self.enemy_projectiles.clear()
+        self.remote_enemies.clear()  # Limpiar enemigos remotos de la sala anterior
+        self.door_cooldown = 0.25
+
+        room = self.dungeon.current_room
+        depth = self.dungeon.depth_map.get((self.dungeon.i, self.dungeon.j), -1)
+        log_room.room_enter((self.dungeon.i, self.dungeon.j), depth)
+        # [FIX SYNC] Cliente NO crea enemigos — los recibe del servidor
+        if self.net is None or self.net.es_servidor:
+            self._spawn_room_enemies(room)
+        self._update_room_lock(room)
 
     def _handle_remote_enemy_death(self, ev: EventoRed) -> None:
         """
@@ -819,12 +1070,286 @@ class Game:
         except Exception as e:
             log_net.error(f"ERROR aplicando daño remoto: {e}", exc_info=True)
 
+    def _create_enemy_from_server_type(self, enemy_type: str, x: float, y: float, enemy_id: str | None = None):
+        """
+        [FIX SYNC] Crea un Enemy real basado en el tipo enviado por el servidor.
+        Se usa cuando el cliente recibe un enemigo nuevo del servidor.
+        """
+        enemies_map = {
+            "FastChaserEnemy": FastChaserEnemy,
+            "ShooterEnemy": ShooterEnemy,
+            "BasicEnemy": BasicEnemy,
+            "TankEnemy": TankEnemy,
+            "FakerEnemy": FakerEnemy,
+            "TelefonoEnemy": TelefonoEnemy,
+            "EmojiEnemy": EmojiEnemy,
+        }
+
+        try:
+            enemy_class = enemies_map.get(enemy_type)
+            if not enemy_class:
+                log_game.warning(f"[SYNC] Tipo desconocido de enemigo: {enemy_type}")
+                return None
+
+            enemy = enemy_class(x, y)
+
+            # [FIX SYNC] Si el servidor proporcionó un ID, reemplazar el ID generado localmente
+            if enemy_id:
+                enemy.enemy_id = enemy_id
+                log_game.debug(f"[SYNC] Creado {enemy_type} con ID servidor {enemy_id}")
+            else:
+                log_game.debug(f"[SYNC] Creado {enemy_type} con ID local {enemy.enemy_id}")
+
+            return enemy
+        except Exception as e:
+            log_game.error(f"[SYNC] Error creando enemigo {enemy_type}: {e}")
+            return None
+
+    def _handle_enemies_state(self, ev: EventoRed) -> None:
+        """
+        Sincroniza el estado de todos los enemigos desde el servidor.
+        [FIX SYNC] Reconcilia la lista completa basándose en datos del servidor.
+
+        El servidor es la única fuente de verdad. El cliente:
+        1. Elimina enemigos que NO envía el servidor
+        2. Crea enemigos que envía el servidor pero el cliente no tiene
+        3. Actualiza enemigos existentes
+        """
+        datos = ev.datos
+        enemies_list = datos.get("enemies", [])
+        room_id_raw = datos.get("room_id")
+        room_id = tuple(room_id_raw) if isinstance(room_id_raw, (list, tuple)) else (0, 0)
+
+        # Solo actualizar si estamos en la misma sala
+        if room_id != (self.dungeon.i, self.dungeon.j):
+            return
+
+        room = self.dungeon.current_room
+        if not hasattr(room, "enemies"):
+            return
+
+        # PASO 1: Crear mapa de IDs de enemigos del servidor
+        server_enemies_by_id = {e.get("id"): e for e in enemies_list}
+
+        # PASO 2: Recolectar TODOS los IDs a eliminar (fantasmas + muertos)
+        ids_a_eliminar = []
+        ids_muertos = set()  # [FIX SYNC] Rastrear enemigos que el servidor envía como muertos
+
+        for i, enemy in enumerate(room.enemies):
+            enemy_id = getattr(enemy, "enemy_id", None)
+            if not enemy_id:
+                continue
+
+            # ¿El enemigo está en la lista del servidor?
+            if enemy_id not in server_enemies_by_id:
+                # [FANTASMA] No está en servidor → eliminar
+                ids_a_eliminar.append(i)
+                log_game.info(f"[SYNC] Eliminando enemigo fantasma {enemy_id} (no en servidor)")
+            else:
+                # [FIX SYNC] ¿El servidor dice que está muerto?
+                server_vivo = server_enemies_by_id[enemy_id].get("vivo", True)
+                if not server_vivo:
+                    # [MUERTO] Servidor envía vivo=False → eliminar INMEDIATAMENTE
+                    ids_a_eliminar.append(i)
+                    ids_muertos.add(enemy_id)
+                    log_game.info(f"[SYNC] Enemigo {enemy_id} MUERTO en servidor — eliminación inmediata")
+
+        # Eliminar en orden inverso para mantener índices
+        for i in sorted(ids_a_eliminar, reverse=True):
+            room.enemies.pop(i)
+
+        # PASO 3: Actualizar/crear enemigos del servidor
+        client_enemy_ids_por_id = {
+            getattr(e, "enemy_id", None): e
+            for e in room.enemies
+            if getattr(e, "enemy_id", None)
+        }
+
+        for server_id, server_data in server_enemies_by_id.items():
+            # [FIX SYNC] Saltar enemigos que ya fueron eliminados por estar muertos
+            if server_id in ids_muertos:
+                continue
+
+            if server_id in client_enemy_ids_por_id:
+                # Actualizar enemigo existente
+                enemy = client_enemy_ids_por_id[server_id]
+                server_vivo = server_data.get("vivo", True)
+
+                # [FIX SYNC] Este bloque ahora NO debería ejecutarse porque los muertos
+                # ya fueron eliminados en PASO 2, pero lo mantenemos como respaldo defensivo
+                if not server_vivo:
+                    # Enemigo marcado como muerto por servidor
+                    if not getattr(enemy, "_is_dying", False):
+                        enemy._is_dying = True
+                        enemy._ready_to_remove = True
+                        log_game.warning(f"[SYNC] RESPALDO: {server_id} marcado como muerto (ya debería estar eliminado)")
+                else:
+                    # Limpiar banderas de muerte si el servidor dice que está vivo
+                    if getattr(enemy, "_is_dying", False):
+                        log_game.debug(f"[SYNC] {server_id} resincronizado vivo desde servidor")
+                        enemy._is_dying = False
+                        enemy._ready_to_remove = False
+                        if enemy.hp <= 0:
+                            enemy.hp = max(1, server_data.get("health", 1))
+
+                # Sincronizar posición, salud
+                enemy.x = server_data.get("x", enemy.x)
+                enemy.y = server_data.get("y", enemy.y)
+                enemy.hp = server_data.get("health", enemy.hp)
+
+                # Sincronizar animación
+                animator_state = server_data.get("animator_state", "idle")
+                if not server_vivo:
+                    animator_state = "death"
+
+                if hasattr(enemy, "animator"):
+                    if animator_state == "shoot":
+                        if hasattr(enemy.animator, "trigger_shoot"):
+                            enemy.animator.trigger_shoot()
+                    elif animator_state == "attack":
+                        if hasattr(enemy.animator, "trigger_attack"):
+                            enemy.animator.trigger_attack()
+                    else:
+                        if hasattr(enemy.animator, "set_base_state"):
+                            enemy.animator.set_base_state(animator_state)
+
+                # Sincronizar dirección
+                enemy._facing_right = server_data.get("facing_right", True)
+
+            else:
+                # Crear nuevo enemigo basado en datos del servidor
+                enemy_type = server_data.get("tipo", "BasicEnemy")
+                enemy = self._create_enemy_from_server_type(
+                    enemy_type,
+                    server_data.get("x", 0),
+                    server_data.get("y", 0),
+                    server_id
+                )
+
+                if enemy:
+                    # Actualizar estado inicial del enemigo
+                    enemy.hp = server_data.get("health", enemy.hp)
+                    enemy._facing_right = server_data.get("facing_right", True)
+
+                    # Si está muerto, marcar inmediatamente
+                    if not server_data.get("vivo", True):
+                        enemy._is_dying = True
+                        enemy._ready_to_remove = True
+
+                    room.enemies.append(enemy)
+                    log_game.info(f"[SYNC] Creado nuevo enemigo {server_id} ({enemy_type})")
+                else:
+                    log_game.error(f"[SYNC] No se pudo crear enemigo {server_id}")
+
+        # [DIAGNOSTICO]
+        client_ids = [getattr(e, "enemy_id", "?") for e in room.enemies]
+        server_ids = list(server_enemies_by_id.keys())
+        log_game.debug(
+            f"[SYNC] Reconciliación completada: cliente={len(client_ids)} enemigos, "
+            f"servidor={len(server_ids)}, muertos_eliminados={len(ids_muertos)}"
+        )
+
+    def _handle_enemy_projectiles_state(self, ev: EventoRed) -> None:
+        """
+        Sincroniza balas de enemigos desde el servidor.
+        En el cliente: crea/actualiza proyectiles remotos para renderizar.
+        """
+        try:
+            datos = ev.datos
+            projectiles_list = datos.get("projectiles", [])
+            room_id_raw = datos.get("room_id")
+            room_id = tuple(room_id_raw) if isinstance(room_id_raw, (list, tuple)) else (0, 0)
+
+            # Solo actualizar si estamos en la misma sala
+            if room_id != (self.dungeon.i, self.dungeon.j):
+                return
+
+            # Crear mapa de IDs de proyectiles del servidor
+            server_proj_by_id = {p.get("id"): p for p in projectiles_list}
+
+            # Crear o actualizar proyectiles remotos
+            for proj_id, proj_data in server_proj_by_id.items():
+                # Buscar si ya existe
+                found = False
+                for proj in self.remote_projectiles:
+                    if hasattr(proj, "_remote_id") and proj._remote_id == proj_id:
+                        # Actualizar posición
+                        proj.x = proj_data.get("x", proj.x)
+                        proj.y = proj_data.get("y", proj.y)
+                        proj.dx = proj_data.get("dx", proj.dx)
+                        proj.dy = proj_data.get("dy", proj.dy)
+                        proj.alive = proj_data.get("vivo", True)
+                        found = True
+                        break
+
+                if not found:
+                    # Crear nuevo proyectil remoto
+                    remote_proj = RemoteProjectile(
+                        proj_id,
+                        proj_data.get("x", 0),
+                        proj_data.get("y", 0),
+                        proj_data.get("dx", 0),
+                        proj_data.get("dy", 0),
+                    )
+                    self.remote_projectiles.append(remote_proj)
+
+            # Limpiar proyectiles que ya no existen en el servidor
+            self.remote_projectiles = [
+                p for p in self.remote_projectiles
+                if not hasattr(p, "_remote_id") or p._remote_id in server_proj_by_id
+            ]
+
+        except Exception as e:
+            log_net.error(f"Error en _handle_enemy_projectiles_state: {e}", exc_info=True)
+
+    def _process_client_bullet(self, ev: EventoRed) -> None:
+        """
+        El servidor procesa un disparo enviado por el cliente.
+        Detecta si impacta un enemigo y envía el evento correspondiente.
+        """
+        if not self.net or not self.net.es_servidor:
+            return
+
+        datos = ev.datos
+        x = datos.get("x", 0)
+        y = datos.get("y", 0)
+        dir_x = datos.get("dir_x", 0)
+        dir_y = datos.get("dir_y", 1)
+        damage = datos.get("damage", 1)
+
+        room = self.dungeon.current_room
+        if not hasattr(room, "enemies"):
+            return
+
+        # Buscar colisión simple en posición inicial
+        # (En una versión más sofisticada, simularíamos la trayectoria)
+        bullet_rect = pygame.Rect(x, y, 2, 2)
+        for enemy in room.enemies:
+            enemy_rect = enemy.rect()
+            if bullet_rect.colliderect(enemy_rect):
+                # Enemigo golpeado - aplicar daño
+                if hasattr(enemy, "take_damage"):
+                    enemy.take_damage(damage, (dir_x, dir_y))
+                else:
+                    enemy.hp -= damage
+
+                # Si el enemigo muere, enviar evento
+                if enemy.hp <= 0:
+                    from network.protocol import msg_enemigo_muerto
+                    evento_muerte = msg_enemigo_muerto(
+                        enemy.x, enemy.y,
+                        enemy.__class__.__name__,
+                        (self.dungeon.i, self.dungeon.j)
+                    )
+                    self.net.enviar(evento_muerte)
+                break
+
     def _on_player_shoot(self, pos: tuple[float, float], direction: tuple[float, float]) -> None:
         """Callback when player fires - send network event."""
         if not self.net:
             return
 
-        from network.protocol import msg_proyectil_disparado
+        from network.protocol import msg_proyectil_disparado, msg_bullet_fired_by_client
 
         weapon_id = getattr(self.player.weapon, "weapon_id", "default") if self.player.weapon else "default"
         sala_actual = (self.dungeon.i, self.dungeon.j)
@@ -839,6 +1364,19 @@ class Game:
         )
 
         self.net.enviar(evento)
+
+        # Si es cliente: también enviar evento para que el servidor procese colisiones
+        if not self.net.es_servidor:
+            damage = getattr(self.player.weapon, "damage", 1) if self.player.weapon else 1
+            evento_colisiones = msg_bullet_fired_by_client(
+                player_id=2,  # Cliente es siempre el jugador 2 (ALIADO)
+                x=pos[0],
+                y=pos[1],
+                dir_x=direction[0],
+                dir_y=direction[1],
+                damage=damage,
+            )
+            self.net.enviar(evento_colisiones)
 
     def add_pause_menu_button(
         self,
@@ -894,6 +1432,9 @@ class Game:
             )
 
     def _update(self, dt: float, events: list) -> None:
+        # Guardar dt para acceso en métodos de sincronización
+        self.dt = dt
+
         # --- Networking: procesar eventos de red y enviar estado ---
         if self.net:
             # Preparar estado local (ambos roles envían para sincronización)
@@ -974,8 +1515,21 @@ class Game:
                 return
 
         self._update_player(dt, room)
-        self._spawn_room_enemies(room)
+        # [FIX SYNC] Cliente NO crea enemigos — los recibe del servidor
+        # Solo el servidor debe llamar a _spawn_room_enemies
+        if self.net is None or self.net.es_servidor:
+            self._spawn_room_enemies(room)
         self._update_enemies(dt, room)
+
+        # En modo servidor: actualizar también enemigos en salas con jugadores remotos
+        if self.net and self.net.es_servidor:
+            self._update_remote_player_rooms(dt)
+
+        # Actualizar enemigos remotos (animaciones y sincronización)
+        self._update_remote_enemies(dt)
+
+        self._sync_enemies_to_client(room)  # Sincronizar enemigos con cliente remoto
+        self._sync_enemy_projectiles_to_client(room)  # Sincronizar balas de enemigos
         self._update_projectiles(dt, room)
         self.death_effect_manager.update(dt)
         room.update_obstacles(dt)  # Actualizar animaciones de obstáculos
@@ -1028,14 +1582,28 @@ class Game:
             difficulty = 1 + depth + branch_factor + (depth // 3) + on_main_path
             room.ensure_spawn(difficulty=difficulty)
 
-    def _get_closest_player_for_enemy(self, enemy) -> object:
+    def _get_closest_player_for_enemy(self, enemy, room_pos=None) -> object:
         """
         Retorna el jugador (local o remoto) más cercano al enemigo.
 
         Esto permite que los enemigos ataquen al jugador más cercano
         en modo multijugador cooperativo.
+
+        Args:
+            enemy: El enemigo a considerar
+            room_pos: Tupla (i, j) de la sala donde está el enemigo (opcional)
+                     Si no se proporciona, usa la sala actual del servidor
         """
         import math
+
+        # Si no se proporciona room_pos, usar la sala actual del servidor
+        if room_pos is None:
+            room_pos = (self.dungeon.i, self.dungeon.j)
+
+        # Validar que self.player existe
+        if not hasattr(self, "player") or self.player is None:
+            log_game.warning("Player no inicializado en _get_closest_player_for_enemy")
+            return None
 
         ex, ey = enemy._center()
 
@@ -1057,10 +1625,18 @@ class Game:
                     else (0, 0)
                 )
 
-                # Solo considerar si está en la misma sala
-                if sala_remota == (self.dungeon.i, self.dungeon.j):
-                    remote_x = datos.get("pos_x", 0)
-                    remote_y = datos.get("pos_y", 0)
+                # Solo considerar si está en la misma sala que el ENEMIGO (no del servidor)
+                if sala_remota == room_pos:
+                    # El formato correcto es "pos": [x, y], pero también soportar "pos_x"/"pos_y"
+                    pos_array = datos.get("pos", None)
+                    if pos_array and isinstance(pos_array, (list, tuple)) and len(pos_array) >= 2:
+                        remote_x = float(pos_array[0])
+                        remote_y = float(pos_array[1])
+                    else:
+                        # Fallback al formato antiguo
+                        remote_x = float(datos.get("pos_x", 0))
+                        remote_y = float(datos.get("pos_y", 0))
+
                     remote_dist = math.hypot(
                         (remote_x + 9) - ex,
                         (remote_y + 12) - ey
@@ -1078,17 +1654,92 @@ class Game:
                     self.w = 18
                     self.h = 24
 
+            # [DEBUG] Log de targeting
+            log_game.debug(f"[TARGETING] {enemy.enemy_id} local_dist={local_dist:.1f} remote_dist={remote_dist:.1f} REMOTE ({remote_pos[0]:.0f},{remote_pos[1]:.0f}) en sala {room_pos}")
             return RemotePlayer(remote_pos[0], remote_pos[1])
         else:
+            # [DEBUG] Log de targeting
+            if hasattr(self, 'remote_players') and self.remote_players:
+                log_game.debug(f"[TARGETING] {enemy.enemy_id} local_dist={local_dist:.1f} remote_players={len(self.remote_players)} pero no en sala {room_pos}")
             return self.player
 
     def _update_enemies(self, dt: float, room) -> None:
         if not hasattr(room, "enemies"):
             return
+
+        # En modo cliente: las posiciones vienen de la red, pero actualizar FSM y animaciones
+        if self.net and not self.net.es_servidor:
+            # Actualizar lógica de estado SIN mover (la posición viene de la red)
+            for enemy in room.enemies:
+                try:
+                    # Actualizar timers básicos
+                    if hasattr(enemy, "hit_flash_timer"):
+                        enemy.hit_flash_timer = max(0.0, enemy.hit_flash_timer - dt)
+                    if hasattr(enemy, "alert_timer"):
+                        enemy.alert_timer = max(0.0, enemy.alert_timer - dt)
+                    if hasattr(enemy, "_los_timer"):
+                        enemy._los_timer = max(0.0, enemy._los_timer - dt)
+                    if hasattr(enemy, "_movement_lock_timer"):
+                        enemy._movement_lock_timer = max(0.0, enemy._movement_lock_timer - dt)
+                    if hasattr(enemy, "stun_timer"):
+                        enemy.stun_timer = max(0.0, enemy.stun_timer - dt)
+
+                    # IMPORTANTE: Actualizar FSM (cambios de estado IDLE/WANDER/CHASE)
+                    # Esto permite que los enemigos persigan al jugador sin moverse
+                    if hasattr(enemy, "state") and hasattr(enemy, "_center"):
+                        if not self.player:
+                            log_game.debug(f"[CLIENTE] WARNING: self.player es None o no existe")
+                        else:
+                            ex, ey = enemy._center()
+                            px, py = self.player.x + self.player.w/2, self.player.y + self.player.h/2
+                            dx, dy = (px - ex), (py - ey)
+                            dist = math.hypot(dx, dy)
+                            has_los = room.has_line_of_sight(ex, ey, px, py)
+
+                            # Debug: ver si detect_radius existe
+                            detect_rad = getattr(enemy, "detect_radius", 150)
+                            lose_rad = getattr(enemy, "lose_radius", 200)
+
+                            # Cambios de estado IDLE ↔ WANDER ↔ CHASE (copiar lógica del update original)
+                            from entities.Enemy import IDLE, WANDER, CHASE
+
+                            if enemy.state != CHASE:
+                                if dist <= detect_rad and has_los:
+                                    log_game.debug(f"[CLIENTE] Enemy {enemy.enemy_id} detectó jugador: dist={dist:.1f}, detect_rad={detect_rad}, los={has_los}")
+                                    enemy.state = CHASE
+                                    enemy._los_timer = getattr(enemy, "_los_grace", 0.35)
+                            else:
+                                if has_los:
+                                    enemy._los_timer = getattr(enemy, "_los_grace", 0.35)
+                                else:
+                                    enemy._los_timer = max(0.0, enemy._los_timer - dt)
+                                if dist >= lose_rad or enemy._los_timer <= 0.0:
+                                    if hasattr(enemy, "_pick_wander"):
+                                        enemy._pick_wander()
+                                    enemy.state = WANDER
+
+                    # IMPORTANTE: Actualizar la animación para que los frames avancen
+                    # El animator protege los estados oneshot (shoot, attack) automáticamente
+                    # en set_base_state(), así que no interfiere con la sincronización del servidor
+                    if hasattr(enemy, "_update_animation"):
+                        enemy._update_animation(dt)
+
+                except Exception as e:
+                    log_game.error(f"Error actualizando enemy en cliente: {e}", exc_info=True)
+                    continue
+            # No llamar a enemy.update() porque eso modifica posición
+            return
+
+        # En modo servidor o modo offline: simular enemigos normalmente
         for enemy in room.enemies:
             # Obtener el jugador más cercano (local o remoto)
             closest_player = self._get_closest_player_for_enemy(enemy)
             enemy.update(dt, closest_player, room)
+            # [DEBUG] Log de actualización
+            if closest_player:
+                dist_to_player = math.hypot(closest_player.x - enemy.x, closest_player.y - enemy.y)
+                log_game.debug(f"[ENEMY_UPDATE] {enemy.enemy_id} pos=({enemy.x:.1f},{enemy.y:.1f}) state={getattr(enemy, 'state', 'N/A')} dist_to_player={dist_to_player:.1f}")
+
         notify = getattr(self.player, "notify_enemy_shot", None)
         for enemy in room.enemies:
             # Obtener el jugador más cercano para disparo también
@@ -1096,6 +1747,243 @@ class Game:
             fired = enemy.maybe_shoot(dt, closest_player, room, self.enemy_projectiles)
             if fired and callable(notify):
                 notify()
+
+    def _update_remote_enemies(self, dt: float) -> None:
+        """
+        Actualiza los enemigos remotos (animaciones, timers, sincronización).
+
+        Los enemigos remotos ya tienen su posición actualizada por mensajes de red.
+        Esta función avanza sus animaciones y mantiene sus timers al día.
+        """
+        if not self.remote_enemies:
+            return
+
+        for remote_enemy in self.remote_enemies.values():
+            try:
+                # Actualizar la animación (avanza frames)
+                remote_enemy.update(dt)
+            except Exception as e:
+                log_game.error(f"Error actualizando remote_enemy {remote_enemy.enemy_id}: {e}")
+
+    def _update_remote_player_rooms(self, dt: float) -> None:
+        """
+        En modo servidor: actualizar enemigos en salas donde hay jugadores remotos.
+
+        Esto es necesario cuando PC2 entra a una sala diferente a la de PC1.
+        PC1 (servidor) debe simular enemigos en esa sala aunque no esté allí.
+        """
+        if not self.net or not self.net.es_servidor:
+            return
+
+        if not self.remote_players:
+            return
+
+        # Recopilar todas las salas donde hay jugadores remotos
+        remote_rooms = set()
+        for rol, datos in self.remote_players.items():
+            sala_list = datos.get("sala", [0, 0])
+            sala_remota = (
+                (sala_list[0], sala_list[1])
+                if isinstance(sala_list, (list, tuple))
+                else (0, 0)
+            )
+            # No procesar salas donde ya estamos (las procesa _update_enemies normal)
+            if sala_remota != (self.dungeon.i, self.dungeon.j):
+                remote_rooms.add(sala_remota)
+
+        # Actualizar enemigos en cada sala remota
+        for room_pos in remote_rooms:
+            try:
+                # self.dungeon.rooms es un diccionario con claves de tupla, no lista de listas
+                room = self.dungeon.rooms.get(room_pos)
+                if room is None:
+                    log_game.debug(f"[SERVIDOR] Sala remota {room_pos} no existe en dungeon")
+                    continue
+
+                if not hasattr(room, "enemies"):
+                    continue
+
+                # IMPORTANTE: Si la sala remota no tiene enemigos aún, spawnearlos
+                # (porque el servidor nunca entró a esa sala)
+                if not room.enemies and hasattr(room, "ensure_spawn"):
+                    # Calcular dificultad igual que en _spawn_room_enemies()
+                    pos = room_pos
+                    depth = 0
+                    if hasattr(self.dungeon, "room_depth"):
+                        depth = self.dungeon.room_depth(pos)
+                    branch_factor = max(0, sum(1 for open_ in getattr(room, "doors", {}).values() if open_) - 2)
+                    on_main_path = 0
+                    if hasattr(self.dungeon, "main_path"):
+                        on_main_path = 1 if pos in self.dungeon.main_path else 0
+                    difficulty = 1 + depth + branch_factor + (depth // 3) + on_main_path
+
+                    room.ensure_spawn(difficulty=difficulty)
+                    log_game.debug(f"[SERVIDOR] Sala remota {room_pos} spawned enemigos (difficulty={difficulty})")
+
+                # Simular enemigos en esta sala (pasar room_pos para targeting correcto)
+                for enemy in room.enemies:
+                    closest_player = self._get_closest_player_for_enemy(enemy, room_pos=room_pos)
+                    if closest_player is not None:
+                        enemy.update(dt, closest_player, room)
+
+                # Procesar disparos de enemigos en sala remota
+                for enemy in room.enemies:
+                    closest_player = self._get_closest_player_for_enemy(enemy, room_pos=room_pos)
+                    if closest_player is not None:
+                        enemy.maybe_shoot(dt, closest_player, room, self.enemy_projectiles)
+
+                # Sincronizar enemigos de esta sala remota
+                self._sync_enemies_to_client_room(room, room_pos)
+                log_game.debug(f"[SERVIDOR] Sala remota {room_pos} sincronizada ({len(room.enemies)} enemigos)")
+
+            except Exception as e:
+                log_game.debug(f"[SERVIDOR] Sala remota {room_pos} error: {type(e).__name__}: {e}")
+                continue
+
+    def _sync_enemies_to_client(self, room) -> None:
+        """
+        Sincroniza el estado de todos los enemigos al cliente remoto.
+        Solo ejecuta si hay un cliente conectado (es decir, si estamos en modo servidor).
+        """
+        if not self.net or not hasattr(room, "enemies") or not room.enemies:
+            return
+
+        # Solo sincronizar si es el servidor (VICTIMA)
+        if not self.net.es_servidor:
+            return
+
+        # Sincronizar cada 50ms (20 veces por segundo) para no sobrecargar la red
+        ahora = time.time()
+        if not hasattr(self, '_last_enemy_sync'):
+            self._last_enemy_sync = 0.0
+
+        if ahora - self._last_enemy_sync < 0.05:
+            return
+
+        self._last_enemy_sync = ahora
+
+        # Preparar lista de enemigos
+        enemies_list = []
+        for enemy in room.enemies:
+            # Obtener estado del animator
+            animator_state = "idle"
+            if hasattr(enemy, "animator"):
+                animator_state = getattr(enemy.animator, "state", "idle")
+
+                # [FIX] Si está en muerte o muriendo, SIEMPRE enviar "death"
+                # Previene que trigger_shoot() sea rechazado mientras el enemigo muere
+                if animator_state in ("shoot", "attack") and getattr(enemy, "_is_dying", False):
+                    animator_state = "death"
+
+            enemies_list.append({
+                "id": enemy.enemy_id,
+                "tipo": enemy.__class__.__name__,
+                "x": round(enemy.x, 1),
+                "y": round(enemy.y, 1),
+                "health": enemy.hp,
+                "vivo": not getattr(enemy, "_is_dying", False),
+                "animator_state": animator_state,
+                "facing_right": getattr(enemy, "_facing_right", True),
+            })
+
+        # Enviar sincronización
+        if enemies_list or len(room.enemies) == 0:
+            from network.protocol import msg_enemies_state
+            msg = msg_enemies_state(enemies_list, (self.dungeon.i, self.dungeon.j))
+            self.net.enviar(msg)
+
+    def _sync_enemies_to_client_room(self, room, room_pos: tuple) -> None:
+        """
+        Sincroniza enemigos de una sala específica al cliente.
+        Similar a _sync_enemies_to_client pero para salas remotas donde hay jugadores.
+        """
+        if not self.net or not hasattr(room, "enemies"):
+            return
+
+        if not self.net.es_servidor:
+            return
+
+        # Sincronizar cada 50ms
+        ahora = time.time()
+        if not hasattr(self, '_last_remote_enemy_sync'):
+            self._last_remote_enemy_sync = {}
+
+        room_key = str(room_pos)
+        if room_key in self._last_remote_enemy_sync:
+            if ahora - self._last_remote_enemy_sync[room_key] < 0.05:
+                return
+
+        self._last_remote_enemy_sync[room_key] = ahora
+
+        # Preparar lista de enemigos
+        enemies_list = []
+        for enemy in room.enemies:
+            # Obtener estado del animator
+            animator_state = "idle"
+            if hasattr(enemy, "animator"):
+                animator_state = getattr(enemy.animator, "state", "idle")
+
+                # [FIX] Si está en muerte o muriendo, SIEMPRE enviar "death"
+                # Previene que trigger_shoot() sea rechazado mientras el enemigo muere
+                if animator_state in ("shoot", "attack") and getattr(enemy, "_is_dying", False):
+                    animator_state = "death"
+
+            enemies_list.append({
+                "id": enemy.enemy_id,
+                "tipo": enemy.__class__.__name__,
+                "x": round(enemy.x, 1),
+                "y": round(enemy.y, 1),
+                "health": enemy.hp,
+                "vivo": not getattr(enemy, "_is_dying", False),
+                "animator_state": animator_state,
+                "facing_right": getattr(enemy, "_facing_right", True),
+            })
+
+        # Enviar sincronización con la sala_pos correcta
+        if enemies_list or len(room.enemies) == 0:
+            from network.protocol import msg_enemies_state
+            msg = msg_enemies_state(enemies_list, room_pos)
+            self.net.enviar(msg)
+
+    def _sync_enemy_projectiles_to_client(self, room) -> None:
+        """
+        Sincroniza el estado de todas las balas de enemigos al cliente.
+        Solo ejecuta si es servidor y hay cliente conectado.
+        """
+        if not self.net or not self.net.es_servidor:
+            return
+
+        if not self.enemy_projectiles or len(self.enemy_projectiles) == 0:
+            return
+
+        # Sincronizar cada 50ms (igual que enemigos)
+        ahora = time.time()
+        if not hasattr(self, '_last_projectile_sync'):
+            self._last_projectile_sync = 0.0
+
+        if ahora - self._last_projectile_sync < 0.05:
+            return
+
+        self._last_projectile_sync = ahora
+
+        # Preparar lista de balas (usar iterador de ProjectileGroup)
+        projectiles_list = []
+        for proj in self.enemy_projectiles:
+            if proj.alive:
+                projectiles_list.append({
+                    "id": id(proj),  # ID único del objeto Python
+                    "x": round(proj.x, 1),
+                    "y": round(proj.y, 1),
+                    "dx": round(proj.dx, 2),
+                    "dy": round(proj.dy, 2),
+                    "vivo": True,
+                })
+
+        # Enviar sincronización (solo si hay balas)
+        if projectiles_list:
+            from network.protocol import msg_enemy_projectiles_state
+            msg = msg_enemy_projectiles_state(projectiles_list, (self.dungeon.i, self.dungeon.j))
+            self.net.enviar(msg)
 
     def _update_projectiles(self, dt: float, room) -> None:
         self.projectiles.update(dt, room)
@@ -1112,19 +2000,24 @@ class Game:
         if not hasattr(room, "enemies"):
             return False
         initial_enemy_count = len(getattr(room, "enemies", ()))
-        for projectile in self.projectiles:
-            if not projectile.alive:
-                continue
-            r_proj = projectile.rect()
-            for enemy in room.enemies:
-                if r_proj.colliderect(enemy.rect()):
-                    if hasattr(enemy, "take_damage"):
-                        enemy.take_damage(1, (projectile.dx, projectile.dy))
-                    else:
-                        enemy.hp -= 1
-                    self._apply_projectile_effects(projectile, enemy)
-                    projectile.alive = False
-                    break
+
+        # Cliente: NO procesa colisiones de sus propios proyectiles contra enemigos
+        # (El servidor procesará las colisiones y enviará eventos)
+        if not (self.net and not self.net.es_servidor):
+            # Servidor u offline: procesar colisiones de proyectiles locales
+            for projectile in self.projectiles:
+                if not projectile.alive:
+                    continue
+                r_proj = projectile.rect()
+                for enemy in room.enemies:
+                    if r_proj.colliderect(enemy.rect()):
+                        if hasattr(enemy, "take_damage"):
+                            enemy.take_damage(1, (projectile.dx, projectile.dy))
+                        else:
+                            enemy.hp -= 1
+                        self._apply_projectile_effects(projectile, enemy)
+                        projectile.alive = False
+                        break
 
         # Remote projectiles from other players also hit enemies
         for projectile in self.remote_projectiles[:]:
@@ -1227,7 +2120,16 @@ class Game:
         self.projectiles.prune()
         self.enemy_projectiles.prune()
         if hasattr(room, "refresh_lock_state"):
+            was_cleared_before = room.cleared
             room.refresh_lock_state()
+            # Si la sala se acaba de limpiar, notificar al cliente remoto
+            if not was_cleared_before and room.cleared and self.net and self.net.es_servidor:
+                from network.protocol import msg_evento
+                evento = msg_evento(
+                    "room_clear",
+                    room_id=(self.dungeon.i, self.dungeon.j)
+                )
+                self.net.enviar(evento)
         self._update_room_lock(room)
         if getattr(self.player, "hp", 1) <= 0:
             self._handle_player_death(room)
@@ -1505,6 +2407,20 @@ class Game:
         if not direction or not self.dungeon.can_move(direction):
             return
 
+        # EN MODO CLIENTE: Notificar al servidor, NO procesar localmente
+        if self.net and not self.net.es_servidor:
+            log_game.info(f"[TRANSICION] Cliente detectó puerta en dirección {direction}")
+            from network.protocol import msg_accion
+            msg = msg_accion("transicion", direccion=direction)
+            self.net.enviar(msg)
+            self.door_cooldown = 0.25
+            return
+
+        # EN MODO SERVIDOR O OFFLINE: Procesar transición
+        self._procesar_transicion(direction, room)
+
+    def _procesar_transicion(self, direction: str, room) -> None:
+        """Procesa la transición y teletransporta a ambos jugadores (si está en servidor)."""
         if hasattr(self.dungeon, "move_and_enter"):
             moved = self.dungeon.move_and_enter(direction, self.player, self.cfg, ShopkeeperCls=Shopkeeper)
         else:
@@ -1513,9 +2429,13 @@ class Game:
         if not moved:
             return
 
-        self.player.x, self.player.y = self.dungeon.entry_position(
+        # Posicionar al jugador local
+        victima_pos = self.dungeon.entry_position(
             direction, self.player.w, self.player.h
         )
+        self.player.x, self.player.y = victima_pos
+
+        # Limpiar y actualizar
         self.dungeon.explored.add((self.dungeon.i, self.dungeon.j))
         self.door_cooldown = 0.25
         self.projectiles.clear()
@@ -1525,8 +2445,27 @@ class Game:
         new_room = self.dungeon.current_room
         depth = self.dungeon.depth_map.get((self.dungeon.i, self.dungeon.j), -1)
         log_room.room_enter((self.dungeon.i, self.dungeon.j), depth)
-        self._spawn_room_enemies(new_room)
+        # [FIX SYNC] Cliente NO crea enemigos — los recibe del servidor
+        if self.net is None or self.net.es_servidor:
+            self._spawn_room_enemies(new_room)
         self._update_room_lock(new_room)
+
+        # Notificar al cliente si estamos en servidor
+        if self.net and self.net.es_servidor and self.remote_players:
+            aliado_pos = victima_pos  # Mismo punto de entrada
+            from network.protocol import msg_transicion_completada
+            msg = msg_transicion_completada(
+                sala_nueva=(self.dungeon.i, self.dungeon.j),
+                pos_victima=victima_pos,
+                pos_aliado=aliado_pos,
+            )
+            self.net.enviar(msg)
+            log_game.info(f"[TRANSICION] Servidor notificó transición completada a sala ({self.dungeon.i}, {self.dungeon.j})")
+
+            # [FIX SYNC] Enviar estado de enemigos inmediatamente después de la transición
+            # para que el cliente no vea una sala vacía
+            self._sync_enemies_to_client(new_room)
+            self._sync_enemy_projectiles_to_client(new_room)
 
     def _update_room_lock(self, room) -> None:
         if not hasattr(room, "enemies") or not hasattr(room, "cleared"):

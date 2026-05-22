@@ -80,6 +80,10 @@ class Player(Entity):
         self.base_dash_cooldown = self.dash_cooldown
         self.dash_iframe_duration = self.dash_duration + 0.08
 
+        # Threshold para diferenciar caminar vs correr en animaciones
+        # input_mag > run_threshold = "run", 0 < input_mag <= run_threshold = "walk"
+        self.run_threshold = 80.0
+
         self._dash_timer = 0.0
         self._dash_cooldown_timer = 0.0
         self._dash_key_down = False
@@ -605,27 +609,73 @@ class Player(Entity):
             self._animation_override = "attack"
             self._set_current_animation("attack", force_reset=True)
 
+    def _is_shift_pressed(self) -> bool:
+        """Detecta si Shift está presionado (izquierdo o derecho)."""
+        keys = pygame.key.get_pressed() if self.controls_enabled else None
+        if not keys:
+            return False
+        return keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+
+    def _get_input_magnitude(self) -> float:
+        """
+        Calcula la magnitud del input (0 a ~1.41 en diagonal).
+        Utilizado para determinar si el jugador está caminando o corriendo.
+        """
+        keys = pygame.key.get_pressed() if self.controls_enabled else None
+        if not keys:
+            return 0.0
+        dx = (keys[pygame.K_d] or keys[pygame.K_RIGHT]) - (keys[pygame.K_a] or keys[pygame.K_LEFT])
+        dy = (keys[pygame.K_s] or keys[pygame.K_DOWN]) - (keys[pygame.K_w] or keys[pygame.K_UP])
+        return math.hypot(dx, dy)
+
     def _update_animation(self, dt: float, moving: bool) -> None:
         """Determina qué animación reproducir según estado del jugador.
 
-        Prioridad:
+        Prioridad: disparar > movimiento > idle
+
+        Lógica:
         1. death (si está muriendo)
-        2. _animation_override (si existe - disparos direccionales específicos)
-        3. attack (si está disparando genéricamente)
-        4. walk (si se está moviendo)
-        5. idle (si está quieto)
+        2. Animaciones de disparo (si está disparando):
+           - pistol_aim_run_up (corriendo hacia arriba)
+           - pistol_aim_run_down (corriendo hacia abajo)
+           - pistol_aim_run (corriendo lateralmente o caminando)
+           - pistol_aim (quieto, congelado en frame 5)
+        3. Animaciones de movimiento (si se está moviendo):
+           - run (corriendo rápido)
+           - walk (caminando)
+        4. idle (quieto sin disparar)
         """
+        # Calcular estado de movimiento actual
+        input_mag = self._get_input_magnitude()  # 0 a ~1.41
+        is_moving = input_mag > 0
+        shift_pressed = self._is_shift_pressed()
+        is_running = shift_pressed and is_moving  # Run solo si Shift + movimiento
+        is_walking = is_moving and not is_running
         is_shooting = self._shoot_dir_current != (0, 0)
 
-        # Lógica de prioridad
+        # Seleccionar animación según prioridad
         if self._respawn_animating:
             active_name = "death"
-        elif self._animation_override:
-            # Usar animación específica de disparo si está establecida
-            active_name = self._animation_override
         elif is_shooting:
-            active_name = "attack"
-        elif moving:
+            # Prioridad: disparar con diferentes animaciones según velocidad
+            shoot_dir_x, shoot_dir_y = self._shoot_dir_current
+            if is_running:
+                # Corriendo + disparando en direcciones específicas
+                if shoot_dir_y < 0:  # Disparando hacia arriba mientras corre
+                    active_name = "pistol_aim_run_up"
+                elif shoot_dir_y > 0:  # Disparando hacia abajo mientras corre
+                    active_name = "pistol_aim_run_down"
+                else:  # Disparando horizontalmente mientras corre
+                    active_name = "pistol_aim_run"
+            elif is_walking:
+                # Caminando + disparando
+                active_name = "pistol_aim_run"
+            else:
+                # Quieto + disparando (congelado en frame 5)
+                active_name = "pistol_aim"
+        elif is_running:
+            active_name = "run"
+        elif is_walking:
             active_name = "walk"
         else:
             active_name = "idle"
@@ -636,21 +686,8 @@ class Player(Entity):
             animation = self._animations[active_name]
             animation.update(dt)
 
-            # Animaciones de disparo específicas terminan y se resetean a idle/walk
-            if self._animation_override and animation.is_finished():
-                self._animation_override = None
-                # Volver a idle o walk según estado
-                if moving:
-                    self._set_current_animation("walk")
-                else:
-                    self._set_current_animation("idle")
-            # Attack se repite mientras se mantenga presionado
-            elif active_name == "attack" and animation.is_finished():
-                # Reiniciar attack si aún está disparando
-                if is_shooting:
-                    animation.reset()
-            # Death termina la animación sin repetir
-            elif self._respawn_animating and animation.is_finished():
+            # Death termina sin repetir
+            if self._respawn_animating and animation.is_finished():
                 self._respawn_animating = False
 
     def _update_dash_trail(self, dt: float, dash_active: bool) -> None:

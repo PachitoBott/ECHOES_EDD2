@@ -17,7 +17,20 @@
       "Read(*)",
       "Write(*)",
       "Bash(echo *)",
-      "TaskOutput(*)"
+      "TaskOutput(*)",
+      "Bash(python -m py_compile \"F:\\\\martin\\\\Universidad\\\\ECHOES_EDD2/CODIGO/Game.py\")",
+      "Bash(python -m py_compile \"F:\\\\martin\\\\Universidad\\\\ECHOES_EDD2/CODIGO/entities/Enemy.py\")",
+      "Bash(python -m py_compile \"F:\\\\martin\\\\Universidad\\\\ECHOES_EDD2/CODIGO/network/protocol.py\")",
+      "Bash(python -m py_compile \"F:\\\\martin\\\\Universidad\\\\ECHOES_EDD2/CODIGO/network/manager.py\")",
+      "Bash(python -m py_compile CODIGO/Game.py)",
+      "Bash(python -m py_compile Game.py)",
+      "Bash(python Main.py --server --port 5555 --skip-menu)",
+      "Bash(python Main.py --client --host 127.0.0.1 --port 5555 --role aliado --skip-menu)",
+      "Bash(pkill -f \"python Main.py\")",
+      "Bash(python -m py_compile CODIGO/Game.py CODIGO/entities/Enemy.py)",
+      "Bash(Get-ChildItem -Recurse -Depth 2 -Directory)",
+      "Bash(Select-Object -First 30)",
+      "Bash(Format-Table FullName)"
     ]
   }
 }

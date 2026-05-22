@@ -3,45 +3,59 @@
   "frame_height": 64,
   "animations": {
     "idle": {
-      "file": "daniel_idle.png",
-      "total_frames": 4,
-      "frame_indices": [0, 1, 2, 3],
-      "fps": 15,
+      "file": "FutureSoldier_Idle.png",
+      "total_frames": 6,
+      "frame_indices": [0, 1, 2, 3, 4, 5],
+      "fps": 12,
       "loop": true
     },
     "walk": {
-      "file": "daniel_walk.png",
-      "total_frames": 11,
-      "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      "file": "FutureSoldier_Walk.png",
+      "total_frames": 10,
+      "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+      "fps": 18,
+      "loop": true
+    },
+    "run": {
+      "file": "FutureSoldier_Run.png",
+      "total_frames": 8,
+      "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7],
       "fps": 24,
       "loop": true
     },
-    "attack": {
-      "file": "daniel_attack.png",
+    "pistol_aim": {
+      "file": "FutureSoldier_PistolAim.png",
       "total_frames": 5,
       "frame_indices": [0, 1, 2, 3, 4],
-      "fps": 30,
-      "loop": false
-    },
-    "death": {
-      "file": "daniel_death.png",
-      "total_frames": 32,
-      "frame_indices": [31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
       "fps": 20,
       "loop": false
     },
-    "shoot_down": {
-      "file": "shoot_down.png",
-      "total_frames": 9,
+    "pistol_aim_run": {
+      "file": "FutureSoldier_PistolAimRun.png",
+      "total_frames": 8,
       "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7],
-      "fps": 30,
-      "loop": false
+      "fps": 24,
+      "loop": true
     },
-    "shoot_up": {
-      "file": "shoot_up.png",
-      "total_frames": 9,
-      "frame_indices": [0, 1, 2, 3, 4, 5, 6],
-      "fps": 30,
+    "pistol_aim_run_up": {
+      "file": "FutureSoldier_PistolAimRunUp.png",
+      "total_frames": 8,
+      "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7],
+      "fps": 24,
+      "loop": true
+    },
+    "pistol_aim_run_down": {
+      "file": "FutureSoldier_PistolAimRunDown.png",
+      "total_frames": 8,
+      "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7],
+      "fps": 24,
+      "loop": true
+    },
+    "death": {
+      "file": "FutureSoldier_Death.png",
+      "total_frames": 1,
+      "frame_indices": [0],
+      "fps": 1,
       "loop": false
     }
   }
