@@ -1040,12 +1040,15 @@ class Game:
             log_game.debug(f"[MUERTE_REMOTA] ANTES: {enemigos_antes} enemigos en lista ({muertos_visibles} muriendo), buscando {enemy_type}")
 
             # Buscar enemigo que coincida con posición y tipo
-            # Usar tolerancia para diferencias por interpolación cliente
-            tolerance = 5.0  # píxeles
+            # Usar tolerancia amplia para diferencias por latencia de red y desync de simulación
+            # El cliente puede reportar la posición con hasta 100ms de desfase de la simulación
+            # (típicamente 30-40 píxeles de offset)
+            tolerance = 50.0  # píxeles (aumentado de 5 para tolerar desync de red)
 
             encontrado = False
             enemy_encontrado = None
             indice_encontrado = -1
+            min_dist = tolerance + 1  # Buscar el más cercano dentro de tolerancia
 
             for i, enemy in enumerate(room.enemies):
                 dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
@@ -1053,13 +1056,14 @@ class Game:
                 hp = getattr(enemy, 'hp', -1)
                 log_game.debug(f"[MUERTE_REMOTA]   [{i}] {enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}) dist={dist:.1f} hp={hp} dying={dying}")
 
-                if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
-                    # Encontrado enemigo que coincide
-                    log_game.debug(f"[MUERTE_REMOTA] [MATCH] Encontrado en índice {i}: {enemy.__class__.__name__}")
+                # Buscar el enemigo del tipo correcto MÁS CERCANO dentro de la tolerancia
+                if dist <= tolerance and enemy.__class__.__name__ == enemy_type and dist < min_dist:
+                    # Encontrado enemigo más cercano que coincide
+                    log_game.debug(f"[MUERTE_REMOTA] [MATCH] Encontrado en índice {i}: {enemy.__class__.__name__} dist={dist:.1f}")
                     enemy_encontrado = enemy
                     indice_encontrado = i
+                    min_dist = dist
                     encontrado = True
-                    break
 
             if encontrado:
                 # [DIAG] Disparar efecto ANTES de eliminar
@@ -1086,10 +1090,14 @@ class Game:
                 if enemigos_despues == 0:
                     log_game.debug(f"[MUERTE_REMOTA] [CLEAR] ¡SALA LIMPIA! (era el último)")
             else:
-                log_game.debug(f"[MUERTE_REMOTA] [NOTFOUND] NO ENCONTRADO {enemy_type} @ ({pos_x}, {pos_y}) (tol={tolerance})")
+                log_game.warning(f"[MUERTE_REMOTA] [NOTFOUND] NO ENCONTRADO {enemy_type} @ ({pos_x}, {pos_y}) dentro de tolerancia={tolerance} píxeles")
+                log_game.warning(f"[MUERTE_REMOTA] Esto puede ocurrir si: 1) El enemigo ya fue eliminado, 2) Hay desincronización de red (el cliente reportó posición antigua)")
                 # [DIAG] Mostrar qué había
                 if room.enemies:
+                    closest = min(room.enemies, key=lambda e: ((e.x - pos_x) ** 2 + (e.y - pos_y) ** 2) ** 0.5)
+                    closest_dist = ((closest.x - pos_x) ** 2 + (closest.y - pos_y) ** 2) ** 0.5
                     log_game.debug(f"[MUERTE_REMOTA] Enemigos en sala: {[(e.__class__.__name__, f'({e.x:.0f},{e.y:.0f})', getattr(e, 'hp', '?')) for e in room.enemies]}")
+                    log_game.debug(f"[MUERTE_REMOTA] Enemigo más cercano: {closest.__class__.__name__} a {closest_dist:.1f} píxeles")
                 else:
                     log_game.debug(f"[MUERTE_REMOTA] Sala está vacía (0 enemigos)")
 
