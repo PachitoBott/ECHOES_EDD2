@@ -439,6 +439,9 @@ class Player(Entity):
         if not self.reviviendo:
             return
 
+        # Decrementar hit flash timer (también durante revival)
+        self.hit_flash_timer = max(0.0, self.hit_flash_timer - dt)
+
         # Actualizar partículas blancas
         if self.revival_particle_effect:
             for particle in self.revival_particle_effect:
