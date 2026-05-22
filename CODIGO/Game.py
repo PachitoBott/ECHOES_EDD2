@@ -1560,7 +1560,7 @@ class Game:
             if self.minijuego_papers is None:
                 self.minijuego_papers = MinijuegoPapers(self.cfg.SCREEN_W, self.cfg.SCREEN_H)
 
-            self.minijuego_papers.tick(dt)
+            self.minijuego_papers.update(dt)
 
             # Procesar eventos del minijuego
             for event in events:
