@@ -1133,12 +1133,11 @@ class Room:
         if not self.obstacles:
             return False
 
-        expanded_rect = rect.inflate(buffer_pixels * 2, buffer_pixels * 2)
         for obstacle in self.obstacles:
             obstacle_rect = obstacle["rect"]
-            # Expandir el rectángulo del obstáculo por el buffer
+            # Expandir SOLO el rectángulo del obstáculo por el buffer
             expanded_obstacle = obstacle_rect.inflate(int(buffer_pixels * 2), int(buffer_pixels * 2))
-            if expanded_rect.colliderect(expanded_obstacle):
+            if rect.colliderect(expanded_obstacle):
                 return True
         return False
     
