@@ -2195,7 +2195,7 @@ class Game:
 
                 # Procesar colisión con boss si existe
                 if projectile.alive and hasattr(room, "boss") and room.boss is not None:
-                    if r_proj.colliderect(room.boss.rect()):
+                    if r_proj.colliderect(room.boss.rect):
                         room.boss.take_damage(1)
                         self._apply_projectile_effects(projectile, room.boss)
                         projectile.alive = False
@@ -2217,7 +2217,7 @@ class Game:
 
             # Procesar colisión con boss si existe
             if projectile.alive and hasattr(room, "boss") and room.boss is not None:
-                if r_proj.colliderect(room.boss.rect()):
+                if r_proj.colliderect(room.boss.rect):
                     room.boss.take_damage(1)
                     self._apply_projectile_effects(projectile, room.boss)
                     projectile.alive = False
