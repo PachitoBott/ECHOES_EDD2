@@ -421,6 +421,11 @@ class HUDPanel:
 
         self._actualizar_posicion()
 
+        # --- Sistema de animación del personaje ---
+        self._animaciones: dict = {}
+        self._personaje_sprites: dict = {}  # Almacena sprites P2 cuando estén disponibles
+        self._cargar_animaciones_personaje()
+
     def _cargar_panel(self, path: str) -> None:
         """Carga el PNG del panel y lo redimensiona al tamaño estándar."""
         if path and os.path.exists(path):
@@ -456,9 +461,36 @@ class HUDPanel:
             # Default: top_left
             self.rect.y = self.MARGIN
 
-    def render(self, surface: pygame.Surface, player_data: dict) -> pygame.Rect:
+    def _cargar_animaciones_personaje(self) -> None:
+        """Carga las animaciones del personaje (idle para P1, placeholder para P2)."""
+        try:
+            from systems.animation import AnimationManager
+            # Cargar animaciones de Daniel
+            self._animaciones = AnimationManager.load_from_json(
+                "assets/sprites/player/animations.json",
+                "assets/sprites/player"
+            )
+        except Exception as e:
+            print(f"[WARNING] HUDPanel: No se pudieron cargar animaciones: {e}")
+            self._animaciones = {}
+
+    def update(self, dt: float) -> None:
+        """Actualiza las animaciones del panel (llamar cada frame del juego)."""
+        if "idle" in self._animaciones:
+            self._animaciones["idle"].update(dt)
+
+    def set_personaje_p2_sprites(self, sprite_dict: dict) -> None:
         """
-        Dibuja el panel completo: PNG de fondo + corazones de vida + monedas.
+        Establece sprites personalizados para P2.
+
+        Args:
+            sprite_dict: dict con sprites del P2 (para futuros personajes)
+        """
+        self._personaje_sprites = sprite_dict
+
+    def render(self, surface: pygame.Surface, player_data: dict, es_p2: bool = False) -> pygame.Rect:
+        """
+        Dibuja el panel completo: PNG de fondo + sprite animado + corazones + monedas.
 
         Args:
             surface: superficie donde dibujar
@@ -467,6 +499,7 @@ class HUDPanel:
                 "max_health": int,      # vidas máximas (6)
                 "coins": int            # monedas/microchips
             }
+            es_p2: True si es panel P2 (muestra placeholder si no hay sprites)
 
         Returns:
             El rect ocupado por el panel
@@ -474,13 +507,16 @@ class HUDPanel:
         # 1. Fondo (PNG del panel o placeholder)
         self._dibujar_fondo(surface)
 
-        # 2. Corazones de vida (3 corazones, daño de derecha a izquierda)
+        # 2. Sprite animado del personaje (izquierda, centrado verticalmente)
+        self._render_personaje(surface, es_p2=es_p2)
+
+        # 3. Corazones de vida (derecha superior)
         lives = player_data.get("health", 6)
         self._render_corazones(surface, lives)
 
-        # 3. Monedas (TODO: implementar después)
-        # coins = player_data.get("coins", 0)
-        # self._render_monedas(surface, coins)
+        # 4. Monedas (derecha inferior)
+        coins = player_data.get("coins", 0)
+        self._render_monedas(surface, coins)
 
         return self.rect
 
@@ -536,6 +572,106 @@ class HUDPanel:
             x = int(self.rect.x + OFFSET_X + i * (CORAZON_W + GAP))
             y = int(self.rect.y + OFFSET_Y)
             surface.blit(sprite, (x, y))
+
+    def _render_personaje(self, surface: pygame.Surface, es_p2: bool = False) -> None:
+        """
+        Renderiza el sprite animado del personaje (izquierda del panel, centrado verticalmente).
+
+        Args:
+            surface: superficie donde dibujar
+            es_p2: True si es panel P2 (mostrar placeholder si no hay sprites)
+        """
+        # Tamaño del sprite (64x64 como en el juego)
+        SPRITE_SIZE = 64
+        SPRITE_MARGIN = 12  # Margen desde el borde izquierdo del panel
+
+        # Posición X (izquierda del panel)
+        x = self.rect.x + SPRITE_MARGIN
+
+        # Posición Y (centrado verticalmente en el panel)
+        panel_center_y = self.rect.y + self.rect.height // 2
+        y = int(panel_center_y - SPRITE_SIZE // 2)
+
+        if es_p2:
+            # Panel P2: mostrar placeholder hasta que lleguen sprites
+            placeholder = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE))
+            placeholder.fill((100, 100, 100))  # Gris oscuro
+            pygame.draw.rect(placeholder, (150, 150, 150), placeholder.get_rect(), 2)
+            # Texto "P2"
+            try:
+                font = pygame.font.SysFont(None, 36)
+                text = font.render("P2", True, (200, 200, 200))
+                text_rect = text.get_rect(center=(SPRITE_SIZE // 2, SPRITE_SIZE // 2))
+                placeholder.blit(text, text_rect)
+            except:
+                pass
+            surface.blit(placeholder, (x, y))
+        else:
+            # Panel P1: mostrar animación de Daniel (idle)
+            if "idle" in self._animaciones:
+                frame = self._animaciones["idle"].current_frame()
+                surface.blit(frame, (x, y))
+            else:
+                # Placeholder si no hay animaciones cargadas
+                placeholder = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE))
+                placeholder.fill((80, 80, 80))  # Gris más oscuro
+                pygame.draw.rect(placeholder, (150, 150, 150), placeholder.get_rect(), 2)
+                surface.blit(placeholder, (x, y))
+
+    def _render_monedas(self, surface: pygame.Surface, coins: int) -> None:
+        """
+        Renderiza el icono de moneda + cantidad en la parte inferior derecha del panel.
+
+        Args:
+            surface: superficie donde dibujar
+            coins: cantidad de monedas/microchips
+        """
+        # Cargar icono de moneda
+        try:
+            if not hasattr(self, '_moneda_icon_cached'):
+                moneda_path = "assets/ui/chip_moneda.png"
+                moneda_img = pygame.image.load(moneda_path).convert_alpha()
+                # Escalar a 20x20 píxeles (pequeño en el HUD)
+                self._moneda_icon_cached = pygame.transform.scale(moneda_img, (20, 20))
+        except Exception as e:
+            self._moneda_icon_cached = None
+
+        # Parámetros de posicionamiento
+        ICON_SIZE = 20
+        ICON_MARGIN_RIGHT = 16  # Margen desde el borde derecho
+        ICON_MARGIN_BOTTOM = 16  # Margen desde el borde inferior
+        TEXT_MARGIN_LEFT = 8     # Espacio entre icono y número
+
+        # Posición del icono (inferior derecha)
+        icon_x = self.rect.right - ICON_MARGIN_RIGHT - ICON_SIZE
+        icon_y = self.rect.bottom - ICON_MARGIN_BOTTOM - ICON_SIZE
+
+        # Dibujar icono
+        if self._moneda_icon_cached:
+            surface.blit(self._moneda_icon_cached, (icon_x, icon_y))
+        else:
+            # Placeholder: rectángulo amarillo
+            pygame.draw.rect(surface, (255, 200, 0),
+                           (icon_x, icon_y, ICON_SIZE, ICON_SIZE))
+
+        # Dibujar cantidad de monedas (texto)
+        try:
+            font = pygame.font.SysFont(None, 24)
+            coins_text = font.render(str(coins), True, (230, 220, 200))
+
+            # Posición del texto (a la derecha del icono)
+            text_x = icon_x - TEXT_MARGIN_LEFT - coins_text.get_width()
+            text_y = icon_y + (ICON_SIZE - coins_text.get_height()) // 2
+
+            # Dibujar sombra (opcional: mejora la legibilidad)
+            shadow_font = pygame.font.SysFont(None, 24)
+            shadow_text = shadow_font.render(str(coins), True, (0, 0, 0))
+            surface.blit(shadow_text, (text_x + 1, text_y + 1))
+
+            # Dibujar texto principal
+            surface.blit(coins_text, (text_x, text_y))
+        except Exception as e:
+            print(f"[WARNING] HUDPanel: No se pudo renderizar cantidad de monedas: {e}")
 
     def set_panel_image(self, path: str) -> None:
         """

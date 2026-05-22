@@ -888,6 +888,10 @@ class Game:
         # Hot-reload: verificar si algún asset cambió en disco
         self.asset_watcher.tick()
 
+        # --- Actualizar animaciones de paneles HUD ---
+        self.hud_panel_p1.update(dt)
+        self.hud_panel_p2.update(dt)
+
         # --- Actualizar fondo matrix ---
         self.matrix_bg.update(dt)
 
@@ -1809,7 +1813,7 @@ class Game:
             "max_health": getattr(self.player, "max_lives", 0),
             "coins": getattr(self.player, "gold", 0)
         }
-        self.hud_panel_p1.render(self.screen, player_data_p1)
+        self.hud_panel_p1.render(self.screen, player_data_p1, es_p2=False)
 
         # Panel del Jugador 2 (si hay jugador remoto)
         if self.remote_players:
@@ -1826,7 +1830,7 @@ class Game:
         else:
             player_data_p2 = {"health": 0, "max_health": 0, "coins": 0}
 
-        self.hud_panel_p2.render(self.screen, player_data_p2)
+        self.hud_panel_p2.render(self.screen, player_data_p2, es_p2=True)
 
         minimap_surface = self.minimap.render(self.dungeon)
         minimap_position = self.hud_panels.compute_minimap_position(self.screen, minimap_surface)
