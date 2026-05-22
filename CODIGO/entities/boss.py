@@ -391,14 +391,12 @@ class Boss:
         ]
 
         # Actualizar proyectiles activos
-        for proj in self.proyectiles:
+        for proj in self.proyectiles[:]:  # Copiar para iteración segura
             proj.update(dt)
 
-        # Eliminar proyectiles inactivos
-        self.proyectiles = [
-            p for p in self.proyectiles
-            if p.activo
-        ]
+        # Eliminar proyectiles inactivos (limpiar in-place, no reasignar)
+        # para mantener la referencia que los ataques tienen
+        self.proyectiles[:] = [p for p in self.proyectiles if p.activo]
 
         # Decidir próximo ataque
         self.timer_decision -= dt
