@@ -439,6 +439,9 @@ class Player(Entity):
         if not self.reviviendo:
             return
 
+        # Decrementar hit flash timer (también durante revival)
+        self.hit_flash_timer = max(0.0, self.hit_flash_timer - dt)
+
         # Actualizar partículas blancas
         if self.revival_particle_effect:
             for particle in self.revival_particle_effect:
@@ -560,6 +563,8 @@ class Player(Entity):
 
         # Aplicar flash blanco si acaba de recibir daño
         if self.hit_flash_timer > 0.0:
+            # Hacer una copia para no modificar el sprite original en caché
+            sprite = sprite.copy()
             flash_overlay = pygame.Surface(sprite.get_size(), pygame.SRCALPHA)
             flash_overlay.fill((255, 255, 255, 220))
             sprite.blit(flash_overlay, (0, 0), special_flags=pygame.BLEND_ADD)
@@ -585,6 +590,8 @@ class Player(Entity):
 
         # Aplicar flash blanco si acaba de recibir daño (durante revival también)
         if self.hit_flash_timer > 0.0:
+            # Hacer una copia para no modificar el frame original en caché
+            frame = frame.copy()
             flash_overlay = pygame.Surface(frame.get_size(), pygame.SRCALPHA)
             flash_overlay.fill((255, 255, 255, 220))
             frame.blit(flash_overlay, (0, 0), special_flags=pygame.BLEND_ADD)
