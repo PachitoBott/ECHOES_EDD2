@@ -28,14 +28,14 @@ def test_imports():
     print("\n[TEST 1] Importando módulos de networking...")
     try:
         from network import NetworkManager, EventoRed, Mensaje, Rol, TipoMensaje
-        print("  ✅ network.NetworkManager")
-        print("  ✅ network.EventoRed")
-        print("  ✅ network.Mensaje")
-        print("  ✅ network.Rol")
-        print("  ✅ network.TipoMensaje")
+        print("  [OK] network.NetworkManager")
+        print("  [OK] network.EventoRed")
+        print("  [OK] network.Mensaje")
+        print("  [OK] network.Rol")
+        print("  [OK] network.TipoMensaje")
         return True
     except Exception as e:
-        print(f"  ❌ Error: {e}")
+        print(f"  [ERROR] Error: {e}")
         return False
 
 
@@ -50,7 +50,7 @@ def test_parser():
         args = parser.parse_args(["--server", "--port", "5555"])
         assert args.server == True, "Flag --server no se parsea"
         assert args.port == 5555, "Flag --port no se parsea"
-        print("  ✅ Flag --server --port 5555")
+        print("  [OK] Flag --server --port 5555")
 
         # Test --client
         args = parser.parse_args([
@@ -63,7 +63,7 @@ def test_parser():
         assert args.host == "192.168.1.10", "Flag --host no se parsea"
         assert args.port == 5556, "Flag --port no se parsea"
         assert args.role == "ally", "Flag --role no se parsea"
-        print("  ✅ Flag --client --host --port --role")
+        print("  [OK] Flag --client --host --port --role")
 
         # Test defaults
         args = parser.parse_args([])
@@ -72,11 +72,11 @@ def test_parser():
         assert args.host == "127.0.0.1", "Default --host incorrecto"
         assert args.port == 5555, "Default --port incorrecto"
         assert args.role == "victim", "Default --role incorrecto"
-        print("  ✅ Valores por defecto correctos")
+        print("  [OK] Valores por defecto correctos")
 
         return True
     except Exception as e:
-        print(f"  ❌ Error: {e}")
+        print(f"  [ERROR] Error: {e}")
         return False
 
 
@@ -91,25 +91,25 @@ def test_message_protocol():
         serializado = msg.serializar()
         assert isinstance(serializado, bytes), "Serialización debe retornar bytes"
         assert b"\\n" in serializado or serializado.endswith(b"\n"), "Debe terminar en newline"
-        print("  ✅ Mensaje se serializa a bytes con newline")
+        print("  [OK] Mensaje se serializa a bytes con newline")
 
         # Test deserialización
         deserializado = Mensaje.deserializar(serializado)
         assert deserializado is not None, "Deserialización falló"
         assert deserializado.tipo == TipoMensaje.CONECTAR, "Tipo de mensaje incorrecto"
         assert deserializado.datos.get("rol") == "victim", "Datos no se preservan"
-        print("  ✅ Mensaje se deserializa correctamente")
+        print("  [OK] Mensaje se deserializa correctamente")
 
         # Test round-trip
         msg2 = msg_aceptado("victim", seed=12345)
         bytes2 = msg2.serializar()
         msg2_recovered = Mensaje.deserializar(bytes2)
         assert msg2_recovered.datos.get("seed") == 12345, "Round-trip pierde datos"
-        print("  ✅ Round-trip serialización preserva datos")
+        print("  [OK] Round-trip serialización preserva datos")
 
         return True
     except Exception as e:
-        print(f"  ❌ Error: {e}")
+        print(f"  [ERROR] Error: {e}")
         return False
 
 
@@ -124,7 +124,7 @@ def test_network_manager():
         assert mgr_server is not None, "NetworkManager.como_servidor() falló"
         assert mgr_server.es_servidor == True, "es_servidor debería ser True"
         assert mgr_server.es_victima == True, "Servidor actúa como VICTIMA"
-        print("  ✅ NetworkManager.como_servidor() funciona")
+        print("  [OK] NetworkManager.como_servidor() funciona")
 
         # Test creación cliente
         from network import Rol
@@ -132,17 +132,17 @@ def test_network_manager():
         assert mgr_client is not None, "NetworkManager.como_cliente() falló"
         assert mgr_client.es_aliado == True, "es_aliado debería ser True"
         assert mgr_client.rol == Rol.ALIADO, "Rol no se asigna"
-        print("  ✅ NetworkManager.como_cliente() funciona")
+        print("  [OK] NetworkManager.como_cliente() funciona")
 
         # Test propiedades
         assert mgr_server.modo == "servidor", "Propiedad modo incorrecta"
         assert mgr_client.modo == "cliente", "Propiedad modo incorrecta"
         assert not mgr_server.esta_conectado(), "Servidor no debería estar conectado antes de iniciar()"
-        print("  ✅ Propiedades del NetworkManager correctas")
+        print("  [OK] Propiedades del NetworkManager correctas")
 
         return True
     except Exception as e:
-        print(f"  ❌ Error: {e}")
+        print(f"  [ERROR] Error: {e}")
         return False
 
 
@@ -160,11 +160,11 @@ def test_evento_red():
         assert ev.tipo == "jugador_unido", "Tipo no se asigna"
         assert ev.datos.get("rol") == "victim", "Datos no se asignan"
         assert ev.origen == "servidor", "Origen no se asigna"
-        print("  ✅ EventoRed se crea correctamente")
+        print("  [OK] EventoRed se crea correctamente")
 
         return True
     except Exception as e:
-        print(f"  ❌ Error: {e}")
+        print(f"  [ERROR] Error: {e}")
         return False
 
 
@@ -175,19 +175,19 @@ def test_game_import():
         # No importamos Game completo (requiere Pygame),
         # solo verificamos que Main.py se importa sin errores
         from Main import Game
-        print("  ⚠️  Game importado (pero no instanciado sin Pygame)")
+        print("  [WARNING]  Game importado (pero no instanciado sin Pygame)")
 
         # Verificamos que Main.py mismo no tiene errores de sintaxis
         from Main import _build_parser, _parse_room
-        print("  ✅ Main.py importa sin errores")
+        print("  [OK] Main.py importa sin errores")
 
         return True
     except SyntaxError as e:
-        print(f"  ❌ Error de sintaxis: {e}")
+        print(f"  [ERROR] Error de sintaxis: {e}")
         return False
     except Exception as e:
         # Otros errores (Pygame no disponible) son OK en este test
-        print(f"  ⚠️  Error (esperado sin Pygame): {type(e).__name__}")
+        print(f"  [WARNING]  Error (esperado sin Pygame): {type(e).__name__}")
         return True
 
 
@@ -215,7 +215,7 @@ if __name__ == "__main__":
             result = test_fn()
             results.append((name, result))
         except Exception as e:
-            print(f"  ❌ Exception no capturada: {e}")
+            print(f"  [ERROR] Exception no capturada: {e}")
             results.append((name, False))
 
     # Summary
@@ -227,16 +227,16 @@ if __name__ == "__main__":
     total = len(results)
 
     for name, result in results:
-        status = "✅ PASS" if result else "❌ FAIL"
+        status = "[OK] PASS" if result else "[ERROR] FAIL"
         print(f"  {status} — {name}")
 
     print(f"\nTotal: {passed}/{total} tests pasaron")
 
     if passed == total:
-        print("\n✅ NETWORKING FUNCIONA CORRECTAMENTE")
+        print("\n[OK] NETWORKING FUNCIONA CORRECTAMENTE")
         print("\nPróximo paso: ejecutar los 3 binarios (servidor + 2 clientes)")
         print("Ver TEST_NETWORKING.md para instrucciones detalladas")
         sys.exit(0)
     else:
-        print("\n❌ Hay problemas que revisar")
+        print("\n[ERROR] Hay problemas que revisar")
         sys.exit(1)

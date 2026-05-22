@@ -26,7 +26,6 @@ class PostsPool:
     POSTS_POR_PARTIDA = 5
     MIN_ACOSO = 3  # mínimo posts de acoso por partida
     MAX_ACOSO = 4  # máximo posts de acoso por partida
-    RUTA_JSON = "assets/data/posts_pool.json"
 
     def __init__(self):
         self.todos_los_posts = []
@@ -36,16 +35,29 @@ class PostsPool:
     def _cargar_pool(self):
         """Carga los posts desde el archivo JSON."""
         try:
-            ruta = self.RUTA_JSON
-            if not os.path.exists(ruta):
-                print(f"[POSTS POOL] No encontrado: {ruta}")
+            # Intentar múltiples rutas posibles
+            rutas_posibles = [
+                "assets/data/posts_pool.json",
+                "../assets/data/posts_pool.json",
+                "../../assets/data/posts_pool.json",
+                os.path.join(os.path.dirname(__file__), "../../assets/data/posts_pool.json"),
+            ]
+
+            ruta = None
+            for ruta_intento in rutas_posibles:
+                if os.path.exists(ruta_intento):
+                    ruta = ruta_intento
+                    break
+
+            if ruta is None:
+                print(f"[POSTS POOL] JSON no encontrado en rutas: {rutas_posibles}")
                 self._usar_fallback()
                 return
 
             with open(ruta, "r", encoding="utf-8") as f:
                 self.todos_los_posts = json.load(f)
 
-            print(f"[POSTS POOL] Cargados {len(self.todos_los_posts)} posts")
+            print(f"[POSTS POOL] [OK] Cargados {len(self.todos_los_posts)} posts desde {ruta}")
 
         except Exception as e:
             print(f"[POSTS POOL] Error al cargar: {e}")

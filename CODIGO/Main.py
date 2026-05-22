@@ -174,9 +174,9 @@ if __name__ == "__main__":
                 time_module.sleep(0.2)
             if game.net._cliente.seed is not None:
                 seed_a_usar = game.net._cliente.seed
-                log_game.info(f"✅ Usando seed del servidor: {seed_a_usar}")
+                log_game.info(f"[OK] Usando seed del servidor: {seed_a_usar}")
             else:
-                log_game.warning(f"⚠️ No se recibió seed del servidor, usando seed aleatoria")
+                log_game.warning(f"[WARNING] No se recibió seed del servidor, usando seed aleatoria")
 
         log_game.info(
             f"Inicio rápido — seed={seed_a_usar}  sala={start_room}  debug={args.debug}  modo={net_mode}"

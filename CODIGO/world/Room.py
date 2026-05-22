@@ -1354,6 +1354,10 @@ class Room:
         Convierte esta sala en la sala del boss.
         Tamaño fijo definido en Config (BOSS_ROOM_W × BOSS_ROOM_H).
         Sin enemigos normales — el boss se añadirá en una fase posterior.
+
+        NOTA: NO bloqueamos la entrada norte aquí. El sistema de validación
+        en Dungeon verifica si hay otras entradas disponibles y bloquea
+        la norte si es necesario (o rechaza la seed si es la única entrada).
         """
         self.type = "boss"
         self.safe = False
@@ -1364,6 +1368,7 @@ class Room:
         # build_centered sobreescribe los tiles, así que re-tallamos los
         # corredores después para que las puertas sigan siendo accesibles.
         self.build_centered(CFG.BOSS_ROOM_W, CFG.BOSS_ROOM_H)
+
         self.carve_corridors(width_tiles=2, length_tiles=3)
 
         # Inicializar el boss después de que la sala esté lista

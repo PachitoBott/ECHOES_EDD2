@@ -192,7 +192,7 @@ class Boss:
         limite_der = self.sala_rect.right - self.render_w - self.MARGIN
         rango_movimiento = limite_der - limite_izq
 
-        print(f"\n[BOSS] ✅ ACTIVADO")
+        print(f"\n[BOSS] [OK] ACTIVADO")
         print(f"      Posición inicial: ({self.x:.0f}, {self.y:.0f})")
         print(f"      Sala rect: left={self.sala_rect.left}, right={self.sala_rect.right}, "
               f"width={self.sala_rect.width}")
@@ -230,13 +230,13 @@ class Boss:
         if self.x <= limite_izq:
             self.x = float(limite_izq)
             self.velocidad_x = abs(self.velocidad_x)  # ir derecha
-            print(f"[BOSS] ⬅️ Rebotó en límite izquierdo: x={x_anterior:.1f}→{self.x:.0f}, "
+            print(f"[BOSS] [LEFT] Rebotó en límite izquierdo: x={x_anterior:.1f}→{self.x:.0f}, "
                   f"vel→{self.velocidad_x}")
 
         elif self.x >= limite_der:
             self.x = float(limite_der)
             self.velocidad_x = -abs(self.velocidad_x)  # ir izquierda
-            print(f"[BOSS] ➡️ Rebotó en límite derecho: x={x_anterior:.1f}→{self.x:.0f}, "
+            print(f"[BOSS] [RIGHT] Rebotó en límite derecho: x={x_anterior:.1f}→{self.x:.0f}, "
                   f"vel→{self.velocidad_x}")
 
     def render(self, surface: pygame.Surface) -> None:

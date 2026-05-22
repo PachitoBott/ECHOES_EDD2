@@ -375,10 +375,10 @@ class Game:
         if self._net_mode == "server":
             self.net = NetworkManager.como_servidor(port=self._net_port, seed=None)
             if not self.net.iniciar():
-                log_game.error("❌ No se pudo iniciar servidor de red")
+                log_game.error("[ERROR] No se pudo iniciar servidor de red")
                 self.running = False
             else:
-                log_game.info(f"✅ Servidor escuchando en puerto {self._net_port}")
+                log_game.info(f"[OK] Servidor escuchando en puerto {self._net_port}")
         elif self._net_mode == "client":
             self.net = NetworkManager.como_cliente(
                 host=self._net_host,
@@ -386,10 +386,10 @@ class Game:
                 rol=self._net_role,
             )
             if not self.net.iniciar():
-                log_game.error(f"❌ No se pudo conectar a {self._net_host}:{self._net_port}")
+                log_game.error(f"[ERROR] No se pudo conectar a {self._net_host}:{self._net_port}")
                 self.running = False
             else:
-                log_game.info(f"✅ Conectado al servidor como {self._net_role}")
+                log_game.info(f"[OK] Conectado al servidor como {self._net_role}")
 
         # ---------- Herramientas de desarrollo ----------
         # Consola de debug (F1): siempre creada, solo visible en debug_mode
@@ -549,7 +549,7 @@ class Game:
         # Actualizar seed del servidor (para que la comunique a los clientes)
         if self.net and self.net.es_servidor and hasattr(self.net, '_servidor'):
             self.net._servidor.seed = self.current_seed
-            log_game.info(f"✅ Seed compartida con clientes: {self.current_seed}")
+            log_game.info(f"[OK] Seed compartida con clientes: {self.current_seed}")
 
         # preparar inventario de la tienda para esta seed
         if hasattr(self, "shop"):
@@ -650,7 +650,7 @@ class Game:
         if hasattr(player, 'stun_timer'):
             player.stun_timer = 0.0
 
-        log_game.info("✅ Poderes del jugador reseteados")
+        log_game.info("[OK] Poderes del jugador reseteados")
 
     def _reset_zone_and_tileset(self) -> None:
         """
@@ -664,17 +664,17 @@ class Game:
         # Forzar el fondo matrix a zona 1
         if self.matrix_bg:
             self.matrix_bg.set_zona(1)
-            log_game.debug("✅ Fondo matrix reseteado a zona 1")
+            log_game.debug("[OK] Fondo matrix reseteado a zona 1")
 
         # Resetear tileset a zona 1
         if hasattr(self, 'tileset_manager') and self.tileset_manager:
             self.tileset_manager.set_zone(1)
-            log_game.debug("✅ Tileset reseteado a zona 1")
+            log_game.debug("[OK] Tileset reseteado a zona 1")
 
         # Limpiar efectos de poderes
         power_effect_manager.limpiar()
 
-        log_game.info("✅ Zona y tileset reseteados a inicio")
+        log_game.info("[OK] Zona y tileset reseteados a inicio")
 
     def _register_gold_spent(self, amount: int) -> None:
         if amount <= 0:
@@ -828,17 +828,17 @@ class Game:
             seed = ev.datos.get("seed")
             if seed is not None and self.current_seed is None:
                 # Usar la seed del servidor
-                log_net.info(f"✅ Usando seed del servidor: {seed}")
+                log_net.info(f"[OK] Usando seed del servidor: {seed}")
                 self.start_new_run(seed=seed)
 
         elif ev.tipo == "jugador_unido":
             rol = ev.datos.get("rol")
-            log_net.info(f"✅ Jugador {rol} se unió a la sesión")
+            log_net.info(f"[OK] Jugador {rol} se unió a la sesión")
 
         elif ev.tipo == "jugador_desconectado":
             rol = ev.datos.get("rol")
             motivo = ev.datos.get("motivo", "desconocido")
-            log_net.info(f"❌ Jugador {rol} desconectado ({motivo})")
+            log_net.info(f"[ERROR] Jugador {rol} desconectado ({motivo})")
             # Limpiar datos del jugador desconectado
             if rol in self.remote_players:
                 del self.remote_players[rol]
@@ -894,7 +894,7 @@ class Game:
 
         elif ev.tipo == "error_red":
             descripcion = ev.datos.get("descripcion", "error desconocido")
-            log_game.warning(f"⚠️ Error de red: {descripcion}")
+            log_game.warning(f"[WARNING] Error de red: {descripcion}")
 
         elif ev.tipo == "accion_recibida":
             # Acción enviada por el cliente (ej: solicitud de transición)
@@ -1011,15 +1011,15 @@ class Game:
 
                 if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
                     # Encontrado enemigo que coincide — removerlo
-                    log_game.warning(f"[FANTASM_MUERTE] ✓ ENCONTRADO en índice {i}. Eliminando...")
+                    log_game.warning(f"[FANTASM_MUERTE] [DONE] ENCONTRADO en índice {i}. Eliminando...")
                     room.enemies.pop(i)
                     encontrado = True
                     break
 
             if encontrado:
-                log_game.warning(f"[FANTASM_MUERTE] ✓ Eliminado. Quedan: {len(room.enemies)} enemigos")
+                log_game.warning(f"[FANTASM_MUERTE] [DONE] Eliminado. Quedan: {len(room.enemies)} enemigos")
             else:
-                log_game.warning(f"[FANTASM_MUERTE] ✗ NO ENCONTRADO {enemy_type} en ({pos_x}, {pos_y}) (tol={tolerance})")
+                log_game.warning(f"[FANTASM_MUERTE] [FAIL] NO ENCONTRADO {enemy_type} en ({pos_x}, {pos_y}) (tol={tolerance})")
                 log_game.warning(f"[FANTASM_MUERTE]   Enemigos actuales en sala: {[(e.__class__.__name__, e.x, e.y) for e in room.enemies]}")
 
         except Exception as e:
