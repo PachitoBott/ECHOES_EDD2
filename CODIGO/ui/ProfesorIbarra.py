@@ -18,6 +18,55 @@ from narrative.text_renderer import TextRenderer
 
 
 # ---------------------------------------------------------------------------
+# Sistema de progreso del Profesor Ibarra
+# ---------------------------------------------------------------------------
+class ProgresoIbarra:
+    """
+    Rastrea cuántas preguntas del Profesor Ibarra ha respondido
+    el jugador en el run actual (sin importar si acertó o falló).
+    """
+
+    MAX_PREGUNTAS = 5  # Total de preguntas posibles en un run
+
+    def __init__(self):
+        self.preguntas_respondidas = 0
+        self.respuestas_correctas = 0
+
+    def registrar_respuesta(self, fue_correcta: bool) -> None:
+        """Registra una respuesta a una pregunta del profesor.
+
+        Args:
+            fue_correcta: True si la respuesta fue correcta
+        """
+        self.preguntas_respondidas += 1
+        if fue_correcta:
+            self.respuestas_correctas += 1
+
+    def reset(self) -> None:
+        """Reinicia el progreso (llamar al iniciar un nuevo run)."""
+        self.preguntas_respondidas = 0
+        self.respuestas_correctas = 0
+
+    @property
+    def porcentaje(self) -> float:
+        """Retorna el porcentaje de preguntas respondidas (0.0 a 1.0)."""
+        if self.MAX_PREGUNTAS == 0:
+            return 0.0
+        return self.preguntas_respondidas / self.MAX_PREGUNTAS
+
+    @property
+    def porcentaje_correctas(self) -> float:
+        """Retorna el porcentaje de respuestas correctas (0.0 a 1.0)."""
+        if self.preguntas_respondidas == 0:
+            return 0.0
+        return self.respuestas_correctas / self.preguntas_respondidas
+
+
+# Instancia global del progreso
+progreso_ibarra = ProgresoIbarra()
+
+
+# ---------------------------------------------------------------------------
 # Banco de preguntas (una por zona; agregar más aquí)
 # ---------------------------------------------------------------------------
 PREGUNTAS: list[dict] = [
@@ -231,7 +280,9 @@ class ProfesorIbarra:
 
     def responder(self, opcion_idx: int, player) -> None:
         """Registra la respuesta, otorga recompensa y cambia a FEEDBACK."""
-        if opcion_idx == self.pregunta["correcta"]:
+        fue_correcta = opcion_idx == self.pregunta["correcta"]
+
+        if fue_correcta:
             reward = RECOMPENSA_CORRECTA
             lines  = list(self.pregunta["feedback_correcto"])
         else:
@@ -246,6 +297,9 @@ class ProfesorIbarra:
         lines.append("(Presiona E, Enter o Espacio para abrir la tienda)")
 
         self._feedback_lines   = lines
+
+        # Registrar respuesta en el progreso global
+        progreso_ibarra.registrar_respuesta(fue_correcta)
 
         # Crear TextRenderer para el efecto typewriter
         # Unir líneas con saltos de línea para renderización
