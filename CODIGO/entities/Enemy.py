@@ -861,8 +861,8 @@ class FakerEnemy(Enemy):
         super().__init__(x, y, hp=4, gold_reward=7)
 
         cx, cy = self.x + self.w / 2.0, self.y + self.h / 2.0
-        self.w = 96
-        self.h = 96
+        self.w = 64
+        self.h = 64
         self.x = cx - self.w / 2.0
         self.y = cy - self.h / 2.0
 
@@ -877,6 +877,9 @@ class FakerEnemy(Enemy):
         self._attack_timer = 0.0
         self.attack_duration = 0.5
         self._attack_fired = False
+
+        # Ralentizar animación de ataque
+        self.animator.fps_overrides["attack"] = 8.0
 
     def update(self, dt, player, room):
         self._attack_timer = max(0.0, self._attack_timer - dt)
