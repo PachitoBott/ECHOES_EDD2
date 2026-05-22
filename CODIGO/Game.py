@@ -1153,6 +1153,8 @@ class Game:
         ids_a_eliminar = []
         ids_muertos = set()  # [FIX SYNC] Rastrear enemigos que el servidor envía como muertos
 
+        log_game.debug(f"[ENEMIES_STATE] PASO 2: Verificando {len(room.enemies)} enemigos locales vs {len(server_enemies_by_id)} del servidor")
+
         for i, enemy in enumerate(room.enemies):
             enemy_id = getattr(enemy, "enemy_id", None)
             if not enemy_id:
@@ -1162,7 +1164,7 @@ class Game:
             if enemy_id not in server_enemies_by_id:
                 # [FANTASMA] No está en servidor → eliminar
                 ids_a_eliminar.append(i)
-                log_game.info(f"[SYNC] Eliminando enemigo fantasma {enemy_id} (no en servidor)")
+                log_game.info(f"[ENEMIES_STATE] FANTASMA: {enemy_id} no está en servidor")
             else:
                 # [FIX SYNC] ¿El servidor dice que está muerto?
                 server_vivo = server_enemies_by_id[enemy_id].get("vivo", True)
@@ -1170,10 +1172,13 @@ class Game:
                     # [MUERTO] Servidor envía vivo=False → eliminar INMEDIATAMENTE
                     ids_a_eliminar.append(i)
                     ids_muertos.add(enemy_id)
-                    log_game.info(f"[SYNC] Enemigo {enemy_id} MUERTO en servidor — eliminación inmediata")
+                    log_game.warning(f"[ENEMIES_STATE] MUERTO (vivo=False): {enemy_id} será eliminado")
 
         # Eliminar en orden inverso para mantener índices
+        log_game.debug(f"[ENEMIES_STATE] Eliminando {len(ids_a_eliminar)} enemigos (fantasmas={len(ids_a_eliminar)-len(ids_muertos)}, muertos={len(ids_muertos)})")
         for i in sorted(ids_a_eliminar, reverse=True):
+            removed_id = getattr(room.enemies[i], "enemy_id", "unknown")
+            log_game.debug(f"[ENEMIES_STATE] Eliminando índice {i}: {removed_id}")
             room.enemies.pop(i)
 
         # PASO 3: Actualizar/crear enemigos del servidor
@@ -1185,11 +1190,11 @@ class Game:
 
         # [DIAG] Verificar qué recibe del servidor
         muertos_recibidos = sum(1 for e in enemies_list if not e.get("vivo", True))
-        log_game.warning(f"[DIAG_CLIENTE] Recibido enemies_state: {len(enemies_list)} enemigos, {muertos_recibidos} muertos")
+        log_game.info(f"[ENEMIES_STATE] Cliente recibió: {len(enemies_list)} enemigos, {muertos_recibidos} muertos, sala {room_id}")
         if muertos_recibidos > 0:
             for e in enemies_list:
                 if not e.get("vivo", True):
-                    log_game.warning(f"[DIAG_CLIENTE] → Enemigo MUERTO: {e.get('id')} (vivo={e.get('vivo')})")
+                    log_game.warning(f"[ENEMIES_STATE] → Enemigo MUERTO en servidor: {e.get('id')} en ({e.get('x', 0):.1f}, {e.get('y', 0):.1f})")
 
         for server_id, server_data in server_enemies_by_id.items():
             # [FIX SYNC] Saltar enemigos que ya fueron eliminados por estar muertos
