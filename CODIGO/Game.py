@@ -975,7 +975,7 @@ class Game:
 
         # Validate that room exists (dungeon may have different sizes between clients)
         try:
-            room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
+            room = self.dungeon.rooms[sala_remota]
         except (KeyError, IndexError, TypeError) as e:
             log_net.warning(f"Sala {sala_remota} no existe en este dungeon: {e}")
             return
@@ -1065,7 +1065,7 @@ class Game:
 
         # Validate that room exists
         try:
-            room = self.dungeon.rooms[sala_remota[0]][sala_remota[1]]
+            room = self.dungeon.rooms[sala_remota]
         except (KeyError, IndexError, TypeError) as e:
             log_net.warning(f"Sala {sala_remota} no existe en este dungeon: {e}")
             return
@@ -1546,6 +1546,9 @@ class Game:
                 self._apply_ibarra_pending_effects(prof, room)
                 return
 
+        # --- Trigger transiciones de zona (PRIMERO, antes de spawnar enemigos) ---
+        self._check_zone_transitions()
+
         self._update_player(dt, room)
         # [FIX SYNC] Cliente NO crea enemigos — los recibe del servidor
         # Solo el servidor debe llamar a _spawn_room_enemies
@@ -1572,9 +1575,6 @@ class Game:
         self._update_pickups(dt, room)
         self._handle_room_transition(room)
         self._update_shop(events)
-
-        # --- Trigger transiciones de zona ---
-        self._check_zone_transitions()
 
         # --- Trigger entrada a sala del boss (banner temporal) ---
         self._check_boss_room_entry(room)
@@ -1613,7 +1613,7 @@ class Game:
             if hasattr(self.dungeon, "main_path"):
                 on_main_path = 1 if pos in self.dungeon.main_path else 0
             difficulty = 1 + depth + branch_factor + (depth // 3) + on_main_path
-            room.ensure_spawn(difficulty=difficulty)
+            room.ensure_spawn(difficulty=difficulty, zone=self._current_zone, dungeon=self.dungeon)
 
     def _get_closest_player_for_enemy(self, enemy, room_pos=None) -> object:
         """
@@ -1850,7 +1850,7 @@ class Game:
                         on_main_path = 1 if pos in self.dungeon.main_path else 0
                     difficulty = 1 + depth + branch_factor + (depth // 3) + on_main_path
 
-                    room.ensure_spawn(difficulty=difficulty)
+                    room.ensure_spawn(difficulty=difficulty, zone=self._current_zone, dungeon=self.dungeon)
                     log_game.debug(f"[SERVIDOR] Sala remota {room_pos} spawned enemigos (difficulty={difficulty})")
 
                 # Simular enemigos en esta sala (pasar room_pos para targeting correcto)
