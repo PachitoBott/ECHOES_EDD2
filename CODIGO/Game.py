@@ -2868,19 +2868,32 @@ class Game:
         self.subtitulos.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)
 
         # Diálogo del Profesor Ibarra (encima del HUD)
+        _ibarra_interacting = False
         try:
             _room = self.dungeon.current_room
             if getattr(_room, "type", "") == "profesor_ibarra":
                 _prof = getattr(_room, "profesor_ibarra", None)
                 if _prof is not None:
+                    # Verificar si Profesor Ibarra está en estado de interacción (no IDLE)
+                    if getattr(_prof, "estado", "idle") != "idle":
+                        _ibarra_interacting = True
                     _prof.draw_screen(self.screen)
         except Exception:
             pass
 
+        # Cambiar cursor solo cuando cambia el estado de interacción con Profesor Ibarra
+        if not hasattr(self, "_prev_ibarra_interacting"):
+            self._prev_ibarra_interacting = False
+
+        if _ibarra_interacting != self._prev_ibarra_interacting:
+            pygame.mouse.set_visible(_ibarra_interacting)
+            self._prev_ibarra_interacting = _ibarra_interacting
+        elif not _ibarra_interacting:
+            # Asegurar que está oculto durante gameplay normal
+            pygame.mouse.set_visible(False)
+
         # Banner de cambio de zona / sala del boss (encima de todo el HUD)
         self._draw_zone_banner()
-
-        pygame.mouse.set_visible(False)  # Ocultar cursor durante gameplay
 
         # Consola de debug: se dibuja encima de todo
         self.debug_console.draw(self.screen)
