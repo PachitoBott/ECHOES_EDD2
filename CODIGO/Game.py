@@ -232,8 +232,7 @@ class Game:
                       cfg.SCREEN_W, cfg.SCREEN_H, cfg.SCREEN_SCALE)
         self.clock = pygame.time.Clock()
         self.world = pygame.Surface((cfg.SCREEN_W, cfg.SCREEN_H))
-        pygame.mouse.set_visible(False)
-        self._cursor_surface = self._create_cursor_surface()
+        pygame.mouse.set_visible(True)  # Mostrar cursor normal del sistema
 
         # ---------- UI ----------
         self.ui_font = pygame.font.SysFont(None, 18)
@@ -2817,11 +2816,8 @@ class Game:
             # Llenar pantalla de negro para ocultar el juego de fondo
             self.screen.fill((0, 0, 0))
 
+            pygame.mouse.set_visible(False)  # Ocultar cursor durante cinemática
             self.cinematics.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)
-            # Dibujar el cursor encima
-            mx, my = pygame.mouse.get_pos()
-            cursor_rect = self._cursor_surface.get_rect(center=(mx, my))
-            self.screen.blit(self._cursor_surface, cursor_rect.topleft)
             # Consola de debug encima de todo
             self.debug_console.draw(self.screen)
             pygame.display.flip()
@@ -2829,11 +2825,8 @@ class Game:
 
         # --- Dibujar diálogos si están activos ---
         if self.dialogue.activo:
+            pygame.mouse.set_visible(True)  # Mostrar cursor en diálogos
             self.dialogue.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)
-            # Dibujar el cursor encima
-            mx, my = pygame.mouse.get_pos()
-            cursor_rect = self._cursor_surface.get_rect(center=(mx, my))
-            self.screen.blit(self._cursor_surface, cursor_rect.topleft)
             # Consola de debug encima de todo
             self.debug_console.draw(self.screen)
             pygame.display.flip()
@@ -2902,23 +2895,34 @@ class Game:
         self.subtitulos.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)
 
         # Diálogo del Profesor Ibarra (encima del HUD)
+        _ibarra_interacting = False
         try:
             _room = self.dungeon.current_room
             if getattr(_room, "type", "") == "profesor_ibarra":
                 _prof = getattr(_room, "profesor_ibarra", None)
                 if _prof is not None:
+                    # Verificar si Profesor Ibarra está en estado de interacción (no IDLE)
+                    if getattr(_prof, "estado", "idle") != "idle":
+                        _ibarra_interacting = True
                     _prof.draw_screen(self.screen)
         except Exception:
             pass
 
+        # Cambiar cursor solo cuando cambia el estado de interacción con Profesor Ibarra
+        if not hasattr(self, "_prev_ibarra_interacting"):
+            self._prev_ibarra_interacting = False
+
+        if _ibarra_interacting != self._prev_ibarra_interacting:
+            pygame.mouse.set_visible(_ibarra_interacting)
+            self._prev_ibarra_interacting = _ibarra_interacting
+        elif not _ibarra_interacting:
+            # Asegurar que está oculto durante gameplay normal
+            pygame.mouse.set_visible(False)
+
         # Banner de cambio de zona / sala del boss (encima de todo el HUD)
         self._draw_zone_banner()
 
-        mx, my = pygame.mouse.get_pos()
-        cursor_rect = self._cursor_surface.get_rect(center=(mx, my))
-        self.screen.blit(self._cursor_surface, cursor_rect.topleft)
-
-        # Consola de debug: se dibuja encima de todo, incluyendo el cursor
+        # Consola de debug: se dibuja encima de todo
         self.debug_console.draw(self.screen)
 
         pygame.display.flip()
@@ -3149,16 +3153,6 @@ class Game:
 
         # Munición eliminada: el jugador dispara infinitamente con cadencia fija
         return icon_rect
-
-    def _create_cursor_surface(self) -> pygame.Surface:
-        cursor_path = Path(__file__).resolve().parent.parent / "assets/ui/cursor2.png"
-        try:
-            surface = pygame.image.load(cursor_path.as_posix()).convert_alpha()
-        except pygame.error as exc:  # pragma: no cover - carga de recursos
-            raise FileNotFoundError(
-                f"No se pudo cargar la imagen del cursor en {cursor_path}"
-            ) from exc
-        return surface
 
     # MÉTODOS DE BATERÍAS REMOVIDOS - Reemplazados con sistema de corazones en HUDPanel
     # - _load_battery_states()
