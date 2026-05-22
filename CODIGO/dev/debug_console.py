@@ -8,7 +8,7 @@ Comandos disponibles
 ────────────────────
   help                    Muestra esta lista
   spawn <tipo>            Spawnea un enemigo en la sala actual
-                            tipos: basic | fast | shooter | tank
+                            tipos: basic | fast | shooter | tank | faker | telefono | emoji
   set hp <n>              Cambia HP del jugador
   set gold <n>            Cambia oro del jugador
   set lives <n>           Cambia vidas del jugador
@@ -180,6 +180,7 @@ class DebugConsole:
             "tp":       self._cmd_teleport,      # alias corto
             "clear":    self._cmd_clear,
             "god":      self._cmd_god,
+            "hitboxes": self._cmd_hitboxes,
             "reload":   self._cmd_reload,
             "skip":     self._cmd_skip,
             "seed":     self._cmd_seed,
@@ -194,11 +195,12 @@ class DebugConsole:
     def _cmd_help(self, args: list[str]) -> None:
         lines = [
             "─── Comandos disponibles ─────────────────────────────────",
-            "  spawn <tipo>          spawnea enemigo  (basic|fast|shooter|tank)",
+            "  spawn <tipo>          spawnea enemigo  (basic|fast|shooter|tank|faker|telefono|emoji)",
             "  set hp/gold/lives/speed <n>  modifica atributo del jugador",
             "  teleport <i> <j>      teletransporta a sala (i,j)  [alias: tp]",
             "  clear                 elimina enemigos de la sala actual",
             "  god                   toggle invulnerabilidad",
+            "  hitboxes              toggle visualización de hitboxes de enemigos",
             "  reload                recarga todos los assets monitoreados",
             "  skip                  avanza al siguiente nodo del camino principal",
             "  seed                  muestra seed actual",
@@ -212,16 +214,22 @@ class DebugConsole:
 
     def _cmd_spawn(self, args: list[str]) -> str:
         if not args:
-            return "Uso: spawn <tipo>   (basic | fast | shooter | tank)"
+            return "Uso: spawn <tipo>   (basic | fast | shooter | tank | faker | telefono | emoji)"
 
         # importación diferida para no crear ciclos
-        from entities.Enemy import BasicEnemy, FastChaserEnemy, ShooterEnemy, TankEnemy
+        from entities.Enemy import (
+            BasicEnemy, FastChaserEnemy, ShooterEnemy, TankEnemy,
+            FakerEnemy, TelefonoEnemy, EmojiEnemy
+        )
 
         tipo_map: dict[str, type] = {
-            "basic":   BasicEnemy,
-            "fast":    FastChaserEnemy,
-            "shooter": ShooterEnemy,
-            "tank":    TankEnemy,
+            "basic":    BasicEnemy,
+            "fast":     FastChaserEnemy,
+            "shooter":  ShooterEnemy,
+            "tank":     TankEnemy,
+            "faker":    FakerEnemy,
+            "telefono": TelefonoEnemy,
+            "emoji":    EmojiEnemy,
         }
         tipo = args[0].lower()
         cls  = tipo_map.get(tipo)
@@ -319,6 +327,13 @@ class DebugConsole:
         estado = "ACTIVADO" if self._god_mode else "DESACTIVADO"
         log_debug.info(f"Modo dios {estado}")
         return f"Modo dios: {estado}"
+
+    def _cmd_hitboxes(self, args: list[str]) -> str:
+        from entities.Enemy import Enemy
+        Enemy._debug_draw_hitboxes = not Enemy._debug_draw_hitboxes
+        estado = "ACTIVADO" if Enemy._debug_draw_hitboxes else "DESACTIVADO"
+        log_debug.info(f"Visualización de hitboxes {estado}")
+        return f"Hitboxes: {estado}"
 
     def _cmd_reload(self, args: list[str]) -> str:
         watcher = getattr(self._game, "asset_watcher", None)

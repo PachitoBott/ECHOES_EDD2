@@ -32,6 +32,7 @@ class Enemy(Entity):
     SPRITE_VARIANT = "default"
     DEATH_PARTICLE_COLOR = (255, 40, 40)  # Rojo brillante — paleta unificada para todas las muertes
     _death_effect_manager_global = None  # Asignado por Game al inicializar
+    _debug_draw_hitboxes = False  # Flag para visualizar hitboxes en debug
 
     def __init__(self, x: float, y: float, hp: int = 3, gold_reward: int = 5) -> None:
         super().__init__(x, y, w=12, h=12, speed=40.0)
@@ -311,6 +312,10 @@ class Enemy(Entity):
 
         dest = frame.get_rect(center=self.rect().center)
         surf.blit(frame, dest)
+
+        if self._debug_draw_hitboxes:
+            rect = self.rect()
+            pygame.draw.rect(surf, (255, 0, 0), rect, 2)
 
     def _update_animation(self, dt: float) -> None:
         base_state = "idle"
@@ -846,3 +851,279 @@ class TankEnemy(Enemy):
         # Renderizar en posición correcta (sin escalado)
         dest = frame.get_rect(center=self.rect().center)
         surf.blit(frame, dest)
+
+
+class FakerEnemy(Enemy):
+    """Faker - Melee rápido y letal. Mayor velocidad, menos vida, ataques más rápidos."""
+    SPRITE_VARIANT = "faker"
+    DEATH_PARTICLE_COLOR = (255, 40, 40)
+    def __init__(self, x, y):
+        super().__init__(x, y, hp=4, gold_reward=7)
+
+        cx, cy = self.x + self.w / 2.0, self.y + self.h / 2.0
+        self.w = 96
+        self.h = 96
+        self.x = cx - self.w / 2.0
+        self.y = cy - self.h / 2.0
+
+        self.chase_speed  = 130.0
+        self.wander_speed = 105.0
+        self.detect_radius = 100.0
+        self.lose_radius   = 150.0
+        self.reaction_delay = 0.0
+        self.contact_damage = 1
+        self.attack_range = 26.0
+        self.attack_cooldown = 2.0
+        self._attack_timer = 0.0
+        self.attack_duration = 0.5
+        self._attack_fired = False
+
+    def update(self, dt, player, room):
+        self._attack_timer = max(0.0, self._attack_timer - dt)
+        super().update(dt, player, room)
+        if self.is_dying():
+            return
+
+        ex = self.x + self.w/2
+        ey = self.y + self.h/2
+        px = player.x + player.w/2
+        py = player.y + player.h/2
+        dist = math.hypot(px - ex, py - ey)
+
+        # Si está en rango de ataque, se queda quieto
+        if dist <= self.attack_range:
+            self.lock_movement(0.1)  # Lock continuo cada frame
+            if self._attack_timer <= 0.0 and not self._attack_fired:
+                dir_x = px - ex
+                self.trigger_attack_animation(dir_x)
+                self._attack_fired = True
+        else:
+            self._attack_fired = False
+
+    def trigger_attack_animation(self, dir_x: float = 0.0) -> None:
+        if self.is_dying():
+            return
+        self._attack_timer = self.attack_cooldown
+        self._update_facing(dir_x)
+        self.animator.trigger_attack()
+        self.lock_movement(self.attack_duration)
+
+    def _update_animation(self, dt: float) -> None:
+        if self._attack_timer > 0.0:
+            base_state = "attack"
+        elif not self._movement_locked and self.state in (WANDER, CHASE):
+            base_state = "run"
+        else:
+            base_state = "idle"
+
+        self.animator.set_base_state(base_state)
+        self.animator.update(dt)
+
+
+class TelefonoEnemy(Enemy):
+    """Teléfono - Dispara rápido y muy ágil. Velocidad aumentada y cadencia de fuego acelerada."""
+    SPRITE_VARIANT = "telefono"
+    def __init__(self, x, y):
+        super().__init__(x, y, hp=3, gold_reward=9)
+
+        cx, cy = self.x + self.w / 2.0, self.y + self.h / 2.0
+        self.w = 64
+        self.h = 64
+        self.x = cx - self.w / 2.0
+        self.y = cy - self.h / 2.0
+
+        self.chase_speed  = 35.0
+        self.wander_speed = 25.0
+        self.detect_radius = 220.0
+        self.lose_radius   = 260.0
+
+        self.fire_cooldown = 1.8
+        self._fire_timer   = 0.0
+        self.fire_range    = 260.0
+        self.bullet_speed  = 160.0 * ENEMY_PROJECTILE_SPEED_SCALE
+        self.reaction_delay = 0.35
+        self._load_attack_sound("shooter_enemy_sfx.mp3")
+
+        self.animator.fps_overrides.update({
+            "idle": 10.0,
+            "run": 10.0,
+            "shoot": 12.0,
+        })
+
+    def update(self, dt, player, room):
+        super().update(dt, player, room)
+        self._fire_timer = max(0.0, self._fire_timer - dt)
+
+    def maybe_shoot(self, dt, player, room, out_bullets: list) -> bool:
+        if self.alert_timer > 0.0 or self.is_stunned() or self.is_dying():
+            return False
+        if self._fire_timer > 0.0:
+            return False
+        ex, ey = self._center()
+        px, py = (player.x + player.w/2, player.y + player.h/2)
+        dx, dy = (px - ex), (py - ey)
+        dist = math.hypot(dx, dy)
+        if self.state != CHASE or dist > self.fire_range:
+            return False
+        if not room.has_line_of_sight(ex, ey, px, py):
+            return False
+
+        if dist > 0:
+            dx, dy = dx/dist, dy/dist
+            self._update_facing(dx)
+
+        base_angle = math.atan2(dy, dx)
+        spread = math.radians(35)
+        burst = 5
+        center = (burst - 1) / 2.0
+        for i in range(burst):
+            offset = (i - center)
+            angle = base_angle + (spread * offset / max(center, 1))
+            dir_x = math.cos(angle)
+            dir_y = math.sin(angle)
+            spawn_x = ex + dir_x * 8
+            spawn_y = ey + dir_y * 8
+            bullet = Projectile(
+                    spawn_x, spawn_y, dir_x, dir_y,
+                    speed=self.bullet_speed,
+                    radius=3,
+                    color=(255, 90, 90),
+                    damage=getattr(self, "projectile_damage", 1),
+                )
+            if hasattr(out_bullets, "add"):
+                out_bullets.add(bullet)
+            else:
+                out_bullets.append(bullet)
+
+        radial = 8
+        radial_speed = self.bullet_speed * 0.55
+        for j in range(radial):
+            angle = base_angle + j * (math.tau / radial)
+            dir_x = math.cos(angle)
+            dir_y = math.sin(angle)
+            spawn_x = ex + dir_x * 10
+            spawn_y = ey + dir_y * 10
+            bullet = Projectile(
+                spawn_x, spawn_y, dir_x, dir_y,
+                speed=radial_speed,
+                radius=4,
+                color=(200, 70, 180),
+                damage=getattr(self, "projectile_damage", 1),
+            )
+            if hasattr(out_bullets, "add"):
+                out_bullets.add(bullet)
+            else:
+                out_bullets.append(bullet)
+        self._fire_timer = self.fire_cooldown
+        if hasattr(self, '_attack_sound') and self._attack_sound:
+            self._attack_sound.play()
+        self.trigger_shoot_animation(dx)
+        return True
+
+
+class EmojiEnemy(Enemy):
+    """Emoji - Dispara en ráfaga de 4 proyectiles rápidos uno tras otro."""
+
+    SPRITE_VARIANT = "emoji"
+    DEATH_PARTICLE_COLOR = (255, 40, 40)
+
+    def __init__(self, x, y):
+        super().__init__(x, y, hp=3, gold_reward=5)
+
+        cx, cy = self.x + self.w / 2.0, self.y + self.h / 2.0
+        self.w = 64
+        self.h = 64
+        self.x = cx - self.w / 2.0
+        self.y = cy - self.h / 2.0
+
+        self.chase_speed = 25.0
+        self.wander_speed = 20.0
+        self.fire_cooldown = 2.0
+        self._fire_timer = 0.0
+        self.fire_range = 210.0
+        self.bullet_speed = 192.0 * ENEMY_PROJECTILE_SPEED_SCALE
+        self.reaction_delay = 0.45
+        self._load_attack_sound("basic_enemy_sfx.mp3")
+        if self._attack_sound:
+            self._attack_sound.set_volume(0.025)
+
+        self.animator.fps_overrides.update({
+            "idle": 10.0,
+            "run": 10.0,
+            "shoot": 12.0,
+        })
+
+        # Sistema de ráfaga
+        self._burst_count = 0
+        self._burst_total = 4
+        self._burst_interval = 0.15
+        self._burst_timer = 0.0
+
+    def update(self, dt, player, room):
+        super().update(dt, player, room)
+        self._fire_timer = max(0.0, getattr(self, "_fire_timer", 0.0) - dt)
+
+        # Actualizar timer de ráfaga si está en progreso
+        if self._burst_count > 0 and self._burst_count < self._burst_total:
+            self._burst_timer = max(0.0, self._burst_timer - dt)
+
+    def maybe_shoot(self, dt, player, room, out_bullets) -> bool:
+        if self.alert_timer > 0.0 or self.is_stunned() or self.is_dying():
+            return False
+        if getattr(self, "_fire_timer", 0.0) > 0.0:
+            return False
+
+        ex, ey = self._center()
+        px, py = (player.x + player.w/2, player.y + player.h/2)
+        dx, dy = (px - ex), (py - ey)
+        dist = math.hypot(dx, dy)
+        if self.state != CHASE or dist > self.fire_range:
+            return False
+        if not room.has_line_of_sight(ex, ey, px, py):
+            return False
+
+        if dist > 0:
+            dx, dy = dx/dist, dy/dist
+            self._update_facing(dx)
+
+        # Si no estamos en ráfaga, iniciarla
+        if self._burst_count == 0:
+            self._burst_count = 1
+            self._burst_timer = self._burst_interval
+        # Si estamos en ráfaga pero el timer no ha llegado, no disparar
+        elif self._burst_count < self._burst_total and self._burst_timer > 0:
+            return False
+        # Si es hora del siguiente disparo en la ráfaga
+        elif self._burst_count < self._burst_total:
+            self._burst_count += 1
+            self._burst_timer = self._burst_interval
+        else:
+            # Ráfaga terminada, reiniciar
+            self._burst_count = 0
+            self._fire_timer = self.fire_cooldown
+            return False
+
+        base_angle = math.atan2(dy, dx)
+        offsets = (-0.18, 0.0, 0.18)
+        for offset in offsets:
+            angle = base_angle + offset
+            dir_x = math.cos(angle)
+            dir_y = math.sin(angle)
+            spawn_x = ex + dir_x * 6
+            spawn_y = ey + dir_y * 6
+            bullet = Projectile(
+                spawn_x, spawn_y, dir_x, dir_y,
+                speed=self.bullet_speed,
+                radius=3,
+                color=(120, 230, 140),
+                damage=getattr(self, "projectile_damage", 1),
+            )
+            if hasattr(out_bullets, "add"):
+                out_bullets.add(bullet)
+            else:
+                out_bullets.append(bullet)
+
+        if hasattr(self, '_attack_sound') and self._attack_sound:
+            self._attack_sound.play()
+        self.trigger_shoot_animation(dx)
+        return True

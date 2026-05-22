@@ -8,7 +8,10 @@ from typing import Dict, List, Optional, Tuple, Type
 import pygame
 
 from Config import CFG
-from entities.Enemy import Enemy, FastChaserEnemy, TankEnemy, ShooterEnemy, BasicEnemy
+from entities.Enemy import (
+    Enemy, FastChaserEnemy, TankEnemy, ShooterEnemy, BasicEnemy,
+    FakerEnemy, TelefonoEnemy, EmojiEnemy
+)
 import entities.Enemy as enemy_mod  # <- para usar enemy_mod.WANDER
 from core.asset_paths import assets_dir
 
@@ -22,6 +25,8 @@ ENCOUNTER_TABLE: list[tuple[int, list[list[Type[Enemy]]]]] = [
             [FastChaserEnemy],
             [BasicEnemy, FastChaserEnemy],
             [BasicEnemy, BasicEnemy, FastChaserEnemy],
+            [EmojiEnemy],
+            [FakerEnemy],
         ],
     ),
     (
@@ -31,6 +36,8 @@ ENCOUNTER_TABLE: list[tuple[int, list[list[Type[Enemy]]]]] = [
             [FastChaserEnemy, FastChaserEnemy],
             [BasicEnemy, FastChaserEnemy, FastChaserEnemy],
             [BasicEnemy, BasicEnemy, BasicEnemy],
+            [EmojiEnemy, FakerEnemy],
+            [TelefonoEnemy],
         ],
     ),
     (
@@ -40,6 +47,8 @@ ENCOUNTER_TABLE: list[tuple[int, list[list[Type[Enemy]]]]] = [
             [TankEnemy, BasicEnemy],
             [TankEnemy, FastChaserEnemy],
             [BasicEnemy, BasicEnemy, TankEnemy],
+            [EmojiEnemy, TankEnemy],
+            [TelefonoEnemy, FastChaserEnemy],
         ],
     ),
     (
@@ -49,6 +58,8 @@ ENCOUNTER_TABLE: list[tuple[int, list[list[Type[Enemy]]]]] = [
             [TankEnemy, FastChaserEnemy, FastChaserEnemy],
             [TankEnemy, BasicEnemy, FastChaserEnemy],
             [TankEnemy, TankEnemy, BasicEnemy],
+            [TelefonoEnemy, TankEnemy, FakerEnemy],
+            [EmojiEnemy, TelefonoEnemy, TankEnemy],
         ],
     ),
     (
@@ -59,6 +70,8 @@ ENCOUNTER_TABLE: list[tuple[int, list[list[Type[Enemy]]]]] = [
             [ShooterEnemy, ShooterEnemy, TankEnemy],
             [ShooterEnemy, BasicEnemy, TankEnemy, FastChaserEnemy],
             [ShooterEnemy, ShooterEnemy, FastChaserEnemy, FastChaserEnemy],
+            [TelefonoEnemy, ShooterEnemy, TankEnemy],
+            [EmojiEnemy, TelefonoEnemy, FakerEnemy],
         ],
     ),
 ]
