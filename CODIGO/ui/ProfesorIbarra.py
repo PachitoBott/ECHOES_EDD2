@@ -788,6 +788,55 @@ class ProfesorIbarra:
             surface.blit(continue_text, (text_x, y + 8))
 
 
+    # --- barra de progreso ---
+    def _draw_progress_bar(self, surface: pygame.Surface, font: pygame.font.Font,
+                          x: int, y: int) -> None:
+        """
+        Dibuja la barra de progreso de preguntas respondidas.
+        Muestra iconos individuales por cada pregunta (completada/pendiente).
+        """
+        ICON_SIZE = 14  # píxeles lógicos
+        ICON_GAP = 6    # píxeles entre iconos
+
+        total = progreso_ibarra.MAX_PREGUNTAS
+        respondidas = progreso_ibarra.preguntas_respondidas
+
+        # Título
+        titulo = font.render("Preguntas respondidas", True, (140, 140, 160))
+        surface.blit(titulo, (x, y))
+
+        # Iconos de progreso
+        icon_y = y + titulo.get_height() + 6
+
+        for i in range(total):
+            icon_x = x + i * (ICON_SIZE + ICON_GAP)
+            completado = i < respondidas
+
+            # Colores
+            color_fill = (76, 175, 80) if completado else (25, 25, 40)
+            color_border = (100, 200, 100) if completado else (50, 50, 70)
+
+            # Dibujar cuadrado del icono
+            rect = pygame.Rect(icon_x, icon_y, ICON_SIZE, ICON_SIZE)
+            pygame.draw.rect(surface, color_fill, rect)
+            pygame.draw.rect(surface, color_border, rect, 1)
+
+            # Dibujar checkmark en los completados
+            if completado:
+                cx = icon_x + ICON_SIZE // 2
+                cy = icon_y + ICON_SIZE // 2
+                pygame.draw.line(surface, (255, 255, 255),
+                               (cx - 3, cy), (cx, cy + 3), 1)
+                pygame.draw.line(surface, (255, 255, 255),
+                               (cx, cy + 3), (cx + 4, cy - 3), 1)
+
+        # Contador numérico al lado
+        contador = font.render(f"{respondidas}/{total}", True, (180, 180, 200))
+        surface.blit(contador, (
+            x + total * (ICON_SIZE + ICON_GAP) + 8,
+            icon_y + 1
+        ))
+
     # --- tienda carousel ---
     def _draw_tienda_ui(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
         sw, sh   = surface.get_size()
@@ -986,6 +1035,9 @@ class ProfesorIbarra:
             mc  = (70, 255, 130) if "Comprado" in self._last_msg else (255, 80, 80)
             ms  = font.render(self._last_msg, True, mc)
             surface.blit(ms, (rx, ry))
+
+        # ── Barra de progreso de preguntas ───────────────────────────────
+        self._draw_progress_bar(surface, font, px, py + ph - CTRL_BAR_H - 50)
 
         # ── Barra de controles ───────────────────────────────────────────
         ctrl_y = py + ph - CTRL_BAR_H + (CTRL_BAR_H - lh) // 2
