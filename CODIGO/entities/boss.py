@@ -497,7 +497,18 @@ class Boss:
                 boca_x, boca_y,
                 self.proyectiles
             )
-        # Los demás ataques (laser, emp) se implementarán en Paso 5-6
+        elif nombre == "laser":
+            # Verificar si el láser puede usarse (jugador debe estar debajo)
+            if not self._puede_usar_laser(jugadores):
+                print(f"[BOSS] Láser no puede activarse: jugador no está en rango")
+                return
+
+            ataque = AtaqueLaser(
+                boca_x, boca_y,
+                self.render_w,
+                self.x
+            )
+        # El ataque EMP se implementará en Paso 6
         else:
             print(f"[BOSS] Ataque '{nombre}' aún no implementado")
             return
@@ -539,6 +550,28 @@ class Boss:
         # Renderizar ataques
         for ataque in self.ataques_activos:
             ataque.render(surface, camera_offset)
+
+    def _puede_usar_laser(self, jugadores: list) -> bool:
+        """
+        Verifica si el láser puede activarse.
+        El láser solo se activa si un jugador está dentro del rango
+        horizontal del boss (ancho del boss ± margen).
+        """
+        boss_izq = self.x - 60  # 60px de margen a la izquierda
+        boss_der = self.x + self.render_w + 60  # 60px de margen a la derecha
+
+        for jugador in jugadores:
+            if not hasattr(jugador, 'x'):
+                continue
+
+            # Centro X del jugador
+            jx = jugador.x + getattr(jugador, 'w', 32) // 2
+
+            # Verificar si está dentro del rango horizontal
+            if boss_izq <= jx <= boss_der:
+                return True
+
+        return False
 
     def verificar_colisiones_jugador(self, jugador) -> None:
         """
@@ -970,3 +1003,206 @@ class AtaqueZigzag(AtaqueBoss):
                camera_offset=(0, 0)) -> None:
         """Los proyectiles se renderizan solos en _render_ataques()."""
         pass
+
+
+# ============================================================================
+# ATAQUE 3: LÁSER DE BARRIDO
+# ============================================================================
+
+class AtaqueLaser(AtaqueBoss):
+    """
+    Dispara un láser ancho (80px) hacia abajo cuando un jugador está
+    debajo del boss.
+    Tiene fase de telegraph (aviso visual) antes de activarse.
+    Causa daño continuo mientras está activo.
+    """
+
+    ANCHO_LASER = 80  # píxeles de ancho
+    DURACION = 1.5  # segundos de activo
+    TELEGRAPH = 0.6  # segundos de aviso visual
+    DAÑO_POR_INTERVALO = 1  # daño por aplicación
+    DAÑO_INTERVALO = 0.3  # cada cuántos segundos aplica daño
+    LASER_HEIGHT = 640  # altura máxima (llega hasta el suelo)
+
+    def __init__(self, boca_x: float, boca_y: float,
+                 boss_render_w: int, boss_x: float):
+        """
+        Args:
+            boca_x: Centro X donde sale el láser
+            boca_y: Y donde sale el láser (boca del boss)
+            boss_render_w: Ancho del sprite del boss (para referencias)
+            boss_x: X del boss (para referencias)
+        """
+        super().__init__()
+        self.boca_x = boca_x
+        self.boca_y = boca_y
+        self.boss_render_w = boss_render_w
+        self.boss_x = boss_x
+
+        # Control de fases
+        self.fase_laser = "telegraph"  # telegraph → activo → terminado
+        self.timer = 0.0
+        self.timer_daño = 0.0
+
+        # Altura del láser (desde boca hasta el suelo)
+        self.laser_alto = self.LASER_HEIGHT
+
+        print(f"[ATAQUE] AtaqueLaser: telegraph ({self.TELEGRAPH}s) "
+              f"→ activo ({self.DURACION}s)")
+
+    def update(self, dt: float, jugadores: list) -> None:
+        """
+        Actualiza las fases del láser.
+        Telegraph → Activo → Terminado.
+        """
+        self.timer += dt
+
+        if self.fase_laser == "telegraph":
+            # Esperar a que termine la fase de telegraph
+            if self.timer >= self.TELEGRAPH:
+                self.fase_laser = "activo"
+                self.timer = 0.0
+
+        elif self.fase_laser == "activo":
+            # Contador para daño continuo
+            self.timer_daño += dt
+
+            # Verificar si terminó la duración
+            if self.timer >= self.DURACION:
+                self.fase_laser = "terminado"
+                self.terminado = True
+
+        elif self.fase_laser == "terminado":
+            self.terminado = True
+
+    def verificar_colision_jugador(self, jugador,
+                                    jugador_rect: pygame.Rect) -> None:
+        """
+        Verifica si el jugador está dentro del área del láser.
+        Aplica daño continuamente si está en contacto.
+
+        Args:
+            jugador: Objeto jugador
+            jugador_rect: pygame.Rect del jugador
+        """
+        if self.fase_laser != "activo":
+            return
+
+        # Crear rect del láser
+        laser_rect = pygame.Rect(
+            self.boca_x - self.ANCHO_LASER // 2,
+            self.boca_y,
+            self.ANCHO_LASER,
+            self.laser_alto
+        )
+
+        # Verificar colisión
+        if laser_rect.colliderect(jugador_rect):
+            # Aplicar daño cada DAÑO_INTERVALO segundos
+            if self.timer_daño >= self.DAÑO_INTERVALO:
+                jugador.take_damage(self.DAÑO_POR_INTERVALO)
+                self.timer_daño = 0.0
+
+    def render(self, surface: pygame.Surface,
+               camera_offset=(0, 0)) -> None:
+        """
+        Renderiza el láser con sus dos fases visuales:
+        - Telegraph: líneas rojas parpadeantes de aviso
+        - Activo: láser rojo/blanco con efectos visuales
+        """
+        cx = int(self.boca_x - camera_offset[0])
+        top = int(self.boca_y - camera_offset[1])
+        bot = int((self.boca_y + self.laser_alto) - camera_offset[1])
+
+        if self.fase_laser == "telegraph":
+            # Fase de aviso: mostrar dónde irá el láser
+            progreso = self.timer / self.TELEGRAPH
+            alpha = int(40 + 140 * progreso)  # Se vuelve más opaco
+
+            # Superficie para el telegraph
+            tell_surf = pygame.Surface(
+                (self.ANCHO_LASER, max(1, bot - top)),
+                pygame.SRCALPHA
+            )
+            tell_surf.fill((255, 50, 50, alpha // 3))
+
+            # Líneas de borde rojo del telegraph
+            pygame.draw.line(
+                tell_surf,
+                (255, 50, 50, alpha),
+                (0, 0),
+                (0, max(1, bot - top)),
+                1
+            )
+            pygame.draw.line(
+                tell_surf,
+                (255, 50, 50, alpha),
+                (self.ANCHO_LASER - 1, 0),
+                (self.ANCHO_LASER - 1, max(1, bot - top)),
+                1
+            )
+
+            # Blittear telegraph
+            surface.blit(tell_surf, (cx - self.ANCHO_LASER // 2, top))
+
+            # Triángulo de aviso en la boca del boss
+            pygame.draw.polygon(
+                surface,
+                (255, 200, 0),
+                [
+                    (cx, top),
+                    (cx - 15, top - 20),
+                    (cx + 15, top - 20),
+                ]
+            )
+
+        elif self.fase_laser == "activo":
+            # Fase activa: mostrar el láser disparando
+            progreso_vida = self.timer / self.DURACION
+
+            # Núcleo del láser (blanco brillante)
+            nucleo_w = max(4, int(self.ANCHO_LASER * 0.3))
+            nucleo = pygame.Surface(
+                (nucleo_w, max(1, bot - top)),
+                pygame.SRCALPHA
+            )
+            nucleo.fill((255, 255, 255, 230))
+            surface.blit(nucleo, (cx - nucleo_w // 2, top))
+
+            # Cuerpo del láser (rojo, se desvanece ligeramente)
+            cuerpo = pygame.Surface(
+                (self.ANCHO_LASER, max(1, bot - top)),
+                pygame.SRCALPHA
+            )
+            alpha_cuerpo = int(180 * (1 - progreso_vida * 0.3))
+            cuerpo.fill((255, 40, 40, alpha_cuerpo))
+            surface.blit(cuerpo, (cx - self.ANCHO_LASER // 2, top))
+
+            # Bordes brillantes del láser
+            pygame.draw.line(
+                surface,
+                (255, 150, 150),
+                (cx - self.ANCHO_LASER // 2, top),
+                (cx - self.ANCHO_LASER // 2, bot),
+                2
+            )
+            pygame.draw.line(
+                surface,
+                (255, 150, 150),
+                (cx + self.ANCHO_LASER // 2, top),
+                (cx + self.ANCHO_LASER // 2, bot),
+                2
+            )
+
+            # Partículas de impacto en el suelo
+            for _ in range(3):
+                px = cx + random.randint(
+                    -self.ANCHO_LASER // 2,
+                    self.ANCHO_LASER // 2
+                )
+                pygame.draw.circle(
+                    surface,
+                    (255, 100, 50),
+                    (px, bot),
+                    random.randint(2, 5)
+                )
