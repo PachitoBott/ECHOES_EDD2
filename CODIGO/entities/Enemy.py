@@ -500,6 +500,11 @@ class ShooterEnemy(Enemy):
         if not room.has_line_of_sight(ex, ey, px, py):
             return False
 
+        # [DIAG] El enemigo está disparando
+        import logging
+        log_enemy = logging.getLogger("ENEMY_FIRE")
+        log_enemy.warning(f"[SHOOT] {self.enemy_id} disparando, owner_id={self.enemy_id}")
+
         # Normaliza y dispara ráfagas en abanico
         if dist > 0:
             dx, dy = dx/dist, dy/dist
