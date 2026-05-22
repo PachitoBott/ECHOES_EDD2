@@ -540,7 +540,7 @@ class Player(Entity):
                     direction = direction.normalize()
                 self.on_shoot((bullet.x, bullet.y), (direction.x, direction.y))
 
-    def draw(self, surf):
+    def draw(self, surf, flash_alpha: int = 255):
         """Dibuja al jugador en la pantalla."""
         # Renderizar trail del dash
         self._draw_dash_trail(surf)
