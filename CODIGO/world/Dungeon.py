@@ -117,6 +117,9 @@ class Dungeon:
         # <<< NUEVO: sala del boss en el extremo más lejano de Zona 2
         self._place_boss_room()
 
+        # Bloquear entrada por arriba (norte) a la sala del boss
+        self._block_boss_north_entrance()
+
         # <<< NUEVO: sala del Profesor Ibarra en Zona 1
         self._place_profesor_ibarra_rooms()
 
@@ -292,12 +295,6 @@ class Dungeon:
             room.doors["S"] = (x, y+1) in self.rooms
             room.doors["W"] = (x-1, y) in self.rooms
             room.doors["E"] = (x+1, y) in self.rooms
-
-            # Especial: sala del boss NO puede tener entrada por arriba (N)
-            # El boss está en la pared superior, así que solo puede entrar por los lados o por abajo
-            if getattr(room, "type", "") == "boss":
-                room.doors["N"] = False
-
             # Corredores visuales
             room.carve_corridors(width_tiles=2, length_tiles=3)
             
@@ -443,6 +440,27 @@ class Dungeon:
 
         room.setup_boss_room()
         self.boss_pos = boss_pos
+
+    def _block_boss_north_entrance(self) -> None:
+        """
+        Bloquea la entrada por el norte (arriba) de la sala del boss.
+        El boss está pegado al techo, así que solo puede entrar por los lados (E/W) o por abajo (S).
+        Se llama DESPUÉS de _place_boss_room() cuando ya se conoce la sala del boss.
+        """
+        if not hasattr(self, "boss_pos"):
+            return
+
+        boss_room = self.rooms.get(self.boss_pos)
+        if boss_room is None:
+            return
+
+        # Bloquear puerta norte
+        boss_room.doors["N"] = False
+
+        # Re-tallar corredores (sin el corredor norte)
+        boss_room.carve_corridors(width_tiles=2, length_tiles=3)
+
+        print(f"[DUNGEON] Bloqueada entrada norte a sala del boss en {self.boss_pos}")
 
     def _populate_hostile_obstacles(self) -> None:
         if not self.rooms:
