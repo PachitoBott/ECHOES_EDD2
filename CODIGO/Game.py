@@ -1428,10 +1428,11 @@ class Game:
         dir_y = datos.get("dir_y", 1)
         damage = datos.get("damage", 1)
 
-        # [FIX] Ignorar disparos desde (0,0) que pueden ser falsos
-        # durante la inicialización del cliente
-        if x == 0 and y == 0:
-            log_game.warning(f"[DISPARO_CLIENTE] [FILTRADO] Disparo sospechoso desde (0,0) - IGNORADO")
+        # [FIX] Ignorar disparos desde posiciones sospechosas o inválidas
+        # El cliente se inicializa en el centro de la sala (~400+, 300+), no en (0,0)
+        # Si un disparo viene desde (0,0) o muy cercano, es un error de sincronización
+        if (x == 0 and y == 0) or (x == 0 or y == 0):
+            log_game.warning(f"[DISPARO_CLIENTE] [FILTRADO] Disparo sospechoso desde ({x:.0f},{y:.0f}) - IGNORADO (posición inicial/inválida)")
             return
 
         # [DIAG] Log del disparo del cliente
@@ -1937,8 +1938,13 @@ class Game:
             # Obtener el jugador más cercano para disparo también
             closest_player = self._get_closest_player_for_enemy(enemy)
             fired = enemy.maybe_shoot(dt, closest_player, room, self.enemy_projectiles)
-            if fired and callable(notify):
-                notify()
+            if fired:
+                # [DIAG] Rastrear cuándo dispara y contra quién
+                target_pos = (closest_player.x, closest_player.y) if closest_player else (0, 0)
+                target_type = "REMOTO" if (closest_player and closest_player != self.player) else "LOCAL"
+                log_game.warning(f"[DISPARO_ENEMIGO] {enemy.enemy_id} disparó hacia {target_type} en ({target_pos[0]:.0f},{target_pos[1]:.0f}), enemigo en ({enemy.x:.0f},{enemy.y:.0f})")
+                if callable(notify):
+                    notify()
 
     def _update_remote_enemies(self, dt: float) -> None:
         """
