@@ -1564,6 +1564,10 @@ class Game:
 
             # Procesar eventos del minijuego
             for event in events:
+                # Si es evento de mouse, escalar coordenadas a lógicas
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    event.pos = (event.pos[0] // self.cfg.SCREEN_SCALE,
+                                event.pos[1] // self.cfg.SCREEN_SCALE)
                 self.minijuego_papers.handle_event(event)
 
             # Verificar si completó el minijuego
@@ -2955,7 +2959,19 @@ class Game:
         # --- Dibujar minijuego Papers si está activo ---
         if self.minijuego_papers is not None:
             pygame.mouse.set_visible(True)  # Mostrar cursor en minijuego
-            self.minijuego_papers.render(self.screen)
+
+            # Crear superficie lógica para el minijuego (sin escala)
+            minigame_surface = pygame.Surface((self.cfg.SCREEN_W, self.cfg.SCREEN_H))
+            self.minijuego_papers.render(minigame_surface)
+
+            # Escalar la superficie a la pantalla final
+            scaled = pygame.transform.scale(
+                minigame_surface,
+                (self.cfg.SCREEN_W * self.cfg.SCREEN_SCALE,
+                 self.cfg.SCREEN_H * self.cfg.SCREEN_SCALE)
+            )
+            self.screen.blit(scaled, (0, 0))
+
             # Consola de debug encima de todo
             self.debug_console.draw(self.screen)
             pygame.display.flip()
