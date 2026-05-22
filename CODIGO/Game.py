@@ -2974,16 +2974,14 @@ class Game:
         except Exception:
             pass
 
-        # Cambiar cursor solo cuando cambia el estado de interacción con Profesor Ibarra
-        if not hasattr(self, "_prev_ibarra_interacting"):
-            self._prev_ibarra_interacting = False
+        # Mostrar/ocultar cursor según estado de interfaz
+        # El cursor debe estar visible en: tienda, interacción con Profesor Ibarra, menú de pausa
+        shop_active = getattr(self.shop, "active", False)
+        should_show_cursor = _ibarra_interacting or shop_active
 
-        if _ibarra_interacting != self._prev_ibarra_interacting:
-            pygame.mouse.set_visible(_ibarra_interacting)
-            self._prev_ibarra_interacting = _ibarra_interacting
-        elif not _ibarra_interacting:
-            # Asegurar que está oculto durante gameplay normal
-            pygame.mouse.set_visible(False)
+        # Siempre establecer el estado correcto del cursor cada frame
+        # para evitar desincronización cuando el menú de pausa oculta/muestra el cursor
+        pygame.mouse.set_visible(should_show_cursor)
 
         # Banner de cambio de zona / sala del boss (encima de todo el HUD)
         self._draw_zone_banner()
