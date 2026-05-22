@@ -941,17 +941,17 @@ class Room:
         used_tiles.update(self._get_enemy_buffer_zone_tiles(enemy))
 
     def _is_enemy_fully_inside_room(self, enemy: Enemy) -> bool:
-        """Verifica si el enemigo está completamente dentro de los límites de la sala."""
+        """Verifica si el enemigo está completamente dentro de la sala y sin colisiones con obstáculos."""
         if self.bounds is None:
             return False
         rx, ry, rw, rh = self.bounds
         ts = CFG.TILE_SIZE
 
         # Límites de la sala en píxeles
-        room_left = rx * ts
-        room_top = ry * ts
-        room_right = (rx + rw) * ts
-        room_bottom = (ry + rh) * ts
+        room_left = rx * ts + ts  # Dejar espacio desde el borde
+        room_top = ry * ts + ts
+        room_right = (rx + rw) * ts - ts
+        room_bottom = (ry + rh) * ts - ts
 
         # Límites del enemigo
         enemy_left = enemy.x
@@ -959,11 +959,22 @@ class Room:
         enemy_right = enemy.x + enemy.w
         enemy_bottom = enemy.y + enemy.h
 
-        # Verificar si está completamente dentro
-        return (enemy_left >= room_left and
+        # Verificar si está completamente dentro de la sala (con margen)
+        if not (enemy_left >= room_left and
                 enemy_top >= room_top and
                 enemy_right <= room_right and
-                enemy_bottom <= room_bottom)
+                enemy_bottom <= room_bottom):
+            return False
+
+        # Verificar que NO colisiona con obstáculos (con margen extra)
+        enemy_rect = enemy.rect()
+        expanded_enemy_rect = enemy_rect.inflate(ts, ts)  # Expandir para verificar proximidad
+
+        for obstacle in self.obstacles:
+            if expanded_enemy_rect.colliderect(obstacle["rect"]):
+                return False
+
+        return True
 
     def ensure_spawn(self, difficulty: int = 1, zone: int = 1, dungeon=None) -> None:
         if self._spawn_done or self.bounds is None or self.no_spawn:
