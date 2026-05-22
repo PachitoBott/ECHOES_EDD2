@@ -118,6 +118,9 @@ class Boss:
         self._cargar_sprites()
         self._calcular_posicion_inicial()
 
+        # Inicializar sistema de ataques
+        self._init_sistema_ataques()
+
     def _cargar_sprites(self) -> None:
         """Carga boss_idle.png desde assets."""
         # Buscar en ubicaciones comunes
@@ -236,8 +239,17 @@ class Boss:
         else:
             print(f"[BOSS] Daño recibido: {amount} | HP: {self.hp}/{self.max_hp}")
 
-    def update(self, dt: float) -> None:
-        """Actualiza animación y movimiento lateral."""
+    def update(self, dt: float, jugadores=None) -> None:
+        """
+        Actualiza animación, movimiento lateral y sistema de ataques.
+
+        Args:
+            dt: Delta time en segundos
+            jugadores: Lista de objetos jugador (opcional)
+        """
+        if jugadores is None:
+            jugadores = []
+
         self._debug_frame_counter += 1
 
         # Actualizar timer de parpadeo
@@ -279,8 +291,17 @@ class Boss:
             print(f"[BOSS] [RIGHT] Rebotó en límite derecho: x={x_anterior:.1f}→{self.x:.0f}, "
                   f"vel→{self.velocidad_x}")
 
+        # Actualizar sistema de ataques
+        self._update_ataques(dt, jugadores)
+
     def render(self, surface: pygame.Surface) -> None:
-        """Renderiza el boss en la pantalla con titilar blanco."""
+        """
+        Renderiza el boss en la pantalla con titilar blanco.
+        Primero renderiza ataques, luego el sprite del boss.
+        """
+        # Renderizar ataques ANTES del sprite para que queden debajo
+        self._render_ataques(surface, camera_offset=(0, 0))
+
         if not self.frames:
             return
 
@@ -308,6 +329,231 @@ class Boss:
             self.render_w,
             self.render_h
         )
+
+    # ========================================================================
+    # MÉTODOS DEL SISTEMA DE ATAQUES
+    # ========================================================================
+
+    def _init_sistema_ataques(self) -> None:
+        """Inicializa el sistema de ataques del boss."""
+        # Ataques activos en curso
+        self.ataques_activos: list = []
+
+        # Proyectiles activos en pantalla
+        self.proyectiles: list = []
+
+        # Cooldowns individuales por ataque (en segundos)
+        self.cooldowns = {
+            "fanout": 0.0,
+            "zigzag": 0.0,
+            "laser": 0.0,
+            "emp": 0.0,
+        }
+
+        # Duraciones de cooldown por ataque
+        self.COOLDOWN_DURACION = {
+            "fanout": 4.0,
+            "zigzag": 5.0,
+            "laser": 6.0,
+            "emp": 8.0,
+        }
+
+        # Timer entre decisiones de ataque
+        self.timer_decision = 0.0
+        self.INTERVALO_DECISION = 2.5  # segundos entre intentos de ataque
+
+        # Fase del boss (1-3 según vida)
+        self.fase = 1
+
+        # Último ataque usado (para no repetir)
+        self.ultimo_ataque = None
+
+        print(f"[BOSS] Sistema de ataques inicializado")
+
+    def _update_ataques(self, dt: float, jugadores: list) -> None:
+        """
+        Actualiza todos los ataques activos.
+        Maneja cooldowns, generación de ataques y proyectiles.
+        """
+        # Actualizar cooldowns
+        for nombre in self.cooldowns:
+            if self.cooldowns[nombre] > 0:
+                self.cooldowns[nombre] -= dt
+
+        # Actualizar ataques activos
+        for ataque in self.ataques_activos:
+            ataque.update(dt, jugadores)
+
+        # Limpiar ataques terminados
+        self.ataques_activos = [
+            a for a in self.ataques_activos
+            if not a.terminado
+        ]
+
+        # Actualizar proyectiles activos
+        for proj in self.proyectiles:
+            proj.update(dt)
+
+        # Eliminar proyectiles inactivos
+        self.proyectiles = [
+            p for p in self.proyectiles
+            if p.activo
+        ]
+
+        # Decidir próximo ataque
+        self.timer_decision -= dt
+        if self.timer_decision <= 0:
+            self._decidir_ataque(jugadores)
+            self.timer_decision = self.INTERVALO_DECISION
+
+        # Actualizar fase según vida
+        self._actualizar_fase()
+
+    def _actualizar_fase(self) -> None:
+        """
+        Actualiza la fase del boss según su vida actual.
+        Fase 1: 100-67% vida
+        Fase 2: 66-34% vida
+        Fase 3: 33-1% vida
+        """
+        if self.max_hp <= 0:
+            return
+
+        porcentaje = self.hp / self.max_hp
+
+        if porcentaje > 0.66:
+            self.fase = 1
+        elif porcentaje > 0.33:
+            self.fase = 2
+        else:
+            self.fase = 3
+
+    def _decidir_ataque(self, jugadores: list) -> None:
+        """
+        Selecciona qué ataque usar según fase, cooldowns y disponibilidad.
+        Solo elige si no hay ataques activos (excepto en fase 3).
+        """
+        if not jugadores or not self.activo:
+            return
+
+        # Ataques disponibles por fase
+        disponibles_por_fase = {
+            1: ["fanout", "zigzag"],
+            2: ["fanout", "zigzag", "laser"],
+            3: ["fanout", "zigzag", "laser", "emp"],
+        }
+
+        candidatos = disponibles_por_fase.get(self.fase, ["fanout"])
+
+        # Filtrar por cooldown disponible
+        candidatos = [
+            nombre for nombre in candidatos
+            if self.cooldowns.get(nombre, 0) <= 0
+        ]
+
+        # No repetir el último ataque si hay más opciones
+        if len(candidatos) > 1 and self.ultimo_ataque in candidatos:
+            candidatos.remove(self.ultimo_ataque)
+
+        if not candidatos:
+            return
+
+        # Verificar si hay algún ataque ya activo
+        if len(self.ataques_activos) > 0:
+            # En fase 3, puede encadenar 2 ataques simultáneamente
+            if self.fase < 3:
+                return
+
+        # Seleccionar ataque al azar
+        nombre_elegido = random.choice(candidatos)
+        self._ejecutar_ataque(nombre_elegido, jugadores)
+        self.ultimo_ataque = nombre_elegido
+
+    def _ejecutar_ataque(self, nombre: str, jugadores: list) -> None:
+        """
+        Instancia y activa un ataque específico.
+        Por ahora, solo reservamos el espacio para cada ataque.
+        Los ataques reales se implementarán en Paso 3.
+        """
+        # Centro inferior del boss (desde donde salen proyectiles)
+        boca_x = self.x + self.render_w // 2
+        boca_y = self.y + self.render_h
+
+        # Obtener jugador más cercano para ataques dirigidos
+        jugador_objetivo = self._get_jugador_mas_cercano(jugadores)
+        if not jugador_objetivo:
+            return
+
+        # Placeholder: los ataques reales se crearán en el Paso 3
+        print(f"[BOSS] Ejecutando ataque: {nombre} (fase {self.fase})")
+
+        # Establecer cooldown
+        self.cooldowns[nombre] = self.COOLDOWN_DURACION[nombre]
+
+    def _get_jugador_mas_cercano(self, jugadores: list):
+        """
+        Devuelve el jugador más cercano al boss.
+        Se usa como objetivo para ataques dirigidos.
+        """
+        if not jugadores:
+            return None
+
+        boss_cx = self.x + self.render_w // 2
+        return min(
+            jugadores,
+            key=lambda j: abs(
+                (j.x + getattr(j, 'w', 32) // 2) - boss_cx
+            ) if hasattr(j, 'x') else float('inf')
+        )
+
+    def _render_ataques(self, surface: pygame.Surface,
+                        camera_offset=(0, 0)) -> None:
+        """
+        Renderiza todos los ataques y proyectiles activos.
+        Llamada desde render() para que aparezcan debajo del sprite del boss.
+        """
+        # Renderizar proyectiles
+        for proj in self.proyectiles:
+            proj.render(surface, camera_offset)
+
+        # Renderizar ataques
+        for ataque in self.ataques_activos:
+            ataque.render(surface, camera_offset)
+
+    def verificar_colisiones_jugador(self, jugador) -> None:
+        """
+        Verifica si algún proyectil del boss golpea al jugador.
+        Debe ser llamado desde el game loop para cada jugador.
+        """
+        if not hasattr(jugador, 'x') or not hasattr(jugador, 'y'):
+            return
+
+        # Obtener rect del jugador
+        jugador_w = getattr(jugador, 'w', 32)
+        jugador_h = getattr(jugador, 'h', 48)
+        jugador_rect = pygame.Rect(
+            jugador.x,
+            jugador.y,
+            jugador_w,
+            jugador_h
+        )
+
+        # Verificar colisión con proyectiles
+        for proj in self.proyectiles[:]:  # Copiar lista para iteración segura
+            if not proj.activo:
+                continue
+
+            if proj.rect.colliderect(jugador_rect):
+                # Aplicar daño al jugador
+                jugador.take_damage(proj.daño)
+                proj.activo = False
+                print(f"[BOSS] Proyectil golpeó al jugador: daño={proj.daño}")
+
+        # Verificar daño del láser (si existe)
+        for ataque in self.ataques_activos:
+            # Esto se rellenará cuando se implemente AtaqueLaser
+            if hasattr(ataque, 'verificar_colision_jugador'):
+                ataque.verificar_colision_jugador(jugador, jugador_rect)
 
 
 # ============================================================================
