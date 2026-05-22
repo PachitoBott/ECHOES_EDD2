@@ -49,6 +49,7 @@ from dev.debug_console import DebugConsole
 # --- Sistemas de efectos ---
 from systems.death_effect import DeathEffectManager
 from systems.power_effects import power_effect_manager
+from systems.spawn_effect import SpawnEffectManager
 
 
 class RemoteProjectile:
@@ -303,6 +304,9 @@ class Game:
         # Asignar el gestor de efectos de muerte a la clase Enemy para que todos los enemigos lo usen
         from entities.Enemy import Enemy
         Enemy._death_effect_manager_global = self.death_effect_manager
+
+        # Gestor de efectos de spawn del jugador
+        self.spawn_effect_manager = SpawnEffectManager()
 
         # ---------- Fondo matrix ----------
         self.matrix_bg = MatrixBackground(cfg.SCREEN_W, cfg.SCREEN_H)
@@ -1543,6 +1547,7 @@ class Game:
         self._sync_enemy_projectiles_to_client(room)  # Sincronizar balas de enemigos
         self._update_projectiles(dt, room)
         self.death_effect_manager.update(dt)
+        self.spawn_effect_manager.update(dt)  # Actualizar efectos de spawn del jugador
         power_effect_manager.update(dt)  # Actualizar efectos de poderes (EMP, invulnerabilidad, cura)
         room.update_obstacles(dt)  # Actualizar animaciones de obstáculos
         player_died = self._handle_collisions(room)
@@ -2336,6 +2341,20 @@ class Game:
                     self.player.x = px - self.player.w / 2
                     self.player.y = py - self.player.h / 2
 
+                # Iniciar efecto de spawn con silueta del sprite idle
+                try:
+                    if hasattr(self.player, "_animations") and "idle" in self.player._animations:
+                        idle_sprite = self.player._animations["idle"].current_frame()
+                        self.spawn_effect_manager.spawn(
+                            self.player.x,
+                            self.player.y,
+                            idle_sprite,
+                            lifetime=0.5,
+                            num_particles=25
+                        )
+                except Exception as e:
+                    log_game.warning(f"Error al iniciar spawn effect: {e}")
+
                 self.projectiles.clear()
                 self.enemy_projectiles.clear()
                 self.door_cooldown = 0.25
@@ -2783,6 +2802,9 @@ class Game:
 
         # Renderizar efectos de poderes (EMP, invulnerabilidad, cura)
         power_effect_manager.render(self.world, camera_offset=(0, 0))
+
+        # Renderizar efecto de spawn (antes del jugador, para que aparezca detrás)
+        self.spawn_effect_manager.render(self.world)
 
         for pickup in getattr(room, "pickups", ()):
             pickup.draw(self.world)
