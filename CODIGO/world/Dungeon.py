@@ -443,19 +443,33 @@ class Dungeon:
 
     def _remove_room_north_of_boss(self) -> None:
         """
-        Elimina la sala que está directamente arriba (norte) de la sala del boss.
-        Esto previene completamente cualquier entrada por arriba.
+        Bloquea la entrada por el norte del boss, PERO solo si hay otra entrada.
+        Si la entrada del norte es la ÚNICA, la mantiene abierta.
         """
         if not hasattr(self, "boss_pos"):
             return
 
         boss_x, boss_y = self.boss_pos
-        room_north = (boss_x, boss_y - 1)
+        boss_room = self.rooms.get(self.boss_pos)
 
-        # Si existe una sala al norte del boss, eliminarla
-        if room_north in self.rooms:
-            del self.rooms[room_north]
-            print(f"[DUNGEON] Sala al norte del boss {room_north} eliminada para prevenir entrada superior")
+        if boss_room is None:
+            return
+
+        # Contar cuántas entradas tiene el boss (además de la norte)
+        other_entrances = 0
+        if boss_room.doors.get("S"):  # Sur (abajo)
+            other_entrances += 1
+        if boss_room.doors.get("E"):  # Este (derecha)
+            other_entrances += 1
+        if boss_room.doors.get("W"):  # Oeste (izquierda)
+            other_entrances += 1
+
+        # Solo bloquear la entrada norte si hay OTRAS entradas disponibles
+        if other_entrances > 0:
+            boss_room.doors["N"] = False
+            print(f"[DUNGEON] Entrada norte del boss bloqueada (hay {other_entrances} otras entrada(s))")
+        else:
+            print(f"[DUNGEON] Entrada norte del boss PERMITIDA (es la única entrada)")
 
     def _populate_hostile_obstacles(self) -> None:
         if not self.rooms:
