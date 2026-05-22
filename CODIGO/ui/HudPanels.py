@@ -581,8 +581,9 @@ class HUDPanel:
             surface: superficie donde dibujar
             es_p2: True si es panel P2 (mostrar placeholder si no hay sprites)
         """
-        # Tamaño del sprite (160x160 - aún más grande)
-        SPRITE_SIZE = 160
+        # Tamaño del sprite: EXACTAMENTE igual al Daniel del jugador (64x64)
+        # Ver: entities/Player.py - PLAYER_SPRITE_SIZE = (64, 64)
+        SPRITE_SIZE = 64
         SPRITE_MARGIN = 40  # Margen desde el borde izquierdo del panel
 
         # Posición X (izquierda-centro del panel)
@@ -639,8 +640,8 @@ class HUDPanel:
 
         # Parámetros de posicionamiento
         ICON_SIZE = 48  # Más grande
-        MARGEN_INF = 42  # Margen desde el borde inferior del panel (+30px arriba)
-        MARGEN_IZQ = 160  # Offset X desde el borde izquierdo (+30px a la derecha)
+        MARGEN_INF = 102  # Margen desde el borde inferior del panel (+60px arriba adicionales)
+        MARGEN_IZQ = 200  # Offset X desde el borde izquierdo (+40px a la derecha adicionales)
         TEXT_MARGIN_LEFT = 12  # Espacio entre icono y número
 
         # Calcular Y desde el FONDO del panel hacia arriba
