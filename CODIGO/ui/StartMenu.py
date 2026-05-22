@@ -8,6 +8,7 @@ import pygame
 
 from Config import Config
 from Statistics import StatisticsManager
+from ui.lobby_screen import PantallaLobby
 
 
 @dataclass(frozen=True)
@@ -16,6 +17,7 @@ class StartMenuResult:
     start_game: bool
     seed: Optional[int]
     skin_path: Optional[str]
+    modo_coop: bool = False  # True si se inició en modo co-op (con cliente conectado)
 
 
 class StartMenu:
@@ -126,6 +128,12 @@ class StartMenu:
 
         self._compute_layout()
         self._start_requested = False
+
+        # --- Pantalla de Lobby (co-op) ---
+        self.lobby: PantallaLobby | None = None
+        self.net_manager = None  # Se asignará desde Game.py para detectar P2
+        self.player_ref = None  # Se asignará desde Game.py para obtener animación idle
+        self.modo_coop_solicitado = False  # Flag para indicar si inició en co-op
 
     def _init_audio(self) -> None:
         """Inicializa el mixer, carga efectos y arranca la música."""
@@ -323,27 +331,58 @@ class StartMenu:
         while running:
             dt = self.clock.tick(self.cfg.FPS) / 1000.0
             self.preview_anim_time = (self.preview_anim_time + dt) % 9999
+
+            # Actualizar lobby si está activo
+            if self.lobby:
+                self.lobby.update(dt)
+
+                # Actualizar estado de conexión P2 en tiempo real
+                if self.net_manager:
+                    p2_conectado = "aliado" in self.net_manager.roles_conectados()
+                    self.lobby.set_p2_conectado(p2_conectado)
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self._start_requested = False
                     running = False
                     break
-                if self.overlay_key:
+                if self.overlay_key == "lobby" and self.lobby:
+                    # Manejar eventos del lobby
+                    self.lobby.handle_event(event)
+                elif self.overlay_key:
                     if self.overlay_key == "skins":
                         keep_running = self._handle_skins_event(event)
                     else:
                         keep_running = self._handle_overlay_event(event)
+                    if not keep_running:
+                        running = False
+                        break
                 else:
                     keep_running = self._handle_menu_event(event)
-
-                if not keep_running:
-                    running = False
-                    break
+                    if not keep_running:
+                        running = False
+                        break
 
             if not running:
                 break
-            
-            if self.overlay_key:
+
+            # Procesar resultado del lobby
+            if self.lobby and self.lobby.terminado:
+                if self.lobby.resultado == "jugar":
+                    # Iniciar juego con modo según conexión de P2
+                    self.modo_coop_solicitado = self.lobby.p2_conectado
+                    self._start_requested = True
+                    running = False
+                    self.overlay_key = None
+                elif self.lobby.resultado == "volver":
+                    # Volver al menú principal
+                    self.lobby = None
+                    self.overlay_key = None
+
+            # Renderizar
+            if self.overlay_key == "lobby" and self.lobby:
+                self.lobby.render(self.screen)
+            elif self.overlay_key:
                 self._draw_menu(dim_background=True)
                 if self.overlay_key == "skins":
                     self._draw_skins_overlay()
@@ -360,9 +399,10 @@ class StartMenu:
                 start_game=True,
                 seed=self.selected_seed(),
                 skin_path=self.selected_skin_path(),
+                modo_coop=self.modo_coop_solicitado,
             )
 
-        return StartMenuResult(start_game=False, seed=None, skin_path=None)
+        return StartMenuResult(start_game=False, seed=None, skin_path=None, modo_coop=False)
         # CONTINÚA DESPUÉS DE def run()...
 
     def _handle_menu_event(self, event: pygame.event.Event) -> bool:
@@ -372,7 +412,7 @@ class StartMenu:
                 return False
             if event.key == pygame.K_RETURN:
                 self._play_click()
-                return self._commit_play()
+                return self._mostrar_lobby()
             if event.key == pygame.K_BACKSPACE:
                 self.seed_text = self.seed_text[:-1]
             else:
@@ -455,7 +495,8 @@ class StartMenu:
 
     def _trigger_button(self, action: str) -> bool:
         if action == "play":
-            return self._commit_play()
+            # En lugar de ir directo al juego, mostrar pantalla de lobby
+            return self._mostrar_lobby()
         if action == "skins":
             self.overlay_key = action
             self.overlay_lines = ()
@@ -491,6 +532,43 @@ class StartMenu:
         self._start_requested = True
         self.overlay_key = None
         return False
+
+    def set_net_manager(self, net_manager) -> None:
+        """Establece el gestor de red para detectar clientes conectados."""
+        self.net_manager = net_manager
+
+    def set_player_animation(self, player) -> None:
+        """Almacena la referencia al jugador para obtener su animación idle."""
+        self.player_ref = player
+
+    def _mostrar_lobby(self) -> bool:
+        """Crea y muestra la pantalla de lobby."""
+        width, height = self.screen.get_size()
+
+        # Obtener animación idle de P1
+        anim_p1 = None
+        if self.player_ref and hasattr(self.player_ref, "animations"):
+            anim_p1 = self.player_ref.animations.get("idle")
+            print(f"[LOBBY] Player ref encontrado, animación idle: {anim_p1}")
+        else:
+            print(f"[LOBBY] No hay player_ref o no tiene animations. player_ref={self.player_ref}")
+
+        # Crear pantalla de lobby
+        self.lobby = PantallaLobby(
+            logical_w=width,
+            logical_h=height,
+            fondo_menu=self.background,
+            btn_asset=self.btn_normal,
+            anim_p1=anim_p1,
+        )
+
+        # Establecer estado inicial: verificar si hay cliente conectado
+        if self.net_manager:
+            p2_conectado = "aliado" in self.net_manager.roles_conectados()
+            self.lobby.set_p2_conectado(p2_conectado)
+
+        self.overlay_key = "lobby"
+        return True
 
     def selected_seed(self) -> Optional[int]:
         if not self.seed_text:
