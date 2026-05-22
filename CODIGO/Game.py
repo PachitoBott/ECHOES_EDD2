@@ -2115,6 +2115,13 @@ class Game:
                         projectile.alive = False
                         break
 
+                # Procesar colisión con boss si existe
+                if projectile.alive and hasattr(room, "boss") and room.boss is not None:
+                    if r_proj.colliderect(room.boss.rect()):
+                        room.boss.take_damage(1)
+                        self._apply_projectile_effects(projectile, room.boss)
+                        projectile.alive = False
+
         # Remote projectiles from other players also hit enemies
         for projectile in self.remote_projectiles[:]:
             if not projectile.alive:
@@ -2129,6 +2136,13 @@ class Game:
                     self._apply_projectile_effects(projectile, enemy)
                     projectile.alive = False
                     break
+
+            # Procesar colisión con boss si existe
+            if projectile.alive and hasattr(room, "boss") and room.boss is not None:
+                if r_proj.colliderect(room.boss.rect()):
+                    room.boss.take_damage(1)
+                    self._apply_projectile_effects(projectile, room.boss)
+                    projectile.alive = False
 
         player_rect = self.player.rect()
         player_invulnerable = getattr(self.player, "is_invulnerable", lambda: False)()

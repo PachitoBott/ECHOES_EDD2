@@ -71,6 +71,10 @@ class Boss:
     # Escalar para que se vea proporcional a la sala
     RENDER_SCALE = 0.25  # 25% → 184x100px en pantalla
 
+    # Configuración de vida
+    MAX_HP = 50  # Vida máxima del boss
+    HIT_FLASH_DURATION = 0.15  # Duración del titilar blanco al recibir daño
+
     def __init__(
         self,
         sala_rect: pygame.Rect,
@@ -85,6 +89,11 @@ class Boss:
         self.pared_y = pared_superior_y
         self.vivo = True
         self.activo = False  # se activa al entrar a la sala
+
+        # Sistema de vida
+        self.hp = self.MAX_HP
+        self.max_hp = self.MAX_HP
+        self.hit_flash_timer = 0.0  # Timer para titilar blanco
 
         # Cargar sprites
         self.frames: list[pygame.Surface] = []
@@ -211,9 +220,26 @@ class Boss:
         print(f"      Sprite: render_w={self.render_w}, render_h={self.render_h}")
         print(f"      Parámetros: SPEED={self.SPEED} px/sec, MARGIN={self.MARGIN}px\n")
 
+    def take_damage(self, amount: int) -> None:
+        """Inflige daño al boss y activa el efecto de titilar blanco."""
+        if not self.vivo:
+            return
+
+        self.hp = max(0, self.hp - amount)
+        self.hit_flash_timer = self.HIT_FLASH_DURATION
+
+        if self.hp <= 0:
+            self.vivo = False
+            print(f"[BOSS] BOSS DERROTADO")
+        else:
+            print(f"[BOSS] Daño recibido: {amount} | HP: {self.hp}/{self.max_hp}")
+
     def update(self, dt: float) -> None:
         """Actualiza animación y movimiento lateral."""
         self._debug_frame_counter += 1
+
+        # Actualizar timer de parpadeo
+        self.hit_flash_timer = max(0.0, self.hit_flash_timer - dt)
 
         if not self.activo or not self.vivo:
             if self._debug_frame_counter % 60 == 0 and self._debug_frame_counter < 120:
@@ -252,7 +278,7 @@ class Boss:
                   f"vel→{self.velocidad_x}")
 
     def render(self, surface: pygame.Surface) -> None:
-        """Renderiza el boss en la pantalla."""
+        """Renderiza el boss en la pantalla con titilar blanco y barra de vida."""
         if not self.frames:
             return
 
@@ -260,7 +286,54 @@ class Boss:
         pos_x = int(self.x)
         pos_y = int(self.y)
 
-        surface.blit(frame, (pos_x, pos_y))
+        # Aplicar efecto de titilar blanco cuando recibe daño
+        if self.hit_flash_timer > 0.0:
+            # Crear una versión blanca del frame
+            frame_white = frame.copy()
+            white_surf = pygame.Surface(frame_white.get_size(), pygame.SRCALPHA)
+            white_surf.fill((255, 255, 255, 200))  # Blanco semi-opaco
+            frame_white.blit(white_surf, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            surface.blit(frame_white, (pos_x, pos_y))
+        else:
+            surface.blit(frame, (pos_x, pos_y))
+
+        # Renderizar barra de vida 16 píxeles por encima del boss
+        self._render_health_bar(surface, pos_x, pos_y - 16)
+
+    def _render_health_bar(self, surface: pygame.Surface, boss_x: int, bar_y: int) -> None:
+        """Renderiza la barra de vida del boss."""
+        # Dimensiones de la barra
+        bar_width = self.render_w  # Mismo ancho que el sprite del boss
+        bar_height = 10
+        bar_x = boss_x
+
+        # Fondo negro
+        pygame.draw.rect(surface, (40, 40, 40), (bar_x, bar_y, bar_width, bar_height))
+        pygame.draw.rect(surface, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height), 1)
+
+        # Barra de vida (rojo a verde dependiendo del HP)
+        if self.max_hp > 0:
+            hp_ratio = max(0.0, self.hp / self.max_hp)
+            health_width = int(bar_width * hp_ratio)
+
+            # Color: rojo si HP bajo, amarillo si medio, verde si alto
+            if hp_ratio > 0.5:
+                color = (0, 200, 0)  # Verde
+            elif hp_ratio > 0.25:
+                color = (200, 200, 0)  # Amarillo
+            else:
+                color = (200, 0, 0)  # Rojo
+
+            if health_width > 0:
+                pygame.draw.rect(surface, color, (bar_x, bar_y, health_width, bar_height))
+
+        # Texto HP (opcional, comentado para no saturar)
+        # try:
+        #     font = pygame.font.SysFont("monospace", 8)
+        #     hp_text = font.render(f"{int(self.hp)}/{int(self.max_hp)}", False, (255, 255, 255))
+        #     surface.blit(hp_text, (bar_x + 2, bar_y - 8))
+        # except Exception:
+        #     pass
 
     @property
     def rect(self) -> pygame.Rect:
