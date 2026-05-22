@@ -13,11 +13,11 @@ class Entity:
         step_y = dy * self.speed * dt
         if step_x != 0:
             self.x += step_x
-            if self._collides(room):
+            if self._collides(room) or self._collides_obstacle_buffer(room):
                 self.x = self._resolve_axis(room, 'x', step_x > 0)
         if step_y != 0:
             self.y += step_y
-            if self._collides(room):
+            if self._collides(room) or self._collides_obstacle_buffer(room):
                 self.y = self._resolve_axis(room, 'y', step_y > 0)
 
     def _collides(self, room) -> bool:
@@ -28,6 +28,12 @@ class Entity:
             for tx in range(x0, x1 + 1):
                 if room.is_blocked(tx, ty): return True
         return False
+
+    def _collides_obstacle_buffer(self, room) -> bool:
+        """Verifica colisión con buffer zone de obstáculos."""
+        if not hasattr(room, 'has_obstacle_collision_with_buffer'):
+            return False
+        return room.has_obstacle_collision_with_buffer(self.rect(), buffer_pixels=16.0)
 
     def _resolve_axis(self, room, axis: str, positive: bool) -> float:
         r = self.rect()

@@ -1123,6 +1123,24 @@ class Room:
         if self.tiles[ty][tx] == CFG.WALL:
             return True
         return (tx, ty) in self._obstacle_tiles
+
+    def has_obstacle_collision_with_buffer(self, rect: pygame.Rect, buffer_pixels: float = 16.0) -> bool:
+        """
+        Verifica si un rectángulo colisiona con obstáculos considerando un buffer zone.
+        rect: pygame.Rect en píxeles
+        buffer_pixels: tamaño del buffer zone alrededor de cada obstáculo
+        """
+        if not self.obstacles:
+            return False
+
+        expanded_rect = rect.inflate(buffer_pixels * 2, buffer_pixels * 2)
+        for obstacle in self.obstacles:
+            obstacle_rect = obstacle["rect"]
+            # Expandir el rectángulo del obstáculo por el buffer
+            expanded_obstacle = obstacle_rect.inflate(int(buffer_pixels * 2), int(buffer_pixels * 2))
+            if expanded_rect.colliderect(expanded_obstacle):
+                return True
+        return False
     
     def has_line_of_sight(self, x0_px: float, y0_px: float, x1_px: float, y1_px: float) -> bool:
         """
