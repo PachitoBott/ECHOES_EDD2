@@ -807,13 +807,13 @@ class AtaqueFanout(AtaqueBoss):
 
     N_PROYECTILES = 6
     ANGULO_TOTAL = 120  # grados del abanico
-    VELOCIDAD_PADRE = 300  # px/segundo (aumentado de 180)
-    VELOCIDAD_HIJO = 400   # px/segundo (aumentado de 250)
+    VELOCIDAD_PADRE = 400  # px/segundo (aumentado de 300)
+    VELOCIDAD_HIJO = 500   # px/segundo (aumentado de 400)
     DAÑO_PADRE = 1
     DAÑO_HIJO = 1
     RADIO_PADRE = 10
     RADIO_HIJO = 6
-    TIEMPO_EXPLOSION = 0.4  # segundos antes de pausarse (reducido de 0.8)
+    TIEMPO_EXPLOSION = 0.6  # segundos antes de pausarse (viaja más lejos)
 
     def __init__(self, boca_x: float, boca_y: float,
                  jugador, lista_proyectiles: list):
@@ -923,21 +923,84 @@ class AtaqueFanout(AtaqueBoss):
 # ATAQUE 2: ZIGZAG DE BALAS
 # ============================================================================
 
+class ProyectilZigzag:
+    """
+    Proyectil especial para zigzag que se mueve en patrón sinusoidal.
+    Se mueve hacia abajo mientras oscila lado a lado.
+    """
+    def __init__(self, x: float, y: float, lado: int,
+                 radio: int = 8, velocidad_y: float = 350):
+        self.x = x
+        self.y = y
+        self.radio = radio
+        self.velocidad_y = velocidad_y
+        self.lado = lado  # +1 o -1 para dirección inicial
+        self.activo = True
+
+        # Oscilación lateral (zigzag)
+        self.amplitud = 80  # píxeles de desviación
+        self.frecuencia = 0.08  # ciclos por segundo
+        self.timer_oscilacion = 0.0
+
+        self.color = (200, 50, 200)
+        self.color_borde = (255, 180, 255)
+        self.daño = 1
+
+    @property
+    def rect(self):
+        return pygame.Rect(
+            int(self.x) - self.radio,
+            int(self.y) - self.radio,
+            self.radio * 2,
+            self.radio * 2
+        )
+
+    def update(self, dt: float):
+        if not self.activo:
+            return
+
+        # Movimiento vertical (hacia abajo)
+        self.y += self.velocidad_y * dt
+
+        # Movimiento horizontal (zigzag sinusoidal)
+        self.timer_oscilacion += dt
+        offset_x = self.amplitud * math.sin(self.timer_oscilacion * self.frecuencia * 2 * math.pi)
+        self.x += offset_x * dt * self.lado
+
+        # Eliminar si sale de pantalla
+        if self.y > 680 or self.x < -100 or self.x > 1060:
+            self.activo = False
+
+    def render(self, surface: pygame.Surface, camera_offset=(0, 0)):
+        if not self.activo:
+            return
+
+        px = int(self.x - camera_offset[0])
+        py = int(self.y - camera_offset[1])
+
+        # Halo
+        halo = pygame.Surface((self.radio * 4, self.radio * 4), pygame.SRCALPHA)
+        pygame.draw.circle(halo, (*self.color, 40), (self.radio * 2, self.radio * 2), self.radio * 2)
+        surface.blit(halo, (px - self.radio * 2, py - self.radio * 2))
+
+        # Cuerpo
+        pygame.draw.circle(surface, self.color, (px, py), self.radio)
+        # Borde
+        pygame.draw.circle(surface, self.color_borde, (px, py), self.radio, 2)
+
+
 class AtaqueZigzag(AtaqueBoss):
     """
-    Dispara 12 proyectiles en rápida sucesión (cada 0.05 segundos)
-    con un patrón zigzag descendente.
-    Los proyectiles se desvían alternadamente izquierda/derecha.
+    Dispara 12 proyectiles que se mueven en patrón zigzag descendente.
+    Los proyectiles oscilan mientras bajan hacia el jugador.
     Incluye telegraph visual antes de comenzar el disparo.
     """
 
     N_BALAS = 12
-    INTERVALO = 0.05  # segundos entre disparos (reducido de 0.08)
-    VELOCIDAD = 400  # px/segundo (aumentado de 320)
-    ANG_BASE = 90  # grados (casi vertical hacia abajo)
-    DESVIACION = 35  # grados alternados (+/-)
+    INTERVALO = 0.08  # segundos entre disparos
+    VELOCIDAD_Y = 250  # px/segundo hacia abajo
     DAÑO = 1
-    RADIO = 7
+    RADIO = 8
     TELEGRAPH = 0.3  # segundos de aviso visual
 
     def __init__(self, boca_x: float, boca_y: float,
@@ -961,7 +1024,7 @@ class AtaqueZigzag(AtaqueBoss):
         self.fase = "telegraph"  # telegraph → activo → terminado
         self.timer_fase = 0.0
 
-        print(f"[ATAQUE] AtaqueZigzag: {self.N_BALAS} balas en zigzag")
+        print(f"[ATAQUE] AtaqueZigzag: {self.N_BALAS} proyectiles en zigzag")
 
     def update(self, dt: float, jugadores: list) -> None:
         """
@@ -989,33 +1052,18 @@ class AtaqueZigzag(AtaqueBoss):
 
     def _disparar_bala(self) -> None:
         """
-        Dispara una bala individual del zigzag.
-        Varía el ángulo entre 90±35 grados para efecto de zigzag.
+        Dispara un proyectil zigzag que oscila mientras baja.
         """
-        # Ángulo: casi vertical con desviación alternada
-        ang_deg = self.ANG_BASE + self.lado * self.DESVIACION
-        ang_rad = math.radians(ang_deg)
+        # Posición X ligeramente aleatoria para variedad
+        offset_x = random.uniform(-60, 60)
 
-        # Convertir ángulo a vector de dirección
-        dx = math.cos(ang_rad)
-        dy = math.sin(ang_rad)
-
-        # Posición X ligeramente aleatoria (dentro de 80px)
-        # para dar más variedad al patrón
-        offset_x = random.uniform(-80, 80)
-
-        # Crear proyectil
-        proj = ProyectilBoss(
+        # Crear proyectil zigzag
+        proj = ProyectilZigzag(
             x=self.boca_x + offset_x,
             y=self.boca_y,
-            dx=dx,
-            dy=dy,
-            daño=self.DAÑO,
+            lado=self.lado,
             radio=self.RADIO,
-            color=(200, 50, 200),  # Púrpura
-            color_borde=(255, 180, 255),  # Púrpura claro
-            puede_explotar=False,
-            velocidad=self.VELOCIDAD
+            velocidad_y=self.VELOCIDAD_Y
         )
         self.lista_proyectiles.append(proj)
 
@@ -1026,33 +1074,10 @@ class AtaqueZigzag(AtaqueBoss):
     def render(self, surface: pygame.Surface,
                camera_offset=(0, 0)) -> None:
         """
-        Renderiza telegraph visual si está en fase de aviso.
         Los proyectiles se renderizan solos en _render_ataques().
+        No necesita renderizado adicional.
         """
-        if self.fase == "telegraph":
-            # Mostrar líneas parpadeantes moradas indicando zona de fuego
-            cx = int(self.boca_x - camera_offset[0])
-            top = int(self.boca_y - camera_offset[1])
-            bot = int((self.boca_y + 600) - camera_offset[1])  # altura aproximada
-
-            progreso = self.timer_fase / self.TELEGRAPH
-            alpha = int(50 + 150 * progreso)
-
-            # Líneas verticales moradas
-            pygame.draw.line(
-                surface,
-                (200, 50, 200, alpha),
-                (cx - 40, top),
-                (cx - 40, bot),
-                2
-            )
-            pygame.draw.line(
-                surface,
-                (200, 50, 200, alpha),
-                (cx + 40, top),
-                (cx + 40, bot),
-                2
-            )
+        pass
 
 
 # ============================================================================
@@ -1262,21 +1287,77 @@ class AtaqueLaser(AtaqueBoss):
 # ATAQUE 4: PULSO EMP
 # ============================================================================
 
+class ProyectilEMP:
+    """
+    Proyectil especial para EMP que se expande lentamente.
+    Representa una bala/pulso de energía que crece en tamaño.
+    """
+    def __init__(self, cx: float, cy: float, radio_inicial: int = 20):
+        self.cx = cx
+        self.cy = cy
+        self.radio = radio_inicial
+        self.radio_max = 600  # muy grande, llena pantalla
+        self.velocidad_expansion = 80  # muy lento
+        self.activo = True
+        self.dañado = set()  # jugadores ya dañados
+        self.color = (100, 200, 255)  # azul cian
+        self.daño = 1
+
+    def update(self, dt: float):
+        if not self.activo:
+            return
+
+        self.radio += self.velocidad_expansion * dt
+
+        if self.radio >= self.radio_max:
+            self.activo = False
+
+    def render(self, surface: pygame.Surface, camera_offset=(0, 0)):
+        if not self.activo:
+            return
+
+        cx = int(self.cx - camera_offset[0])
+        cy = int(self.cy - camera_offset[1])
+        radio = int(self.radio)
+
+        # Bala/pulso expandiéndose
+        pygame.draw.circle(surface, self.color, (cx, cy), radio, 4)
+        # Anillo interior más brillante
+        if radio > 10:
+            pygame.draw.circle(surface, (180, 240, 255), (cx, cy), int(radio * 0.7), 2)
+
+    def verificar_colision(self, jugador) -> bool:
+        """Verifica si el jugador toca este pulso."""
+        if not hasattr(jugador, 'x') or not hasattr(jugador, 'y'):
+            return False
+
+        jid = id(jugador)
+        if jid in self.dañado:
+            return False
+
+        jcx = jugador.x + getattr(jugador, 'w', 32) // 2
+        jcy = jugador.y + getattr(jugador, 'h', 48) // 2
+
+        dist = math.sqrt((jcx - self.cx)**2 + (jcy - self.cy)**2)
+
+        if abs(dist - self.radio) < 30:
+            self.dañado.add(jid)
+            return True
+
+        return False
+
+
 class AtaqueEMP(AtaqueBoss):
     """
-    Emite 3 ondas de choque circulares expansivas en sucesión rápida.
-    Las ondas se expanden desde el centro del boss y dañan al jugador
-    cuando las cruza.
+    Emite 3 pulsos/balas de choque que se expanden lentamente desde el boss.
+    Los pulsos dañan al jugador cuando los cruza.
     Incluye telegraph visual con pulso azul de aviso.
     """
 
     N_ONDAS = 3
-    INTERVALO_ONDAS = 0.4  # segundos entre ondas
-    VELOCIDAD = 280  # px/segundo de expansión
-    RADIO_MAX = 500  # píxeles máximo
-    GROSOR = 12  # píxeles de grosor del anillo
+    INTERVALO_ONDAS = 0.5  # segundos entre pulsos (más espaciado)
     DAÑO = 1
-    TELEGRAPH = 0.5  # segundos de aviso visual
+    TELEGRAPH = 0.6  # segundos de aviso visual
 
     def __init__(self, boca_x: float, boca_y: float,
                  lista_proyectiles: list):
@@ -1291,20 +1372,20 @@ class AtaqueEMP(AtaqueBoss):
         self.cy = boca_y
         self.lista_proyectiles = lista_proyectiles
 
-        # Control de ondas
-        self.ondas_creadas = 0
-        self.timer_onda = 0.0
-        self.ondas_activas = []  # lista de dicts con radio, alpha, dañado
+        # Control de pulsos
+        self.pulsos_creados = 0
+        self.timer_pulso = 0.0
+        self.pulsos_activos = []  # lista de ProyectilEMP
 
         # Fase de telegraph
         self.fase = "telegraph"  # telegraph → activo → terminado
         self.timer_fase = 0.0
 
-        print(f"[ATAQUE] AtaqueEMP: {self.N_ONDAS} ondas expansivas (con telegraph)")
+        print(f"[ATAQUE] AtaqueEMP: {self.N_ONDAS} pulsos expansivos (con telegraph)")
 
     def update(self, dt: float, jugadores: list) -> None:
         """
-        Actualiza el ataque EMP: telegraph → ondas expansivas → terminado.
+        Actualiza el ataque EMP: telegraph → pulsos expansivos → terminado.
         """
         self.timer_fase += dt
 
@@ -1315,74 +1396,46 @@ class AtaqueEMP(AtaqueBoss):
                 self.timer_fase = 0.0
             return
 
-        # Fase activa: crear y expandir ondas
+        # Fase activa: crear y expandir pulsos
         if self.fase == "activo":
-            # Crear nuevas ondas en intervalos
-            if self.ondas_creadas < self.N_ONDAS:
-                self.timer_onda += dt
-                if self.timer_onda >= self.INTERVALO_ONDAS:
-                    self.timer_onda -= self.INTERVALO_ONDAS
-                    # Nueva onda: radio 0, alpha 255, sin jugadores dañados
-                    self.ondas_activas.append({
-                        "radio": 0.0,
-                        "alpha": 255,
-                        "dañado": set()  # IDs de jugadores dañados por esta onda
-                    })
-                    self.ondas_creadas += 1
+            # Crear nuevos pulsos en intervalos
+            if self.pulsos_creados < self.N_ONDAS:
+                self.timer_pulso += dt
+                if self.timer_pulso >= self.INTERVALO_ONDAS:
+                    self.timer_pulso -= self.INTERVALO_ONDAS
+                    pulso = ProyectilEMP(self.cx, self.cy)
+                    self.pulsos_activos.append(pulso)
+                    self.lista_proyectiles.append(pulso)
+                    self.pulsos_creados += 1
 
-        # Expandir ondas existentes y verificar colisiones
-        for onda in self.ondas_activas:
-            onda["radio"] += self.VELOCIDAD * dt
-            progreso = onda["radio"] / self.RADIO_MAX
-            onda["alpha"] = int(255 * (1 - progreso))
+        # Actualizar pulsos existentes
+        for pulso in self.pulsos_activos:
+            pulso.update(dt)
 
             # Verificar colisión con jugadores
             for jugador in jugadores:
-                if not hasattr(jugador, 'x') or not hasattr(jugador, 'y'):
-                    continue
-
-                # Identificador único del jugador
-                jid = id(jugador)
-
-                # Si ya fue dañado por esta onda, saltar
-                if jid in onda["dañado"]:
-                    continue
-
-                # Centro del jugador
-                jcx = jugador.x + getattr(jugador, 'w', 32) // 2
-                jcy = jugador.y + getattr(jugador, 'h', 48) // 2
-
-                # Distancia desde el centro del EMP
-                dist = math.sqrt((jcx - self.cx)**2 + (jcy - self.cy)**2)
-
-                # El jugador toca la onda si está cerca del radio actual
-                # (dentro de +/- 20px del radio de la onda)
-                if abs(dist - onda["radio"]) < 20:
+                if pulso.verificar_colision(jugador):
                     jugador.take_damage(self.DAÑO)
-                    onda["dañado"].add(jid)
-                    print(f"[BOSS] Onda EMP golpeó al jugador: daño={self.DAÑO}")
 
-        # Limpiar ondas que llegaron al máximo y extinguirse
-        self.ondas_activas = [
-            o for o in self.ondas_activas
-            if o["radio"] < self.RADIO_MAX
-        ]
+        # Limpiar pulsos inactivos
+        self.pulsos_activos = [p for p in self.pulsos_activos if p.activo]
+        self.lista_proyectiles = [p for p in self.lista_proyectiles if p.activo]
 
-        # Terminar cuando todas las ondas se disiparon
-        if (self.ondas_creadas >= self.N_ONDAS and
-                not self.ondas_activas):
+        # Terminar cuando todos los pulsos se disiparon
+        if (self.pulsos_creados >= self.N_ONDAS and
+                not self.pulsos_activos):
             self.terminado = True
 
     def render(self, surface: pygame.Surface,
                camera_offset=(0, 0)) -> None:
         """
-        Renderiza telegraph visual (pulso azul de aviso) y las ondas expansivas.
-        Cada onda es un anillo de cian eléctrico que se expande.
+        Renderiza telegraph visual (pulso azul de aviso).
+        Los pulsos activos se renderizan solos a través de ProyectilEMP.render().
         """
         cx = int(self.cx - camera_offset[0])
         cy = int(self.cy - camera_offset[1])
 
-        # Renderizar telegraph visual (pulso azul)
+        # Renderizar telegraph visual (pulso azul de aviso)
         if self.fase == "telegraph":
             progreso = self.timer_fase / self.TELEGRAPH
             alpha = int(150 * (1 - progreso))  # Se desvanece
@@ -1417,53 +1470,4 @@ class AtaqueEMP(AtaqueBoss):
             surface.blit(
                 pulso_surf,
                 (cx - radio_pulso - 50, cy - radio_pulso - 50)
-            )
-
-        # Renderizar ondas activas
-        for onda in self.ondas_activas:
-            radio = int(onda["radio"])
-            alpha = max(0, onda["alpha"])
-
-            if radio <= 0 or alpha <= 0:
-                continue
-
-            # Crear superficie para la onda con canal alpha
-            tam = (radio + self.GROSOR) * 2 + 4
-            onda_surf = pygame.Surface(
-                (tam, tam),
-                pygame.SRCALPHA
-            )
-            centro = (tam // 2, tam // 2)
-
-            # Onda exterior (cian eléctrico)
-            pygame.draw.circle(
-                onda_surf,
-                (0, 200, 255, alpha),
-                centro,
-                radio,
-                self.GROSOR
-            )
-
-            # Onda interior más brillante (cian más claro)
-            pygame.draw.circle(
-                onda_surf,
-                (180, 240, 255, min(255, alpha + 50)),
-                centro,
-                radio,
-                3
-            )
-
-            # Halo exterior muy tenue (cyan oscuro)
-            pygame.draw.circle(
-                onda_surf,
-                (0, 150, 200, alpha // 3),
-                centro,
-                radio + self.GROSOR // 2,
-                4
-            )
-
-            # Blittear la onda en la pantalla
-            surface.blit(
-                onda_surf,
-                (cx - tam // 2, cy - tam // 2)
             )
