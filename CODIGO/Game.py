@@ -984,19 +984,30 @@ class Game:
             # Usar tolerancia para diferencias por interpolación cliente
             tolerance = 5.0  # píxeles
 
+            # [DIAGNÓSTICO] Registrar búsqueda
+            log_game.info(f"[DEATH] Buscando {enemy_type} en ({pos_x:.1f}, {pos_y:.1f}) — {len(room.enemies)} enemigos en sala")
+
+            found = False
             for i, enemy in enumerate(room.enemies):
                 dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
-                if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
+                is_type_match = enemy.__class__.__name__ == enemy_type
+                is_pos_match = dist <= tolerance
+
+                log_game.debug(f"[DEATH]   Enemigo {i}: {enemy.__class__.__name__} en ({enemy.x:.1f}, {enemy.y:.1f}) dist={dist:.1f} type_ok={is_type_match} pos_ok={is_pos_match}")
+
+                if is_pos_match and is_type_match:
                     # Encontrado enemigo que coincide — removerlo
-                    log_net.info(f"🗑️ Removiendo {enemy_type} en posición ({pos_x}, {pos_y})")
+                    log_game.info(f"[DEATH] ✓ Removiendo {enemy_type} en posición ({pos_x:.1f}, {pos_y:.1f})")
                     room.enemies.pop(i)
+                    found = True
                     break
-            else:
-                log_net.debug(
-                    f"No encontré {enemy_type} en ({pos_x}, {pos_y}) sala {sala_remota}"
+
+            if not found:
+                log_game.warning(
+                    f"[DEATH] ✗ No encontré {enemy_type} en ({pos_x:.1f}, {pos_y:.1f}) sala {sala_remota} — {len(room.enemies)} enemigos"
                 )
         except Exception as e:
-            log_net.error(f"ERROR buscando/removiendo enemigo: {e}", exc_info=True)
+            log_game.error(f"ERROR buscando/removiendo enemigo: {e}", exc_info=True)
 
     def _handle_remote_projectile(self, ev: EventoRed) -> None:
         """
