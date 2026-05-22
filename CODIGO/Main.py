@@ -166,7 +166,9 @@ if __name__ == "__main__":
     game = Game(CFG, debug_mode=args.debug, mode=net_mode, skip_intro=args.skip_intro, **net_params)
 
     # Decidir si saltar el menú
-    skip_menu = args.skip_menu or (start_room is not None) or (args.seed is not None) or args.server or args.client
+    # CAMBIO: Permitir menú incluso con --server/--client (útil para presentaciones)
+    # Solo saltar menú si se especifica explícitamente --skip-menu, o si se especifica sala/seed
+    skip_menu = args.skip_menu or (start_room is not None) or (args.seed is not None)
 
     if skip_menu:
         # Si es cliente, esperar a que obtenga la seed del servidor
