@@ -90,13 +90,7 @@ class Game:
         # Usa los métodos set_coin_icon_scale/offset/value_offset para ajustar
         # manualmente la presentación del icono dentro del HUD.
         self._coin_icon = self._scale_coin_icon(self.coin_icon_scale)
-        self._battery_states = self._load_battery_states()
-        self._life_battery_highlight = pygame.Color(110, 200, 255)
-        # Ajusta este offset para reposicionar las vidas en el HUD.
-        # Incrementa la componente X para mover las barras hacia la derecha
-        # (disminúyela para moverlas a la izquierda) y modifica Y para
-        # desplazarlas verticalmente.
-        self._life_battery_offset = pygame.Vector2(-455, 35)
+        # NOTA: Sistema de baterías removido - reemplazado con sistema de corazones en HUDPanel
         # --- Configuración del HUD de armas ---
         self.weapon_icon_offset = pygame.Vector2(60, 50)
         self.weapon_icon_scale = 1.0
@@ -2090,124 +2084,8 @@ class Game:
             ) from exc
         return surface
 
-    def _load_battery_states(self) -> list[pygame.Surface]:
-        sprite_path = Path(__file__).resolve().parent.parent / "assets/ui/Baterias_Vida.png"
-        try:
-            sheet = pygame.image.load(sprite_path.as_posix()).convert_alpha()
-        except pygame.error as exc:  # pragma: no cover - carga de recursos
-            raise FileNotFoundError(f"No se pudo cargar el sprite de baterías en {sprite_path}") from exc
-
-        columns = 4
-        frame_width = sheet.get_width() // columns
-        frame_height = sheet.get_height()
-        frames: list[pygame.Surface] = []
-        for index in range(columns):
-            frame = pygame.Surface((frame_width, frame_height), pygame.SRCALPHA)
-            frame.blit(sheet, (0, 0), pygame.Rect(index * frame_width, 0, frame_width, frame_height))
-            frames.append(frame)
-
-        if not frames:
-            raise ValueError("El sprite de baterías no contiene frames válidos")
-
-        if len(frames) >= 4:
-            empty_frame = frames[-1]
-            filled_frames = frames[:-1]
-        else:
-            empty_frame = frames[0].copy()
-            darken = pygame.Surface(empty_frame.get_size(), pygame.SRCALPHA)
-            darken.fill((60, 60, 60, 255))
-            empty_frame.blit(darken, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-            filled_frames = frames
-
-        return [empty_frame] + filled_frames
-
-    def _player_hits_remaining(self) -> int:
-        hits_remaining_life_fn = getattr(self.player, "hits_remaining_this_life", None)
-        if callable(hits_remaining_life_fn):
-            try:
-                return int(hits_remaining_life_fn())
-            except (TypeError, ValueError):
-                pass
-        return max(0, int(getattr(self.player, "hp", 0)))
-
-    def _battery_surface(self, max_hp: int, hp: int) -> pygame.Surface:
-        if not self._battery_states:
-            return pygame.Surface((0, 0), pygame.SRCALPHA)
-
-        if max_hp <= 0:
-            return self._battery_states[0]
-
-        hp_clamped = max(0, min(max_hp, hp))
-        if hp_clamped <= 0:
-            return self._battery_states[0]
-
-        tiers = len(self._battery_states) - 1
-        ratio = hp_clamped / max_hp
-        frame_index = max(1, min(tiers, math.ceil(ratio * tiers)))
-        return self._battery_states[frame_index]
-
-    def _blit_life_batteries(self, surface: pygame.Surface, origin: tuple[int, int]) -> pygame.Rect:
-        if not hasattr(self, "player"):
-            return pygame.Rect(origin, (0, 0))
-
-        max_lives = max(0, int(getattr(self.player, "max_lives", 0)))
-        if max_lives <= 0:
-            return pygame.Rect(origin, (0, 0))
-
-        lives_remaining = max(0, int(getattr(self.player, "lives", 0)))
-        max_hp = max(1, int(getattr(self.player, "max_hp", 1)))
-        hits_remaining = max(0, min(max_hp, self._player_hits_remaining()))
-
-        lost_lives = max(0, min(max_lives, max_lives - lives_remaining))
-        icons: list[pygame.Surface] = []
-        for index in range(max_lives):
-            if index < lost_lives or lives_remaining <= 0:
-                hp_value = 0
-            elif index == lost_lives:
-                hp_value = hits_remaining
-            else:
-                hp_value = max_hp
-
-            icon = self._battery_surface(max_hp, hp_value).copy()
-            if index == lost_lives and lives_remaining > 0:
-                pygame.draw.rect(
-                    icon,
-                    self._life_battery_highlight,
-                    icon.get_rect(),
-                    3,
-                    border_radius=6,
-                )
-            icons.append(icon)
-
-        if not icons:
-            return pygame.Rect(origin, (0, 0))
-
-        icon_w, icon_h = icons[0].get_size()
-        columns = 2
-        max_rows = 5
-        spacing_x = 6
-        spacing_y = 6
-        rows = min(max_rows, math.ceil(len(icons) / columns))
-
-        ox, oy = origin
-        max_icons = min(len(icons), columns * rows)
-        for idx, icon_surface in enumerate(icons[:max_icons]):
-            col = idx % columns
-            row = idx // columns
-            x = ox + col * (icon_w + spacing_x)
-            y = oy + row * (icon_h + spacing_y)
-            surface.blit(icon_surface, (x, y))
-
-        used_columns = columns if max_icons >= columns else max_icons
-        width = used_columns * icon_w + max(0, used_columns - 1) * spacing_x
-        height = rows * icon_h + max(0, rows - 1) * spacing_y
-
-        last_row_count = max_icons % columns or min(max_icons, columns)
-        if max_icons >= columns:
-            width_columns = columns
-        else:
-            width_columns = last_row_count
-        width = width_columns * icon_w + max(0, width_columns - 1) * spacing_x
-        height = rows * icon_h + max(0, rows - 1) * spacing_y
-
-        return pygame.Rect(ox, oy, width, height) 
+    # MÉTODOS DE BATERÍAS REMOVIDOS - Reemplazados con sistema de corazones en HUDPanel
+    # - _load_battery_states()
+    # - _player_hits_remaining()
+    # - _battery_surface()
+    # - _blit_life_batteries() 

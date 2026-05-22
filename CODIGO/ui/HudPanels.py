@@ -9,6 +9,120 @@ import pygame
 from core.asset_paths import assets_dir as get_assets_dir
 
 
+# ========================================================================
+# Función global para cargar corazones desde spritesheet
+# ========================================================================
+
+def cargar_corazones(ruta: str, render_size: int = 64) -> dict:
+    """
+    Carga los 3 estados del corazón desde el spritesheet.
+
+    Args:
+        ruta: ruta al archivo Hearts_sprite_sheet.png (512×171)
+        render_size: tamaño final del corazón escalado (default 64×64)
+
+    Returns:
+        Dict con 3 superficies escaladas: {"lleno", "medio", "vacio"}
+
+    El spritesheet contiene 3 frames horizontales:
+    - Frame 0 (0-170px): corazón lleno (rojo brillante)
+    - Frame 1 (170-341px): corazón medio (partido)
+    - Frame 2 (341-512px): corazón vacío (solo contorno)
+    """
+    try:
+        sheet = pygame.image.load(ruta).convert_alpha()
+    except pygame.error as e:
+        print(f"Error cargando spritesheet de corazones: {e}")
+        raise
+
+    w_total = sheet.get_width()    # 512
+    h_total = sheet.get_height()   # 171
+    frame_w = w_total // 3         # ~170px por corazón
+    frame_h = h_total              # 171px
+
+    estados = {}
+    nombres = ["lleno", "medio", "vacio"]
+
+    for i, nombre in enumerate(nombres):
+        # Extraer frame del spritesheet
+        surface = pygame.Surface((frame_w, frame_h), pygame.SRCALPHA)
+        surface.blit(sheet, (0, 0),
+                     pygame.Rect(i * frame_w, 0, frame_w, frame_h))
+
+        # Escalar a tamaño final con scale (nearest-neighbor para pixel art nítido)
+        estados[nombre] = pygame.transform.scale(
+            surface, (render_size, render_size)
+        )
+
+    return estados
+
+
+def get_estado_corazones(lives: int) -> list:
+    """
+    Convierte los puntos de vida al estado visual de cada corazón.
+
+    Sistema de 3 corazones:
+    - Cada corazón tiene 2 puntos de vida internos
+    - Vida máxima = 3 corazones × 2 puntos = 6 puntos totales
+    - El daño se aplica de DERECHA A IZQUIERDA
+      (el corazón derecho se daña primero, el izquierdo último)
+
+    Args:
+        lives: puntos de vida actuales (0-6)
+
+    Returns:
+        Lista de 3 strings ordenados izquierda a derecha:
+        [corazon_izq, corazon_centro, corazon_der]
+        donde cada valor es "lleno", "medio" o "vacio"
+
+    EJEMPLOS (daño de derecha a izquierda):
+        6 vidas -> [lleno,  lleno,  lleno ]  (todos llenos)
+        5 vidas -> [lleno,  lleno,  medio ]  (der pasa a medio)
+        4 vidas -> [lleno,  lleno,  vacio ]  (der pasa a vacío)
+        3 vidas -> [lleno,  medio,  vacio ]  (centro pasa a medio)
+        2 vidas -> [lleno,  vacio,  vacio ]  (centro pasa a vacío)
+        1 vida  -> [medio,  vacio,  vacio ]  (izq pasa a medio)
+        0 vidas -> [vacio,  vacio,  vacio ]  (todos vacíos - GAME OVER)
+    """
+    # Calcular puntos de vida en cada corazón
+    # Los corazones se LLENAN de izquierda a derecha al ganar vidas
+    # Los corazones se VACÍAN de derecha a izquierda al perder vidas
+    #
+    # Distribución de vidas por corazón:
+    # - Vidas 0-1:  IZQ obtiene estos puntos primero
+    # - Vidas 2-3:  CENTRO obtiene estos puntos después
+    # - Vidas 4-5:  DER obtiene estos puntos último
+    # - Vida 6:     Todos llenan (2 cada uno)
+
+    if lives <= 2:
+        # Primeras 2 vidas van al corazón IZQUIERDO
+        puntos_izq = lives
+        puntos_centro = 0
+        puntos_der = 0
+    elif lives <= 4:
+        # Siguientes 2 vidas van al corazón CENTRO
+        puntos_izq = 2
+        puntos_centro = lives - 2
+        puntos_der = 0
+    else:
+        # Últimas 2 vidas van al corazón DERECHO
+        puntos_izq = 2
+        puntos_centro = 2
+        puntos_der = lives - 4
+
+    # Convertir puntos a estados visuales
+    estados = []
+    for puntos in [puntos_izq, puntos_centro, puntos_der]:
+        if puntos == 2:
+            estados.append("lleno")
+        elif puntos == 1:
+            estados.append("medio")
+        else:  # puntos == 0
+            estados.append("vacio")
+
+    return estados
+
+
 class HudPanels:
     """Administrador de los paneles gráficos del HUD.
 
@@ -345,21 +459,30 @@ class HUDPanel:
 
     def render(self, surface: pygame.Surface, player_data: dict) -> pygame.Rect:
         """
-        Dibuja el panel con los datos del jugador.
+        Dibuja el panel completo: PNG de fondo + corazones de vida + monedas.
 
         Args:
             surface: superficie donde dibujar
             player_data: {
-                "health": int,
-                "max_health": int,
-                "coins": int
+                "health": int,          # vidas actuales (0-6)
+                "max_health": int,      # vidas máximas (6)
+                "coins": int            # monedas/microchips
             }
 
         Returns:
             El rect ocupado por el panel
         """
+        # 1. Fondo (PNG del panel o placeholder)
         self._dibujar_fondo(surface)
-        # Cuando lleguen los PNGs, agregar lógica aquí para dibujar vida/monedas
+
+        # 2. Corazones de vida (3 corazones, daño de derecha a izquierda)
+        lives = player_data.get("health", 6)
+        self._render_corazones(surface, lives)
+
+        # 3. Monedas (TODO: implementar después)
+        # coins = player_data.get("coins", 0)
+        # self._render_monedas(surface, coins)
+
         return self.rect
 
     def _dibujar_fondo(self, surface: pygame.Surface) -> None:
@@ -370,6 +493,51 @@ class HUDPanel:
             # Placeholder temporal: rectángulo de color
             pygame.draw.rect(surface, self.PLACEHOLDER_COLOR, self.rect)
             pygame.draw.rect(surface, self.PLACEHOLDER_BORDER_COLOR, self.rect, 2)
+
+    def _render_corazones(self, surface: pygame.Surface, lives: int) -> None:
+        """
+        Renderiza los 3 corazones dentro del panel.
+
+        Args:
+            surface: superficie donde dibujar
+            lives: puntos de vida actuales (0-6)
+
+        Los corazones se renderizan de izquierda a derecha.
+        El daño ocurre de derecha a izquierda (corazón derecho se daña primero).
+        """
+        # Cargar corazones una sola vez (en caché global)
+        if not hasattr(self, '_corazones_cargados'):
+            global _CORAZONES_CACHE
+            if '_CORAZONES_CACHE' not in globals():
+                # Usar ruta relativa desde CODIGO/
+                _CORAZONES_CACHE = cargar_corazones(
+                    "assets/ui/Hearts_sprite_sheet.png",
+                    render_size=64
+                )
+            self._corazones_cargados = _CORAZONES_CACHE
+
+        corazones = self._corazones_cargados
+
+        # Obtener los estados de los 3 corazones
+        estados = get_estado_corazones(lives)
+
+        # Configuración de posicionamiento
+        CORAZON_W = 64
+        CORAZON_H = 64
+        GAP = 8         # separación entre corazones (píxeles)
+        OFFSET_Y = 35   # margen superior dentro del panel (movido hacia abajo)
+
+        # Calcular ancho total de corazones para centrarlos horizontalmente
+        total_hearts_width = 3 * CORAZON_W + 2 * GAP  # 208px
+        panel_width = self.rect.width
+        OFFSET_X = (panel_width - total_hearts_width) // 2  # Centrar horizontalmente
+
+        # Renderizar los 3 corazones (izquierda a derecha)
+        for i, estado in enumerate(estados):
+            sprite = corazones[estado]
+            x = int(self.rect.x + OFFSET_X + i * (CORAZON_W + GAP))
+            y = int(self.rect.y + OFFSET_Y)
+            surface.blit(sprite, (x, y))
 
     def set_panel_image(self, path: str) -> None:
         """
