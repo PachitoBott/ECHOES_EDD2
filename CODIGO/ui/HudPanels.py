@@ -516,7 +516,7 @@ class HUDPanel:
 
         # 4. Monedas (derecha inferior)
         coins = player_data.get("coins", 0)
-        self._render_monedas(surface, coins)
+        self._render_monedas(surface, coins, es_p2=es_p2)
 
         return self.rect
 
@@ -581,45 +581,47 @@ class HUDPanel:
             surface: superficie donde dibujar
             es_p2: True si es panel P2 (mostrar placeholder si no hay sprites)
         """
-        # Tamaño del sprite: EXACTAMENTE igual al Daniel del jugador (64x64)
-        # Ver: entities/Player.py - PLAYER_SPRITE_SIZE = (64, 64)
-        SPRITE_SIZE = 64
-        SPRITE_MARGIN = 40  # Margen desde el borde izquierdo del panel
+        # Tamaño del sprite: 64x64 base, escalado a 163x163 (15% más pequeño que 192)
+        SPRITE_SIZE_BASE = 64  # Tamaño base de la animación
+        SPRITE_SIZE_SCALED = 163  # Tamaño final en HUD (192 × 0.85 = 163, 15% más pequeño)
+        SPRITE_MARGIN = 15  # Margen desde el borde izquierdo (-10px a la izquierda)
 
-        # Posición X (izquierda-centro del panel)
+        # Posición X (izquierda-centro del panel, +5px a la derecha)
         x = self.rect.x + SPRITE_MARGIN
 
-        # Posición Y (centrado verticalmente en el panel)
+        # Posición Y (centrado verticalmente en el panel, -30px arriba)
         panel_center_y = self.rect.y + self.rect.height // 2
-        y = int(panel_center_y - SPRITE_SIZE // 2)
+        y = int(panel_center_y - SPRITE_SIZE_SCALED // 2 - 30)  # -30px hacia arriba
 
         if es_p2:
             # Panel P2: mostrar placeholder hasta que lleguen sprites
-            placeholder = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE))
+            placeholder = pygame.Surface((SPRITE_SIZE_SCALED, SPRITE_SIZE_SCALED))
             placeholder.fill((100, 100, 100))  # Gris oscuro
             pygame.draw.rect(placeholder, (150, 150, 150), placeholder.get_rect(), 2)
             # Texto "P2"
             try:
-                font = pygame.font.SysFont(None, 36)
+                font = pygame.font.SysFont(None, 48)
                 text = font.render("P2", True, (200, 200, 200))
-                text_rect = text.get_rect(center=(SPRITE_SIZE // 2, SPRITE_SIZE // 2))
+                text_rect = text.get_rect(center=(SPRITE_SIZE_SCALED // 2, SPRITE_SIZE_SCALED // 2))
                 placeholder.blit(text, text_rect)
             except:
                 pass
             surface.blit(placeholder, (x, y))
         else:
-            # Panel P1: mostrar animación de Daniel (idle)
+            # Panel P1: mostrar animación de Daniel (idle) escalada a 128x128
             if "idle" in self._animaciones:
                 frame = self._animaciones["idle"].current_frame()
-                surface.blit(frame, (x, y))
+                # Escalar el frame a 128x128 para coincidir con el jugador
+                scaled_frame = pygame.transform.scale(frame, (SPRITE_SIZE_SCALED, SPRITE_SIZE_SCALED))
+                surface.blit(scaled_frame, (x, y))
             else:
                 # Placeholder si no hay animaciones cargadas
-                placeholder = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE))
+                placeholder = pygame.Surface((SPRITE_SIZE_SCALED, SPRITE_SIZE_SCALED))
                 placeholder.fill((80, 80, 80))  # Gris más oscuro
                 pygame.draw.rect(placeholder, (150, 150, 150), placeholder.get_rect(), 2)
                 surface.blit(placeholder, (x, y))
 
-    def _render_monedas(self, surface: pygame.Surface, coins: int) -> None:
+    def _render_monedas(self, surface: pygame.Surface, coins: int, es_p2: bool = False) -> None:
         """
         Renderiza el icono de moneda + cantidad en la parte inferior del panel.
         Se calcula desde rect.bottom para garantizar que siempre está dentro.
@@ -627,6 +629,7 @@ class HUDPanel:
         Args:
             surface: superficie donde dibujar
             coins: cantidad de monedas/microchips
+            es_p2: True si es panel P2 (ajusta márgenes según tamaño del panel)
         """
         # Cargar icono de moneda (más grande que antes)
         try:
@@ -638,10 +641,13 @@ class HUDPanel:
         except Exception as e:
             self._moneda_icon_cached = None
 
-        # Parámetros de posicionamiento
+        # Parámetros de posicionamiento (ajustados según el panel)
         ICON_SIZE = 48  # Más grande
-        MARGEN_INF = 102  # Margen desde el borde inferior del panel (+60px arriba adicionales)
-        MARGEN_IZQ = 200  # Offset X desde el borde izquierdo (+40px a la derecha adicionales)
+        MARGEN_INF = 72  # Margen desde el borde inferior del panel
+
+        # P1 (497x221): márgenes más grandes a la derecha
+        # P2 (450x200): márgenes más pequeños para caber en el panel
+        MARGEN_IZQ = 120 if es_p2 else 200  # Ajustado para P2
         TEXT_MARGIN_LEFT = 12  # Espacio entre icono y número
 
         # Calcular Y desde el FONDO del panel hacia arriba
