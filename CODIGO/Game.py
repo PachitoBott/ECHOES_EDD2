@@ -967,9 +967,6 @@ class Game:
         pos_y = datos.get("pos_y")
         enemy_type = datos.get("enemy_type")
 
-        # [DIAG FANTASM] Log de entrada
-        log_game.warning(f"[FANTASM_MUERTE] Recibido muerte: tipo={enemy_type}, pos=({pos_x}, {pos_y})")
-
         # Solo procesar si el enemigo murió en la sala actual
         sala_actual = (self.dungeon.i, self.dungeon.j)
         if sala_remota != sala_actual:
@@ -987,32 +984,32 @@ class Game:
             return
 
         try:
-            # [DIAG FANTASM] Estado antes de buscar
-            enemigos_antes = len(room.enemies)
-            log_game.warning(f"[FANTASM_MUERTE] Buscando en {enemigos_antes} enemigos de sala {sala_remota}")
-
             # Buscar enemigo que coincida con posición y tipo
             # Usar tolerancia para diferencias por interpolación cliente
             tolerance = 5.0  # píxeles
 
-            encontrado = False
+            # [DIAGNÓSTICO] Registrar búsqueda
+            log_game.info(f"[DEATH] Buscando {enemy_type} en ({pos_x:.1f}, {pos_y:.1f}) — {len(room.enemies)} enemigos en sala")
+
+            found = False
             for i, enemy in enumerate(room.enemies):
                 dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
-                log_game.debug(f"[FANTASM_MUERTE] → Enemigo[{i}]: {enemy.__class__.__name__} en ({enemy.x}, {enemy.y}), dist={dist:.1f}")
+                is_type_match = enemy.__class__.__name__ == enemy_type
+                is_pos_match = dist <= tolerance
 
-                if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
+                log_game.debug(f"[DEATH]   Enemigo {i}: {enemy.__class__.__name__} en ({enemy.x:.1f}, {enemy.y:.1f}) dist={dist:.1f} type_ok={is_type_match} pos_ok={is_pos_match}")
+
+                if is_pos_match and is_type_match:
                     # Encontrado enemigo que coincide — removerlo
-                    log_game.warning(f"[FANTASM_MUERTE] ✓ ENCONTRADO en índice {i}. Eliminando...")
+                    log_game.info(f"[DEATH] ✓ Removiendo {enemy_type} en posición ({pos_x:.1f}, {pos_y:.1f})")
                     room.enemies.pop(i)
-                    encontrado = True
+                    found = True
                     break
 
-            if encontrado:
-                log_game.warning(f"[FANTASM_MUERTE] ✓ Eliminado. Quedan: {len(room.enemies)} enemigos")
-            else:
-                log_game.warning(f"[FANTASM_MUERTE] ✗ NO ENCONTRADO {enemy_type} en ({pos_x}, {pos_y}) (tol={tolerance})")
-                log_game.warning(f"[FANTASM_MUERTE]   Enemigos actuales en sala: {[(e.__class__.__name__, e.x, e.y) for e in room.enemies]}")
-
+            if not found:
+                log_game.warning(
+                    f"[DEATH] ✗ No encontré {enemy_type} en ({pos_x:.1f}, {pos_y:.1f}) sala {sala_remota} — {len(room.enemies)} enemigos"
+                )
         except Exception as e:
             log_game.error(f"ERROR buscando/removiendo enemigo: {e}", exc_info=True)
 
@@ -2792,14 +2789,12 @@ class Game:
                 self._diag_render_counter = 0
             self._diag_render_counter += 1
 
-            # [DIAG FANTASM] Logs más frecuentes cuando hay pocos enemigos
-            if self._diag_render_counter % 10 == 0 or len(room.enemies) <= 2:
+            if self._diag_render_counter % 60 == 0:
                 muertos_en_lista = sum(1 for e in room.enemies if getattr(e, "_is_dying", False))
-                log_game.warning(f"[FANTASM_RENDER] room.enemies={len(room.enemies)}, muertos={muertos_en_lista}")
-                for i, enemy in enumerate(room.enemies):
+                log_game.warning(f"[DIAG_CLIENTE_RENDER] room.enemies={len(room.enemies)}, muertos={muertos_en_lista}")
+                for enemy in room.enemies:
                     dying = getattr(enemy, "_is_dying", False)
-                    enemy_id = getattr(enemy, "enemy_id", "?")
-                    log_game.warning(f"[FANTASM_RENDER]   [{i}] {enemy_id} ({enemy.__class__.__name__}) _is_dying={dying}")
+                    log_game.warning(f"[DIAG_CLIENTE_RENDER] → {enemy.enemy_id} (_is_dying={dying})")
 
             for enemy in room.enemies:
                 enemy.draw(self.world)
