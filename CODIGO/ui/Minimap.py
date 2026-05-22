@@ -31,8 +31,8 @@ class Minimap:
     EDGE_WIDTH = 1                      # grosor de línea
 
     # ====== Configuración del minimapa ======
-    MINIMAP_WIDTH = 180                 # ancho del minimapa en px lógicos
-    MINIMAP_HEIGHT = 160                # alto del minimapa en px lógicos
+    MINIMAP_WIDTH = 234                 # ancho del minimapa en px lógicos (180 * 1.3)
+    MINIMAP_HEIGHT = 208                # alto del minimapa en px lógicos (160 * 1.3)
     MINIMAP_MARGIN = 12                 # margen interno
     MINIMAP_BG_COLOR = (8, 8, 15)      # color de fondo
     MINIMAP_BG_ALPHA = 200              # semitransparencia
