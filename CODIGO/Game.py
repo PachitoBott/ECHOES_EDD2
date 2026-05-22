@@ -2882,13 +2882,6 @@ class Game:
         for pickup in getattr(room, "pickups", ()):
             pickup.draw(self.world)
 
-        # [DIAG] Log para diagnosticar renders invertidos en cliente
-        is_client = self.net and not self.net.es_servidor
-        if is_client:
-            log_game.debug(f"[RENDER_DIAG] Cliente: self.player en ({self.player.x:.0f}, {self.player.y:.0f}), remote_players keys={list(self.remote_players.keys())}")
-            for rol, datos in self.remote_players.items():
-                log_game.debug(f"[RENDER_DIAG] {rol} en ({datos.get('pos_x', 0)}, {datos.get('pos_y', 0)})")
-
         self.player.draw(self.world)
 
         # --- Dibujar jugadores remotos (cubo negro) ---
