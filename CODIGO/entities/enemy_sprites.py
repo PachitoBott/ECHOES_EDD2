@@ -68,6 +68,9 @@ _VARIANT_COLORS: dict[str, tuple[int, int, int]] = {
     "green_chaser": (126, 232, 170),
     "blue_shooter": (120, 188, 255),
     "tank": (200, 116, 116),
+    "faker": (200, 120, 200),
+    "emoji": (255, 180, 100),
+    "telefono": (150, 150, 255),
     "default": (210, 210, 210),
 }
 

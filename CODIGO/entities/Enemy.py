@@ -23,6 +23,7 @@ class Enemy(Entity):
     SPRITE_VARIANT = "default"
     DEATH_PARTICLE_COLOR = (255, 40, 40)  # Rojo brillante — paleta unificada para todas las muertes
     _death_effect_manager_global = None  # Asignado por Game al inicializar
+    _debug_draw_hitboxes = False  # Flag para visualizar hitboxes en debug
 
     def __init__(self, x: float, y: float, hp: int = 3, gold_reward: int = 5) -> None:
         super().__init__(x, y, w=12, h=12, speed=40.0)
@@ -283,6 +284,10 @@ class Enemy(Entity):
             frame.blit(flash_overlay, (0, 0), special_flags=pygame.BLEND_ADD)
         dest = frame.get_rect(center=self.rect().center)
         surf.blit(frame, dest)
+
+        if self._debug_draw_hitboxes:
+            rect = self.rect()
+            pygame.draw.rect(surf, (255, 0, 0), rect, 2)
 
     def _update_animation(self, dt: float) -> None:
         base_state = "idle"
