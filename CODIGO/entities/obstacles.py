@@ -214,8 +214,8 @@ class ObstaculoPantalla2(ObstaculoAnimado):
 class ObstaculoTubo(ObstaculoAnimado):
     """
     Tubo animado 1×2 tiles.
-    Spritesheet: 256×512 px (4 columnas × 4 filas)
-    Frames: 11 de 16 (ignora frames 11, 12, 13, 14, 15)
+    Spritesheet: 256×512 px (4 columnas × 3 filas)
+    Frames: 11 de 12 (ignora frames 11, 12)
     """
 
     _frames_cache: Optional[List[pygame.Surface]] = None
@@ -238,23 +238,23 @@ class ObstaculoTubo(ObstaculoAnimado):
 
     @classmethod
     def _cargar_frames(cls) -> List[pygame.Surface]:
-        """Carga los 11 frames de tubo-3.png (lazy loading)."""
+        """Carga los 11 frames de tubo-3.png (lazy loading, 4×3 grid)."""
         if cls._frames_cache is not None:
             return cls._frames_cache
 
         frames = cargar_spritesheet_cuadricula(
             ruta="assets/tubo-3.png",
             frame_w=64,
-            frame_h=128,
+            frame_h=170,
             cols=4,
             frames_a_usar=11,
             flip_horizontal=False,
-            tamaño_logico=128
+            tamaño_logico=170
         )
 
         if not frames:
             # Fallback
-            placeholder = pygame.Surface((64, 128))
+            placeholder = pygame.Surface((64, 170))
             placeholder.fill((50, 150, 50))
             frames = [placeholder] * 11
 
