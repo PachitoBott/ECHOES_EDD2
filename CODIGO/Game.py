@@ -1477,7 +1477,8 @@ class Game:
 
                 # Si el enemigo muere, enviar evento
                 if enemy.hp <= 0:
-                    log_game.debug(f"[DISPARO_CLIENTE] [DEATH] Enemigo muere. Enviando evento enemigo_muerto...")
+                    enemy_id = getattr(enemy, 'enemy_id', '?')
+                    log_game.warning(f"[DISPARO_CLIENTE] [DEATH] Enemigo {enemy_id} muere. Reportando muerte en ({enemy.x:.1f},{enemy.y:.1f})")
                     from network.protocol import msg_enemigo_muerto
                     evento_muerte = msg_enemigo_muerto(
                         enemy.x, enemy.y,
@@ -1485,7 +1486,7 @@ class Game:
                         (self.dungeon.i, self.dungeon.j)
                     )
                     self.net.enviar(evento_muerte)
-                    log_game.debug(f"[DISPARO_CLIENTE] [DEATH] Evento enviado. Quedarán {enemigos_antes - 1} enemigos")
+                    log_game.warning(f"[DISPARO_CLIENTE] [DEATH] Evento de muerte enviado al servidor. Quedarán {enemigos_antes - 1} enemigos")
                 else:
                     log_game.debug(f"[DISPARO_CLIENTE] Enemigo sobrevivió (HP={hp_despues})")
                 break
