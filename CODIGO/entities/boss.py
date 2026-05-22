@@ -36,18 +36,18 @@ def cargar_boss_idle(ruta: str) -> list[pygame.Surface]:
     frame_w, frame_h = 736, 400
     frames = []
 
-    # Extraer exactamente 12 frames (4 cols x 3 filas) - nunca más
+    # Extraer exactamente 11 frames (primeros 11 del spritesheet 4x3)
     frame_count = 0
     for row in range(3):
         for col in range(4):
-            if frame_count >= 12:  # Límite duro: máximo 12 frames
+            if frame_count >= 11:  # Límite duro: máximo 11 frames
                 break
             x = col * frame_w
             y = row * frame_h
             frame = img.subsurface(pygame.Rect(x, y, frame_w, frame_h))
             frames.append(frame.copy())
             frame_count += 1
-        if frame_count >= 12:
+        if frame_count >= 11:
             break
 
     print(f"[BOSS] Cargados {len(frames)} frames de {ruta}")
@@ -158,7 +158,7 @@ class Boss:
         # aunque el PNG no esté disponible
         placeholder_frames = []
 
-        for frame_idx in range(12):  # 12 frames como en el spritesheet real
+        for frame_idx in range(11):  # 11 frames como en el spritesheet real
             surf = pygame.Surface((self.render_w, self.render_h), pygame.SRCALPHA)
             surf.fill((120, 0, 0, 200))
             pygame.draw.rect(surf, (200, 0, 0), (0, 0, self.render_w, self.render_h), 2)
