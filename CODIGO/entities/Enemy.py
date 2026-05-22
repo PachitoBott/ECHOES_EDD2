@@ -957,6 +957,8 @@ class TelefonoEnemy(Enemy):
         self.bullet_speed  = 160.0 * ENEMY_PROJECTILE_SPEED_SCALE
         self.reaction_delay = 0.35
         self._load_attack_sound("shooter_enemy_sfx.mp3")
+        if self._attack_sound:
+            self._attack_sound.set_volume(0.1)
 
         self.animator.fps_overrides.update({
             "idle": 10.0,
