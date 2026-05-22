@@ -7,6 +7,7 @@ los obstáculos con animación (pantalla-1, pantalla-2, tubo-3, etc.)
 """
 
 import pygame
+import random
 from typing import List, Optional
 from entities.enemy_sprites import cargar_spritesheet_cuadricula
 
@@ -44,6 +45,11 @@ class ObstaculoAnimado:
         self.frame_actual = 0
         self.timer_frame = 0.0
         self.intervalo = 1.0 / self.FPS_ANIMACION
+
+        # Desincronizar animación: offset aleatorio en el frame
+        if self.frames:
+            self.frame_actual = random.randint(0, len(self.frames) - 1)
+            self.timer_frame = random.uniform(0.0, self.intervalo)
 
     def update(self, dt: float) -> None:
         """
