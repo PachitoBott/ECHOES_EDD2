@@ -2885,9 +2885,14 @@ class Game:
         # [DIAG] Log para diagnosticar renders invertidos en cliente
         is_client = self.net and not self.net.es_servidor
         if is_client:
-            log_game.debug(f"[RENDER_DIAG] Cliente: self.player en ({self.player.x:.0f}, {self.player.y:.0f}), remote_players keys={list(self.remote_players.keys())}")
+            # Log the LOCAL PLAYER identity
+            self_role = self.net.rol if self.net else "?"
+            log_game.debug(f"[RENDER_DIAG] mi_rol={self_role}, self.player pos=({self.player.x:.0f}, {self.player.y:.0f})")
+            log_game.debug(f"[RENDER_DIAG] remote_players roles: {list(self.remote_players.keys())}")
             for rol, datos in self.remote_players.items():
-                log_game.debug(f"[RENDER_DIAG] {rol} en ({datos.get('pos_x', 0)}, {datos.get('pos_y', 0)})")
+                pos_x = datos.get('pos_x') or (datos.get('pos')[0] if isinstance(datos.get('pos'), (list, tuple)) else 0)
+                pos_y = datos.get('pos_y') or (datos.get('pos')[1] if isinstance(datos.get('pos'), (list, tuple)) and len(datos.get('pos')) > 1 else 0)
+                log_game.debug(f"[RENDER_DIAG] remote {rol} en ({pos_x}, {pos_y})")
 
         self.player.draw(self.world)
 
