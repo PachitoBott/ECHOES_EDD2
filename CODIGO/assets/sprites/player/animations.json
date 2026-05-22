@@ -57,6 +57,13 @@
       "frame_indices": [0],
       "fps": 1,
       "loop": false
+    },
+    "death_spawn": {
+      "file": "FutureSoldier_Death.png",
+      "total_frames": 7,
+      "frame_indices": [6, 5, 4, 3, 2, 1, 0],
+      "fps": 10,
+      "loop": false
     }
   }
 }
