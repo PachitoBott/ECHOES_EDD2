@@ -79,6 +79,7 @@ PUBLICACIONES = [
             "Reportar protege a la víctima."
         ),
         "nivel_actividad": 0.85,
+        "porcentaje": 20,
     },
     {
         "id": 2,
@@ -99,6 +100,7 @@ PUBLICACIONES = [
             "Reportarlo silenciaría a un aliado."
         ),
         "nivel_actividad": 0.25,
+        "porcentaje": 40,
     },
     {
         "id": 3,
@@ -119,6 +121,7 @@ PUBLICACIONES = [
             "amplifica el daño aunque 'no opines'."
         ),
         "nivel_actividad": 0.60,
+        "porcentaje": 60,
     },
     {
         "id": 4,
@@ -140,6 +143,7 @@ PUBLICACIONES = [
             "es acoso encubierto."
         ),
         "nivel_actividad": 0.72,
+        "porcentaje": 80,
     },
     {
         "id": 5,
@@ -162,6 +166,7 @@ PUBLICACIONES = [
             "Los 👀 no son neutrales."
         ),
         "nivel_actividad": 0.55,
+        "porcentaje": 100,
     },
 ]
 
@@ -765,11 +770,15 @@ class MinijuegoPapers:
         surface.blit(hint_i, (self.rect_btn_ignorar.x + 5, self.rect_btn_ignorar.y + 5))
 
     def _render_progreso(self, surface):
-        """Indicador de progreso — cuántas quedan."""
-        total = len(PUBLICACIONES)
+        """Indicador de progreso — muestra porcentaje de la publicación actual."""
+        pub = PUBLICACIONES[min(self.pub_actual, len(PUBLICACIONES) - 1)]
+        porcentaje = pub["porcentaje"]
         actual = self.pub_actual + 1
+        total = len(PUBLICACIONES)
+
+        # Mostrar número y porcentaje
         txt = self.font_stats.render(
-            f"Publicación {actual} de {total}", False, (80, 60, 110)
+            f"Publicación {actual} de {total} - {porcentaje}%", False, (80, 60, 110)
         )
         surface.blit(txt, (self.lw - txt.get_width() - 20, self.lh - 30))
 
