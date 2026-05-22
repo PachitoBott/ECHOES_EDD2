@@ -14,7 +14,11 @@ from ui.StartMenu import StartMenu
 from core.Tileset import Tileset
 from core.TilesetManager import TilesetManager
 from entities.Player import Player
-from entities.Enemy import IDLE as ENEMY_IDLE
+from entities.Enemy import (
+    IDLE as ENEMY_IDLE,
+    FastChaserEnemy, ShooterEnemy, BasicEnemy, TankEnemy,
+    FakerEnemy, TelefonoEnemy, EmojiEnemy
+)
 from world.Dungeon import Dungeon
 from world.background import MatrixBackground
 from ui.Minimap import Minimap
@@ -937,7 +941,9 @@ class Game:
         room = self.dungeon.current_room
         depth = self.dungeon.depth_map.get((self.dungeon.i, self.dungeon.j), -1)
         log_room.room_enter((self.dungeon.i, self.dungeon.j), depth)
-        self._spawn_room_enemies(room)
+        # [FIX SYNC] Cliente NO crea enemigos — los recibe del servidor
+        if self.net is None or self.net.es_servidor:
+            self._spawn_room_enemies(room)
         self._update_room_lock(room)
 
     def _handle_remote_enemy_death(self, ev: EventoRed) -> None:
@@ -1064,10 +1070,50 @@ class Game:
         except Exception as e:
             log_net.error(f"ERROR aplicando daño remoto: {e}", exc_info=True)
 
+    def _create_enemy_from_server_type(self, enemy_type: str, x: float, y: float, enemy_id: str | None = None):
+        """
+        [FIX SYNC] Crea un Enemy real basado en el tipo enviado por el servidor.
+        Se usa cuando el cliente recibe un enemigo nuevo del servidor.
+        """
+        enemies_map = {
+            "FastChaserEnemy": FastChaserEnemy,
+            "ShooterEnemy": ShooterEnemy,
+            "BasicEnemy": BasicEnemy,
+            "TankEnemy": TankEnemy,
+            "FakerEnemy": FakerEnemy,
+            "TelefonoEnemy": TelefonoEnemy,
+            "EmojiEnemy": EmojiEnemy,
+        }
+
+        try:
+            enemy_class = enemies_map.get(enemy_type)
+            if not enemy_class:
+                log_game.warning(f"[SYNC] Tipo desconocido de enemigo: {enemy_type}")
+                return None
+
+            enemy = enemy_class(x, y)
+
+            # [FIX SYNC] Si el servidor proporcionó un ID, reemplazar el ID generado localmente
+            if enemy_id:
+                enemy.enemy_id = enemy_id
+                log_game.debug(f"[SYNC] Creado {enemy_type} con ID servidor {enemy_id}")
+            else:
+                log_game.debug(f"[SYNC] Creado {enemy_type} con ID local {enemy.enemy_id}")
+
+            return enemy
+        except Exception as e:
+            log_game.error(f"[SYNC] Error creando enemigo {enemy_type}: {e}")
+            return None
+
     def _handle_enemies_state(self, ev: EventoRed) -> None:
         """
         Sincroniza el estado de todos los enemigos desde el servidor.
-        En el cliente: actualiza posiciones de enemigos locales basado en datos del servidor.
+        [FIX SYNC] Reconcilia la lista completa basándose en datos del servidor.
+
+        El servidor es la única fuente de verdad. El cliente:
+        1. Elimina enemigos que NO envía el servidor
+        2. Crea enemigos que envía el servidor pero el cliente no tiene
+        3. Actualiza enemigos existentes
         """
         datos = ev.datos
         enemies_list = datos.get("enemies", [])
@@ -1082,90 +1128,100 @@ class Game:
         if not hasattr(room, "enemies"):
             return
 
-        # Crear mapa de IDs de enemigos del servidor
+        # PASO 1: Crear mapa de IDs de enemigos del servidor
         server_enemies_by_id = {e.get("id"): e for e in enemies_list}
 
-        # [DIAGNOSTICO] Mostrar qué enemigos tiene el cliente vs servidor
-        client_enemy_ids = [getattr(e, "enemy_id", "?") for e in room.enemies]
-        server_enemy_ids = list(server_enemies_by_id.keys())
-        if client_enemy_ids != server_enemy_ids:
-            log_game.warning(f"[DESYNC_ENEMIGOS] Cliente tiene {client_enemy_ids}, Servidor envía {server_enemy_ids}")
-
-        # Actualizar posiciones de enemigos locales basado en datos del servidor
-        # Usar el enemy_id para hacer match
-        enemies_to_remove = []
+        # PASO 2: Eliminar enemigos que NO envía el servidor
+        ids_a_eliminar = []
         for i, enemy in enumerate(room.enemies):
             enemy_id = getattr(enemy, "enemy_id", None)
-            if enemy_id and enemy_id in server_enemies_by_id:
-                server_data = server_enemies_by_id[enemy_id]
+            if enemy_id and enemy_id not in server_enemies_by_id:
+                ids_a_eliminar.append(i)
+                log_game.info(f"[SYNC] Eliminando enemigo fantasma {enemy_id} (no en servidor)")
 
-                # PRIMERO: Verificar si el enemigo está vivo o muerto según el servidor
-                # Esto es CRÍTICO hacer ANTES de sincronizar animator_state
+        for i in sorted(ids_a_eliminar, reverse=True):
+            room.enemies.pop(i)
+
+        # PASO 3: Actualizar/crear enemigos del servidor
+        client_enemy_ids_por_id = {
+            getattr(e, "enemy_id", None): e
+            for e in room.enemies
+            if getattr(e, "enemy_id", None)
+        }
+
+        for server_id, server_data in server_enemies_by_id.items():
+            if server_id in client_enemy_ids_por_id:
+                # Actualizar enemigo existente
+                enemy = client_enemy_ids_por_id[server_id]
                 server_vivo = server_data.get("vivo", True)
-                enemy_esta_muerto_servidor = not server_vivo
 
-                if enemy_esta_muerto_servidor:
-                    # Marcar para eliminación (no eliminar durante la iteración)
-                    enemies_to_remove.append(i)
+                if not server_vivo:
+                    # Marcar para muerte
                     if not getattr(enemy, "_is_dying", False):
                         enemy._is_dying = True
                         enemy._ready_to_remove = True
                 else:
-                    # IMPORTANTE: Si el servidor dice que está VIVO, limpiar cualquier bandera de muerte local
-                    # Esto previene que enemigos que se murieron localmente (por error) queden atrapados en estado death
+                    # Limpiar banderas de muerte si el servidor dice que está vivo
                     if getattr(enemy, "_is_dying", False):
-                        log_game.debug(f"[SINCRO] {enemy_id} estaba marcado como muerto pero servidor dice vivo=True, resincronizando")
+                        log_game.debug(f"[SYNC] {server_id} resincronizado vivo desde servidor")
                         enemy._is_dying = False
                         enemy._ready_to_remove = False
-                        # Restaurar HP si es necesario
                         if enemy.hp <= 0:
                             enemy.hp = max(1, server_data.get("health", 1))
 
-                # Sincronizar posición, health y estado de vivo
+                # Sincronizar posición, salud
                 enemy.x = server_data.get("x", enemy.x)
                 enemy.y = server_data.get("y", enemy.y)
                 enemy.hp = server_data.get("health", enemy.hp)
 
-                # Sincronizar animator_state desde el servidor
-                # IMPORTANTE: Si el enemigo está muerto, SIEMPRE sincronizar a "death"
+                # Sincronizar animación
                 animator_state = server_data.get("animator_state", "idle")
-                if enemy_esta_muerto_servidor:
-                    animator_state = "death"  # Forzar death si está muerto
+                if not server_vivo:
+                    animator_state = "death"
 
                 if hasattr(enemy, "animator"):
-                    # [DIAGNOSTICO] Log para detectar cuándo desaparece
-                    current_state = getattr(enemy.animator, "state", "?")
-                    log_game.info(f"[DIAGNOSTICO] {enemy_id} servidor envía animator_state={animator_state} (cliente estaba en {current_state}), vivo={server_vivo}")
-
                     if animator_state == "shoot":
-                        # trigger_shoot() establece oneshot_state = "shoot"
                         if hasattr(enemy.animator, "trigger_shoot"):
                             enemy.animator.trigger_shoot()
-                            # [DEBUG] Log
-                            log_game.debug(f"[ANIMATOR_SYNC] {enemy_id} animator_state=SHOOT → trigger_shoot()")
                     elif animator_state == "attack":
-                        # trigger_attack() establece oneshot_state = "attack"
                         if hasattr(enemy.animator, "trigger_attack"):
                             enemy.animator.trigger_attack()
-                            # [DEBUG] Log
-                            log_game.debug(f"[ANIMATOR_SYNC] {enemy_id} animator_state=ATTACK → trigger_attack()")
                     else:
-                        # Para otros estados (idle, run, death), cambiar el base_state directamente
                         if hasattr(enemy.animator, "set_base_state"):
                             enemy.animator.set_base_state(animator_state)
-                            # [DEBUG] Log
-                            log_game.debug(f"[ANIMATOR_SYNC] {enemy_id} animator_state={animator_state} → set_base_state()")
 
-                # Sincronizar dirección del sprite
-                facing_right = server_data.get("facing_right", True)
-                enemy._facing_right = facing_right
+                # Sincronizar dirección
+                enemy._facing_right = server_data.get("facing_right", True)
 
-                # NO actualizar el animator aquí - se actualiza en _update_enemies() para evitar doble actualización
-                # (que causaba que los frames de "shoot" se saltaran)
+            else:
+                # Crear nuevo enemigo basado en datos del servidor
+                enemy_type = server_data.get("tipo", "BasicEnemy")
+                enemy = self._create_enemy_from_server_type(
+                    enemy_type,
+                    server_data.get("x", 0),
+                    server_data.get("y", 0),
+                    server_id
+                )
 
-        # Eliminar enemigos muertos (en orden inverso para mantener índices)
-        for i in sorted(enemies_to_remove, reverse=True):
-            room.enemies.pop(i)
+                if enemy:
+                    # Actualizar estado inicial del enemigo
+                    enemy.hp = server_data.get("health", enemy.hp)
+                    enemy._facing_right = server_data.get("facing_right", True)
+
+                    # Si está muerto, marcar inmediatamente
+                    if not server_data.get("vivo", True):
+                        enemy._is_dying = True
+                        enemy._ready_to_remove = True
+
+                    room.enemies.append(enemy)
+                    log_game.info(f"[SYNC] Creado nuevo enemigo {server_id} ({enemy_type})")
+                else:
+                    log_game.error(f"[SYNC] No se pudo crear enemigo {server_id}")
+
+        # [DIAGNOSTICO]
+        client_ids = [getattr(e, "enemy_id", "?") for e in room.enemies]
+        server_ids = list(server_enemies_by_id.keys())
+        log_game.debug(f"[SYNC] Reconciliación completada: cliente={len(client_ids)} enemigos, servidor={len(server_ids)}")
 
     def _handle_enemy_projectiles_state(self, ev: EventoRed) -> None:
         """
@@ -1433,7 +1489,10 @@ class Game:
                 return
 
         self._update_player(dt, room)
-        self._spawn_room_enemies(room)
+        # [FIX SYNC] Cliente NO crea enemigos — los recibe del servidor
+        # Solo el servidor debe llamar a _spawn_room_enemies
+        if self.net is None or self.net.es_servidor:
+            self._spawn_room_enemies(room)
         self._update_enemies(dt, room)
 
         # En modo servidor: actualizar también enemigos en salas con jugadores remotos
@@ -2360,7 +2419,9 @@ class Game:
         new_room = self.dungeon.current_room
         depth = self.dungeon.depth_map.get((self.dungeon.i, self.dungeon.j), -1)
         log_room.room_enter((self.dungeon.i, self.dungeon.j), depth)
-        self._spawn_room_enemies(new_room)
+        # [FIX SYNC] Cliente NO crea enemigos — los recibe del servidor
+        if self.net is None or self.net.es_servidor:
+            self._spawn_room_enemies(new_room)
         self._update_room_lock(new_room)
 
         # Notificar al cliente si estamos en servidor
@@ -2374,6 +2435,11 @@ class Game:
             )
             self.net.enviar(msg)
             log_game.info(f"[TRANSICION] Servidor notificó transición completada a sala ({self.dungeon.i}, {self.dungeon.j})")
+
+            # [FIX SYNC] Enviar estado de enemigos inmediatamente después de la transición
+            # para que el cliente no vea una sala vacía
+            self._sync_enemies_to_client(new_room)
+            self._sync_enemy_projectiles_to_client(new_room)
 
     def _update_room_lock(self, room) -> None:
         if not hasattr(room, "enemies") or not hasattr(room, "cleared"):
