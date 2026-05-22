@@ -113,6 +113,27 @@ class Enemy(Entity):
     def _center(self):
         return (self.x + self.w/2, self.y + self.h/2)
 
+    def move(self, dx: float, dy: float, dt: float, room) -> None:
+        """Sobrescribir move para aplicar buffer zone con obstáculos a enemigos."""
+        step_x = dx * self.speed * dt
+        step_y = dy * self.speed * dt
+        if step_x != 0:
+            old_x = self.x
+            self.x += step_x
+            if self._collides(room):
+                self.x = self._resolve_axis(room, 'x', step_x > 0)
+            # Chequear buffer zone después de resolver paredes
+            if self._collides_obstacle_buffer(room):
+                self.x = old_x
+        if step_y != 0:
+            old_y = self.y
+            self.y += step_y
+            if self._collides(room):
+                self.y = self._resolve_axis(room, 'y', step_y > 0)
+            # Chequear buffer zone después de resolver paredes
+            if self._collides_obstacle_buffer(room):
+                self.y = old_y
+
     # ---------- loop ----------
     def update(self, dt: float, player, room) -> None:
         if self._is_dying:
