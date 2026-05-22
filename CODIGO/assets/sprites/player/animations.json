@@ -25,10 +25,10 @@
     },
     "pistol_aim": {
       "file": "FutureSoldier_PistolAim.png",
-      "total_frames": 10,
-      "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+      "total_frames": 5,
+      "frame_indices": [0, 1, 2, 3, 4],
       "fps": 20,
-      "loop": true
+      "loop": false
     },
     "pistol_aim_run": {
       "file": "FutureSoldier_PistolAimRun.png",
