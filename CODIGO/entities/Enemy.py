@@ -831,6 +831,13 @@ class FakerEnemy(Enemy):
     DEATH_PARTICLE_COLOR = (255, 40, 40)
     def __init__(self, x, y):
         super().__init__(x, y, hp=4, gold_reward=7)
+
+        cx, cy = self.x + self.w / 2.0, self.y + self.h / 2.0
+        self.w = 96
+        self.h = 96
+        self.x = cx - self.w / 2.0
+        self.y = cy - self.h / 2.0
+
         self.chase_speed  = 130.0
         self.wander_speed = 105.0
         self.detect_radius = 100.0
@@ -890,6 +897,13 @@ class TelefonoEnemy(Enemy):
     SPRITE_VARIANT = "telefono"
     def __init__(self, x, y):
         super().__init__(x, y, hp=3, gold_reward=9)
+
+        cx, cy = self.x + self.w / 2.0, self.y + self.h / 2.0
+        self.w = 64
+        self.h = 64
+        self.x = cx - self.w / 2.0
+        self.y = cy - self.h / 2.0
+
         self.chase_speed  = 35.0
         self.wander_speed = 25.0
         self.detect_radius = 220.0
@@ -989,8 +1003,8 @@ class EmojiEnemy(Enemy):
         super().__init__(x, y, hp=3, gold_reward=5)
 
         cx, cy = self.x + self.w / 2.0, self.y + self.h / 2.0
-        self.w = 72
-        self.h = 72
+        self.w = 64
+        self.h = 64
         self.x = cx - self.w / 2.0
         self.y = cy - self.h / 2.0
 
