@@ -72,7 +72,7 @@ class Boss:
     RENDER_SCALE = 0.25  # 25% → 184x100px en pantalla
 
     # Configuración de vida
-    MAX_HP = 50  # Vida máxima del boss
+    MAX_HP = 100  # Vida máxima del boss
     HIT_FLASH_DURATION = 0.15  # Duración del titilar blanco al recibir daño
 
     def __init__(
