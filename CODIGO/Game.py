@@ -3481,7 +3481,7 @@ class Game:
         bar_width = 300
         bar_height = 24
         bar_x = (self.cfg.SCREEN_W * self.cfg.SCREEN_SCALE - bar_width) // 2  # Centrado en pantalla
-        bar_y = 70  # Centro superior con margen
+        bar_y = 150  # Más abajo para estar por encima del tileset
         padding = 4
 
         # --- Fondo decorativo ---
