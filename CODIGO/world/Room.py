@@ -741,9 +741,9 @@ class Room:
                     prof.iniciar_interaccion()
                     continue
 
-                # Abrir tienda carousel directamente si la pregunta ya fue respondida
+                # Si está en LISTO, permitir nueva pregunta (iniciar_interaccion resetea pregunta_respondida)
                 if ev.key == pygame.K_e and can_interact and prof.estado == prof.LISTO:
-                    prof.abrir_tienda()
+                    prof.iniciar_interaccion()
                     continue
 
             # Delegar TODOS los eventos al profesor en cualquier estado activo
