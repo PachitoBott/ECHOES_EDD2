@@ -472,8 +472,7 @@ class Boss:
     def _ejecutar_ataque(self, nombre: str, jugadores: list) -> None:
         """
         Instancia y activa un ataque específico.
-        Por ahora, solo reservamos el espacio para cada ataque.
-        Los ataques reales se implementarán en Paso 3.
+        Crea la instancia del ataque y la añade a la lista de ataques activos.
         """
         # Centro inferior del boss (desde donde salen proyectiles)
         boca_x = self.x + self.render_w // 2
@@ -484,8 +483,24 @@ class Boss:
         if not jugador_objetivo:
             return
 
-        # Placeholder: los ataques reales se crearán en el Paso 3
-        print(f"[BOSS] Ejecutando ataque: {nombre} (fase {self.fase})")
+        ataque = None
+
+        # Crear instancia del ataque elegido
+        if nombre == "fanout":
+            ataque = AtaqueFanout(
+                boca_x, boca_y,
+                jugador_objetivo,
+                self.proyectiles
+            )
+        # Los demás ataques (zigzag, laser, emp) se implementarán en Paso 4-5
+        else:
+            print(f"[BOSS] Ataque '{nombre}' aún no implementado")
+            return
+
+        # Añadir ataque a la lista de activos
+        if ataque:
+            self.ataques_activos.append(ataque)
+            print(f"[BOSS] Ejecutando ataque: {nombre} (fase {self.fase})")
 
         # Establecer cooldown
         self.cooldowns[nombre] = self.COOLDOWN_DURACION[nombre]
@@ -732,3 +747,127 @@ class ProyectilBoss:
                 2
             )
             surface.blit(warn, (px - r * 3, py - r * 3))
+
+
+# ============================================================================
+# ATAQUE 1: ABANICO FRAGMENTADO (FANOUT)
+# ============================================================================
+
+class AtaqueFanout(AtaqueBoss):
+    """
+    Dispara 6 proyectiles en abanico de 120 grados.
+    Cada proyectil se pausa en el aire y explota en 4 hijos en forma de cruz.
+    """
+
+    N_PROYECTILES = 6
+    ANGULO_TOTAL = 120  # grados del abanico
+    VELOCIDAD_PADRE = 180  # px/segundo
+    VELOCIDAD_HIJO = 250  # px/segundo
+    DAÑO_PADRE = 1
+    DAÑO_HIJO = 1
+    RADIO_PADRE = 10
+    RADIO_HIJO = 6
+    TIEMPO_EXPLOSION = 0.8  # segundos antes de pausarse
+
+    def __init__(self, boca_x: float, boca_y: float,
+                 jugador, lista_proyectiles: list):
+        """
+        Args:
+            boca_x, boca_y: Posición donde se generan los proyectiles
+            jugador: Jugador objetivo (para calcular ángulo base)
+            lista_proyectiles: Lista donde se añaden los proyectiles generados
+        """
+        super().__init__()
+        self.lista_proyectiles = lista_proyectiles
+        self.padres_activos = []
+
+        # Calcular dirección base hacia el jugador más cercano
+        dx_base = jugador.x - boca_x
+        dy_base = jugador.y - boca_y
+        dist = max(1, math.sqrt(dx_base**2 + dy_base**2))
+
+        # Ángulo base normalizado
+        ang_base = math.degrees(
+            math.atan2(dy_base / dist, dx_base / dist)
+        )
+
+        # Crear 6 proyectiles padre en abanico
+        for i in range(self.N_PROYECTILES):
+            # Interpolación lineal de 0 a 1
+            t = i / (self.N_PROYECTILES - 1)
+
+            # Calcular ángulo para este proyectil
+            ang = ang_base - self.ANGULO_TOTAL / 2 + t * self.ANGULO_TOTAL
+            rad = math.radians(ang)
+
+            # Vector de dirección
+            dx = math.cos(rad)
+            dy = math.sin(rad)
+
+            # Crear proyectil padre
+            proj = ProyectilBoss(
+                x=boca_x,
+                y=boca_y,
+                dx=dx,
+                dy=dy,
+                daño=self.DAÑO_PADRE,
+                radio=self.RADIO_PADRE,
+                color=(220, 60, 60),
+                color_borde=(255, 180, 180),
+                puede_explotar=True,
+                tiempo_explosion=self.TIEMPO_EXPLOSION,
+                velocidad=self.VELOCIDAD_PADRE
+            )
+            self.padres_activos.append(proj)
+            lista_proyectiles.append(proj)
+
+        print(f"[ATAQUE] AtaqueFanout: {self.N_PROYECTILES} proyectiles "
+              f"en abanico de {self.ANGULO_TOTAL}°")
+
+    def update(self, dt: float, jugadores: list) -> None:
+        """
+        Verifica si algún proyectil padre explotó y crea los hijos.
+        Termina cuando todos los padres están inactivos.
+        """
+        # Verificar si algún padre explotó
+        for padre in self.padres_activos:
+            if padre.explotar_flag and not padre.activo:
+                self._crear_hijos(padre)
+                padre.explotar_flag = False
+
+        # Terminar cuando todos los padres estén inactivos
+        if all(not p.activo for p in self.padres_activos):
+            self.terminado = True
+
+    def _crear_hijos(self, padre: ProyectilBoss) -> None:
+        """
+        Crea 4 proyectiles hijo en forma de cruz (cardinal).
+        Se disparan desde la posición del padre en el momento de explosión.
+        """
+        # Direcciones cardinales: arriba, abajo, izquierda, derecha
+        direcciones = [
+            (0, -1),  # arriba
+            (0, 1),   # abajo
+            (-1, 0),  # izquierda
+            (1, 0),   # derecha
+        ]
+
+        for dx, dy in direcciones:
+            hijo = ProyectilBoss(
+                x=padre.x,
+                y=padre.y,
+                dx=dx,
+                dy=dy,
+                daño=self.DAÑO_HIJO,
+                radio=self.RADIO_HIJO,
+                color=(255, 140, 60),
+                color_borde=(255, 220, 150),
+                puede_explotar=False,
+                velocidad=self.VELOCIDAD_HIJO
+            )
+            self.lista_proyectiles.append(hijo)
+
+    def render(self, surface: pygame.Surface,
+               camera_offset=(0, 0)) -> None:
+        """Los proyectiles se renderizan solos en _render_ataques()."""
+        pass
