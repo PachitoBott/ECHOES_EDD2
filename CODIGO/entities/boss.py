@@ -508,7 +508,15 @@ class Boss:
                 self.render_w,
                 self.x
             )
-        # El ataque EMP se implementará en Paso 6
+        elif nombre == "emp":
+            # Centro del boss como punto de origen de las ondas
+            centro_boss_x = self.x + self.render_w // 2
+            centro_boss_y = self.y + self.render_h // 2
+
+            ataque = AtaqueEMP(
+                centro_boss_x, centro_boss_y,
+                self.proyectiles
+            )
         else:
             print(f"[BOSS] Ataque '{nombre}' aún no implementado")
             return
@@ -1206,3 +1214,160 @@ class AtaqueLaser(AtaqueBoss):
                     (px, bot),
                     random.randint(2, 5)
                 )
+
+
+# ============================================================================
+# ATAQUE 4: PULSO EMP
+# ============================================================================
+
+class AtaqueEMP(AtaqueBoss):
+    """
+    Emite 3 ondas de choque circulares expansivas en sucesión rápida.
+    Las ondas se expanden desde el centro del boss y dañan al jugador
+    cuando las cruza.
+    """
+
+    N_ONDAS = 3
+    INTERVALO_ONDAS = 0.4  # segundos entre ondas
+    VELOCIDAD = 280  # px/segundo de expansión
+    RADIO_MAX = 500  # píxeles máximo
+    GROSOR = 12  # píxeles de grosor del anillo
+    DAÑO = 1
+
+    def __init__(self, boca_x: float, boca_y: float,
+                 lista_proyectiles: list):
+        """
+        Args:
+            boca_x: Centro X de expansión (generalmente centro del boss)
+            boca_y: Centro Y de expansión (generalmente centro del boss)
+            lista_proyectiles: Lista de proyectiles (no se usa, pero por consistencia)
+        """
+        super().__init__()
+        self.cx = boca_x
+        self.cy = boca_y
+        self.lista_proyectiles = lista_proyectiles
+
+        # Control de ondas
+        self.ondas_creadas = 0
+        self.timer_onda = 0.0
+        self.ondas_activas = []  # lista de dicts con radio, alpha, dañado
+
+        print(f"[ATAQUE] AtaqueEMP: {self.N_ONDAS} ondas expansivas")
+
+    def update(self, dt: float, jugadores: list) -> None:
+        """
+        Crea nuevas ondas en intervalos y expande las existentes.
+        Aplica daño cuando el jugador cruza una onda.
+        """
+        # Crear nuevas ondas en intervalos
+        if self.ondas_creadas < self.N_ONDAS:
+            self.timer_onda += dt
+            if self.timer_onda >= self.INTERVALO_ONDAS:
+                self.timer_onda -= self.INTERVALO_ONDAS
+                # Nueva onda: radio 0, alpha 255, sin jugadores dañados
+                self.ondas_activas.append({
+                    "radio": 0.0,
+                    "alpha": 255,
+                    "dañado": set()  # IDs de jugadores dañados por esta onda
+                })
+                self.ondas_creadas += 1
+
+        # Expandir ondas existentes y verificar colisiones
+        for onda in self.ondas_activas:
+            onda["radio"] += self.VELOCIDAD * dt
+            progreso = onda["radio"] / self.RADIO_MAX
+            onda["alpha"] = int(255 * (1 - progreso))
+
+            # Verificar colisión con jugadores
+            for jugador in jugadores:
+                if not hasattr(jugador, 'x') or not hasattr(jugador, 'y'):
+                    continue
+
+                # Identificador único del jugador
+                jid = id(jugador)
+
+                # Si ya fue dañado por esta onda, saltar
+                if jid in onda["dañado"]:
+                    continue
+
+                # Centro del jugador
+                jcx = jugador.x + getattr(jugador, 'w', 32) // 2
+                jcy = jugador.y + getattr(jugador, 'h', 48) // 2
+
+                # Distancia desde el centro del EMP
+                dist = math.sqrt((jcx - self.cx)**2 + (jcy - self.cy)**2)
+
+                # El jugador toca la onda si está cerca del radio actual
+                # (dentro de +/- 20px del radio de la onda)
+                if abs(dist - onda["radio"]) < 20:
+                    jugador.take_damage(self.DAÑO)
+                    onda["dañado"].add(jid)
+                    print(f"[BOSS] Onda EMP golpeó al jugador: daño={self.DAÑO}")
+
+        # Limpiar ondas que llegaron al máximo y extinguirse
+        self.ondas_activas = [
+            o for o in self.ondas_activas
+            if o["radio"] < self.RADIO_MAX
+        ]
+
+        # Terminar cuando todas las ondas se disiparon
+        if (self.ondas_creadas >= self.N_ONDAS and
+                not self.ondas_activas):
+            self.terminado = True
+
+    def render(self, surface: pygame.Surface,
+               camera_offset=(0, 0)) -> None:
+        """
+        Renderiza las ondas expansivas con efectos visuales.
+        Cada onda es un anillo de cian eléctrico que se expande.
+        """
+        cx = int(self.cx - camera_offset[0])
+        cy = int(self.cy - camera_offset[1])
+
+        for onda in self.ondas_activas:
+            radio = int(onda["radio"])
+            alpha = max(0, onda["alpha"])
+
+            if radio <= 0 or alpha <= 0:
+                continue
+
+            # Crear superficie para la onda con canal alpha
+            tam = (radio + self.GROSOR) * 2 + 4
+            onda_surf = pygame.Surface(
+                (tam, tam),
+                pygame.SRCALPHA
+            )
+            centro = (tam // 2, tam // 2)
+
+            # Onda exterior (cian eléctrico)
+            pygame.draw.circle(
+                onda_surf,
+                (0, 200, 255, alpha),
+                centro,
+                radio,
+                self.GROSOR
+            )
+
+            # Onda interior más brillante (cian más claro)
+            pygame.draw.circle(
+                onda_surf,
+                (180, 240, 255, min(255, alpha + 50)),
+                centro,
+                radio,
+                3
+            )
+
+            # Halo exterior muy tenue (cyan oscuro)
+            pygame.draw.circle(
+                onda_surf,
+                (0, 150, 200, alpha // 3),
+                centro,
+                radio + self.GROSOR // 2,
+                4
+            )
+
+            # Blittear la onda en la pantalla
+            surface.blit(
+                onda_surf,
+                (cx - tam // 2, cy - tam // 2)
+            )
