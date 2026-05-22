@@ -1318,11 +1318,20 @@ class ProyectilEMP:
         cy = int(self.cy - camera_offset[1])
         radio = int(self.radio)
 
-        # Bala/pulso expandiéndose
-        pygame.draw.circle(surface, self.color, (cx, cy), radio, 4)
-        # Anillo interior más brillante
-        if radio > 10:
-            pygame.draw.circle(surface, (180, 240, 255), (cx, cy), int(radio * 0.7), 2)
+        # Limitar el radio de renderizado para evitar crashes de pygame
+        # cuando el círculo es muy grande
+        if radio > 800:
+            return
+
+        try:
+            # Bala/pulso expandiéndose
+            pygame.draw.circle(surface, self.color, (cx, cy), radio, 4)
+            # Anillo interior más brillante
+            if radio > 10:
+                pygame.draw.circle(surface, (180, 240, 255), (cx, cy), int(radio * 0.7), 2)
+        except (pygame.error, OverflowError, ValueError) as e:
+            # Silenciar errores de pygame si el círculo es muy grande
+            print(f"[EMP] Error renderizando pulso: {e}")
 
     def verificar_colision(self, jugador) -> bool:
         """Verifica si el jugador toca este pulso."""
