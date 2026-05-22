@@ -127,15 +127,18 @@ class Dungeon:
             # self._place_shop_room()
 
             # <<< NUEVO: sala del boss en el extremo más lejano de Zona 2
+            # Primero asignamos la posición del boss
             self._place_boss_room()
 
-            # VALIDAR: Boss room debe tener al menos una entrada que NO sea por el norte
-            if self._has_valid_boss_entrance():
+            # VALIDAR: Verificar que boss room tenga entrada NO-norte
+            # ANTES de que setup_boss_room() bloquee automáticamente la norte
+            if self._check_boss_room_would_have_valid_entrance():
+                # Puertas válidas, procedemos
+                # Nota: setup_boss_room() ya fue llamado en _place_boss_room()
+                # y ha bloqueado automáticamente la entrada norte
+
                 # Guardar seed ANTES de usar self.seed en otros métodos
                 self.seed = current_seed
-
-                # Bloquear la entrada norte del boss
-                self._enforce_no_north_boss_entrance()
 
                 # <<< NUEVO: sala del Profesor Ibarra en Zona 1
                 self._place_profesor_ibarra_rooms()
@@ -146,6 +149,7 @@ class Dungeon:
                 # marcar inicial como explorado
                 self.explored.add((self.i, self.j))
 
+                print(f"[DUNGEON] Dungeon generado exitosamente con seed {current_seed}")
                 return  # Éxito, dungeon generado correctamente
             else:
                 # Dungeon inválido - reintentar con nuevo seed
@@ -469,59 +473,41 @@ class Dungeon:
         room.setup_boss_room()
         self.boss_pos = boss_pos
 
-    def _has_valid_boss_entrance(self) -> bool:
+    def _check_boss_room_would_have_valid_entrance(self) -> bool:
         """
-        Verifica que la sala del boss tenga al menos una entrada que NO sea por el norte.
-        Retorna True si el boss es accesible por Sur, Este u Oeste.
-        Retorna False si la única entrada es por el norte (seed inválida).
+        Verifica QUE LA SALA DESTINADA A SER BOSS tenga al menos una entrada
+        que NO sea por el norte, ANTES de que setup_boss_room() la configure.
+
+        Esta validación ocurre ANTES de _place_boss_room(), usando las puertas
+        ya asignadas por _link_neighbors_and_carve().
+
+        Retorna True si es válida (tiene S/E/W)
+        Retorna False si solo tiene N (seed será rechazada y regenerada)
         """
         if not hasattr(self, "boss_pos"):
-            print(f"[DUNGEON] _has_valid_boss_entrance: No boss_pos")
             return False
 
         boss_room = self.rooms.get(self.boss_pos)
         if boss_room is None:
-            print(f"[DUNGEON] _has_valid_boss_entrance: boss_room is None")
             return False
 
-        # Contar entradas disponibles (excepto norte)
+        # Verificar puertas ANTES de cualquier modificación
         has_south = boss_room.doors.get("S", False)
         has_east = boss_room.doors.get("E", False)
         has_west = boss_room.doors.get("W", False)
         has_north = boss_room.doors.get("N", False)
 
-        # Válido si tiene al menos una entrada lateral o por abajo
+        # Válido si tiene al menos una entrada NO-norte
         is_valid = has_south or has_east or has_west
-        entrances = sum([has_south, has_east, has_west])
+        entrances_non_north = sum([has_south, has_east, has_west])
 
         if is_valid:
-            print(f"[DUNGEON] [OK] Boss room VALIDO: {entrances} entrada(s) "
+            print(f"[DUNGEON] [OK] Boss room VALIDO: {entrances_non_north} entrada(s) "
                   f"(S={has_south}, E={has_east}, W={has_west})")
         else:
             print(f"[DUNGEON] [FAIL] Boss room INVALIDO: SOLO norte={has_north} disponible")
 
         return is_valid
-
-    def _enforce_no_north_boss_entrance(self) -> None:
-        """
-        Bloquea la entrada por el norte del boss.
-        NOTA: Solo se llama si _has_valid_boss_entrance() retornó True,
-        lo que garantiza que hay otras entradas disponibles.
-        """
-        if not hasattr(self, "boss_pos"):
-            return
-
-        boss_room = self.rooms.get(self.boss_pos)
-        if boss_room is None:
-            return
-
-        # Bloquear norte de forma incondicional
-        boss_room.doors["N"] = False
-        print(f"[DUNGEON] [BLOCKED] Entrada norte del boss bloqueada. "
-              f"Acceso por: "
-              f"{'Sur ' if boss_room.doors.get('S') else ''}"
-              f"{'Este ' if boss_room.doors.get('E') else ''}"
-              f"{'Oeste' if boss_room.doors.get('W') else ''}")
 
     def _populate_hostile_obstacles(self) -> None:
         if not self.rooms:

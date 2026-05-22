@@ -1355,9 +1355,16 @@ class Room:
         Tamaño fijo definido en Config (BOSS_ROOM_W × BOSS_ROOM_H).
         Sin enemigos normales — el boss se añadirá en una fase posterior.
 
-        NOTA: NO bloqueamos la entrada norte aquí. El sistema de validación
-        en Dungeon verifica si hay otras entradas disponibles y bloquea
-        la norte si es necesario (o rechaza la seed si es la única entrada).
+        NOTA: Bloqueamos la entrada norte ANTES de tallar corredores, porque:
+        - carve_corridors() se ejecuta dentro de este método
+        - Si no bloqueamos norte aquí, carve_corridors() tallará el corredor norte
+        - Luego Dungeon.py validará y podría rechazar la seed
+        - Pero el corredor norte ya estaría tallado para nada
+
+        La lógica es:
+        1. Si setup_boss_room() es llamado, es porque Dungeon ya validó OR quiere validar
+        2. Bloqueamos norte aquí para tallar solo los corredores válidos
+        3. Si Dungeon luego rechaza la seed, se regenera limpiamente
         """
         self.type = "boss"
         self.safe = False
@@ -1368,6 +1375,10 @@ class Room:
         # build_centered sobreescribe los tiles, así que re-tallamos los
         # corredores después para que las puertas sigan siendo accesibles.
         self.build_centered(CFG.BOSS_ROOM_W, CFG.BOSS_ROOM_H)
+
+        # Bloquear norte ANTES de tallar corredores
+        # Esto garantiza que solo tallamos los corredores válidos
+        self.doors["N"] = False
 
         self.carve_corridors(width_tiles=2, length_tiles=3)
 
