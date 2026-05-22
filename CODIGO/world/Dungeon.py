@@ -137,6 +137,10 @@ class Dungeon:
                 # Nota: setup_boss_room() ya fue llamado en _place_boss_room()
                 # y ha bloqueado automáticamente la entrada norte
 
+                # CRÍTICO: Bloquear entrada sur de sala arriba del boss
+                # Esto previene acceso indirecto al boss desde arriba
+                self._block_north_adjacencies_to_boss()
+
                 # Guardar seed ANTES de usar self.seed en otros métodos
                 self.seed = current_seed
 
@@ -472,6 +476,28 @@ class Dungeon:
 
         room.setup_boss_room()
         self.boss_pos = boss_pos
+
+    def _block_north_adjacencies_to_boss(self) -> None:
+        """
+        Bloquea las puertas sur de la sala arriba del boss room.
+
+        Esto es crítico: aunque la puerta norte del boss esté bloqueada,
+        si hay una sala arriba con puerta sur ABIERTA, permitiría acceso
+        indirecto al boss desde arriba.
+
+        Solución: Bloquear la puerta sur de cualquier sala arriba del boss.
+        """
+        if not hasattr(self, "boss_pos"):
+            return
+
+        boss_x, boss_y = self.boss_pos
+
+        # Sala arriba (norte) del boss
+        room_above = self.rooms.get((boss_x, boss_y - 1))
+        if room_above:
+            if room_above.doors.get("S"):
+                room_above.doors["S"] = False
+                print(f"[DUNGEON] Bloqueada entrada sur de sala arriba {(boss_x, boss_y - 1)}")
 
     def _check_boss_room_would_have_valid_entrance(self) -> bool:
         """
