@@ -776,8 +776,8 @@ class HUDPanel:
 
         # Parámetros de posicionamiento
         ICON_SIZE = 28  # Tamaño de cada icono (ya escalado en cargar_iconos_poderes)
-        MARGEN_DERECHO = 12  # Margen desde el borde derecho del panel
-        MARGEN_SUPERIOR = 70  # Margen desde el borde superior del panel (suficiente para estar debajo de corazones)
+        MARGEN_DERECHO = 52  # Margen desde el borde derecho del panel (40px más a la izquierda)
+        MARGEN_SUPERIOR = 50  # Margen desde el borde superior del panel (20px más arriba)
         GAP_VERTICAL = 4  # Separación entre iconos
 
         # Posición X (alineada al borde derecho del panel, con margen)
