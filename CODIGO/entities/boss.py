@@ -66,7 +66,7 @@ class Boss:
     FPS_IDLE = 8  # frames por segundo
 
     # Configuración de movimiento
-    SPEED = 60  # px/segundo lateral
+    SPEED = 200  # px/segundo lateral (aumentado de 60)
     MARGIN = 50  # margen desde bordes de sala
 
     # Escala de render — el sprite es muy grande (736x400)
@@ -352,15 +352,15 @@ class Boss:
 
         # Duraciones de cooldown por ataque
         self.COOLDOWN_DURACION = {
-            "fanout": 4.0,
-            "zigzag": 5.0,
-            "laser": 6.0,
-            "emp": 8.0,
+            "fanout": 2.0,   # reducido de 4.0
+            "zigzag": 2.5,   # reducido de 5.0
+            "laser": 3.0,    # reducido de 6.0
+            "emp": 4.0,      # reducido de 8.0
         }
 
         # Timer entre decisiones de ataque
         self.timer_decision = 0.0
-        self.INTERVALO_DECISION = 2.5  # segundos entre intentos de ataque
+        self.INTERVALO_DECISION = 1.2  # reducido de 2.5 segundos
 
         # Fase del boss (1-3 según vida)
         self.fase = 1
@@ -807,13 +807,13 @@ class AtaqueFanout(AtaqueBoss):
 
     N_PROYECTILES = 6
     ANGULO_TOTAL = 120  # grados del abanico
-    VELOCIDAD_PADRE = 180  # px/segundo
-    VELOCIDAD_HIJO = 250  # px/segundo
+    VELOCIDAD_PADRE = 300  # px/segundo (aumentado de 180)
+    VELOCIDAD_HIJO = 400   # px/segundo (aumentado de 250)
     DAÑO_PADRE = 1
     DAÑO_HIJO = 1
     RADIO_PADRE = 10
     RADIO_HIJO = 6
-    TIEMPO_EXPLOSION = 0.8  # segundos antes de pausarse
+    TIEMPO_EXPLOSION = 0.4  # segundos antes de pausarse (reducido de 0.8)
 
     def __init__(self, boca_x: float, boca_y: float,
                  jugador, lista_proyectiles: list):
@@ -925,18 +925,20 @@ class AtaqueFanout(AtaqueBoss):
 
 class AtaqueZigzag(AtaqueBoss):
     """
-    Dispara 12 proyectiles en rápida sucesión (cada 0.08 segundos)
+    Dispara 12 proyectiles en rápida sucesión (cada 0.05 segundos)
     con un patrón zigzag descendente.
     Los proyectiles se desvían alternadamente izquierda/derecha.
+    Incluye telegraph visual antes de comenzar el disparo.
     """
 
     N_BALAS = 12
-    INTERVALO = 0.08  # segundos entre disparos
-    VELOCIDAD = 320  # px/segundo
+    INTERVALO = 0.05  # segundos entre disparos (reducido de 0.08)
+    VELOCIDAD = 400  # px/segundo (aumentado de 320)
     ANG_BASE = 90  # grados (casi vertical hacia abajo)
     DESVIACION = 35  # grados alternados (+/-)
     DAÑO = 1
     RADIO = 7
+    TELEGRAPH = 0.3  # segundos de aviso visual
 
     def __init__(self, boca_x: float, boca_y: float,
                  lista_proyectiles: list):
@@ -955,21 +957,35 @@ class AtaqueZigzag(AtaqueBoss):
         self.timer_bala = 0.0
         self.lado = 1  # Alterna +1 (derecha) y -1 (izquierda)
 
+        # Fase de telegraph
+        self.fase = "telegraph"  # telegraph → activo → terminado
+        self.timer_fase = 0.0
+
         print(f"[ATAQUE] AtaqueZigzag: {self.N_BALAS} balas en zigzag")
 
     def update(self, dt: float, jugadores: list) -> None:
         """
-        Dispara una bala cada intervalo.
-        Termina cuando se han disparado todas las balas.
+        Actualiza el ataque: telegraph → disparo de balas → terminado.
         """
-        if self.balas_disparadas >= self.N_BALAS:
-            self.terminado = True
+        self.timer_fase += dt
+
+        if self.fase == "telegraph":
+            # Esperar fase de telegraph
+            if self.timer_fase >= self.TELEGRAPH:
+                self.fase = "activo"
+                self.timer_fase = 0.0
             return
 
-        self.timer_bala += dt
-        if self.timer_bala >= self.INTERVALO:
-            self.timer_bala -= self.INTERVALO
-            self._disparar_bala()
+        if self.fase == "activo":
+            # Disparar balas
+            if self.balas_disparadas >= self.N_BALAS:
+                self.terminado = True
+                return
+
+            self.timer_bala += dt
+            if self.timer_bala >= self.INTERVALO:
+                self.timer_bala -= self.INTERVALO
+                self._disparar_bala()
 
     def _disparar_bala(self) -> None:
         """
@@ -1009,8 +1025,34 @@ class AtaqueZigzag(AtaqueBoss):
 
     def render(self, surface: pygame.Surface,
                camera_offset=(0, 0)) -> None:
-        """Los proyectiles se renderizan solos en _render_ataques()."""
-        pass
+        """
+        Renderiza telegraph visual si está en fase de aviso.
+        Los proyectiles se renderizan solos en _render_ataques().
+        """
+        if self.fase == "telegraph":
+            # Mostrar líneas parpadeantes moradas indicando zona de fuego
+            cx = int(self.boca_x - camera_offset[0])
+            top = int(self.boca_y - camera_offset[1])
+            bot = int((self.boca_y + 600) - camera_offset[1])  # altura aproximada
+
+            progreso = self.timer_fase / self.TELEGRAPH
+            alpha = int(50 + 150 * progreso)
+
+            # Líneas verticales moradas
+            pygame.draw.line(
+                surface,
+                (200, 50, 200, alpha),
+                (cx - 40, top),
+                (cx - 40, bot),
+                2
+            )
+            pygame.draw.line(
+                surface,
+                (200, 50, 200, alpha),
+                (cx + 40, top),
+                (cx + 40, bot),
+                2
+            )
 
 
 # ============================================================================
