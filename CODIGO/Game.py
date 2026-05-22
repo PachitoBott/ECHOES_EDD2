@@ -217,6 +217,7 @@ class Game:
         port: int = 5555,
         host: str = "127.0.0.1",
         role: str = "victim",
+        skip_intro: bool = False,
     ) -> None:
         pygame.init()
         self.cfg = cfg
@@ -225,6 +226,7 @@ class Game:
         self._net_port = port
         self._net_host = host
         self._net_role = role
+        self._skip_intro = skip_intro
 
         # ---------- Ventana ----------
         self.screen = pygame.display.set_mode(
@@ -1685,7 +1687,9 @@ class Game:
         # --- Trigger intro cinemática en primer frame ---
         if not self._intro_played:
             self._intro_played = True
-            self.cinematics.reproducir("intro")
+            # [FEATURE] Skip intro si se especificó --skip-intro
+            if not self._skip_intro:
+                self.cinematics.reproducir("intro")
             return
 
         room = self.dungeon.current_room
