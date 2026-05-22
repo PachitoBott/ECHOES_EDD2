@@ -522,6 +522,7 @@ class ShooterEnemy(Enemy):
                     radius=3,
                     color=(255, 90, 90),
                     damage=getattr(self, "projectile_damage", 1),
+                    owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
                 )
             if hasattr(out_bullets, "add"):
                 out_bullets.add(bullet)
@@ -992,6 +993,7 @@ class TelefonoEnemy(Enemy):
                     radius=3,
                     color=(255, 90, 90),
                     damage=getattr(self, "projectile_damage", 1),
+                    owner_id=self.enemy_id,  # [FIX] Prevenir que el enemigo se dañe a sí mismo
                 )
             if hasattr(out_bullets, "add"):
                 out_bullets.add(bullet)
