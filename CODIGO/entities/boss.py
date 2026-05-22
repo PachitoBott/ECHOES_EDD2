@@ -1301,6 +1301,16 @@ class ProyectilEMP:
         self.color = (100, 200, 255)  # azul cian
         self.daño = 1
 
+    @property
+    def rect(self) -> pygame.Rect:
+        """Rect del pulso para colisiones."""
+        return pygame.Rect(
+            int(self.cx) - int(self.radio),
+            int(self.cy) - int(self.radio),
+            int(self.radio) * 2,
+            int(self.radio) * 2
+        )
+
     def update(self, dt: float):
         if not self.activo:
             return
