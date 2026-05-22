@@ -420,7 +420,11 @@ class Game:
         # Reset de runtime
         self._reset_runtime_state()
 
-        # ✅ Entrar “formalmente” a la sala inicial (dispara on_enter/Shop si aplica)
+        # Reset del progreso del Profesor Ibarra
+        from ui.ProfesorIbarra import progreso_ibarra
+        progreso_ibarra.reset()
+
+        # Entrar "formalmente" a la sala inicial (dispara on_enter/Shop si aplica)
         if hasattr(self.dungeon, "enter_initial_room"):
             self.dungeon.enter_initial_room(self.player, self.cfg, ShopkeeperCls=Shopkeeper)
 

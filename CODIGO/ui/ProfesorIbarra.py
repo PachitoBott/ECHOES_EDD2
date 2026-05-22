@@ -12,8 +12,64 @@ Flujo de estado:
 """
 from __future__ import annotations
 import math
+import random
 from pathlib import Path
 import pygame
+from narrative.text_renderer import TextRenderer
+
+
+# ---------------------------------------------------------------------------
+# Sistema de progreso del Profesor Ibarra
+# ---------------------------------------------------------------------------
+class ProgresoIbarra:
+    """
+    Rastrea cuántas preguntas del Profesor Ibarra ha respondido
+    el jugador en el run actual (sin importar si acertó o falló).
+    """
+
+    MAX_PREGUNTAS = 5  # Total de preguntas posibles en un run
+
+    def __init__(self):
+        self.preguntas_respondidas = 0
+        self.respuestas_correctas = 0
+        self.preguntas_hechas = set()  # Set de índices de preguntas ya respondidas
+
+    def registrar_respuesta(self, fue_correcta: bool, pregunta_idx: int | None = None) -> None:
+        """Registra una respuesta a una pregunta del profesor.
+
+        Args:
+            fue_correcta: True si la respuesta fue correcta
+            pregunta_idx: Índice de la pregunta en la pool (para evitar repetidas)
+        """
+        self.preguntas_respondidas += 1
+        if fue_correcta:
+            self.respuestas_correctas += 1
+        if pregunta_idx is not None:
+            self.preguntas_hechas.add(pregunta_idx)
+
+    def reset(self) -> None:
+        """Reinicia el progreso (llamar al iniciar un nuevo run)."""
+        self.preguntas_respondidas = 0
+        self.respuestas_correctas = 0
+        self.preguntas_hechas = set()
+
+    @property
+    def porcentaje(self) -> float:
+        """Retorna el porcentaje de preguntas respondidas (0.0 a 1.0)."""
+        if self.MAX_PREGUNTAS == 0:
+            return 0.0
+        return self.preguntas_respondidas / self.MAX_PREGUNTAS
+
+    @property
+    def porcentaje_correctas(self) -> float:
+        """Retorna el porcentaje de respuestas correctas (0.0 a 1.0)."""
+        if self.preguntas_respondidas == 0:
+            return 0.0
+        return self.respuestas_correctas / self.preguntas_respondidas
+
+
+# Instancia global del progreso
+progreso_ibarra = ProgresoIbarra()
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +160,7 @@ IBARRA_CATALOG: list[dict] = [
             "",
             "Puedes comprarla hasta 3 veces.",
         ],
+        "descripcion": "Recupera 2 HP. Comprable 3 veces.",
         "icon_color": (80, 200, 120),
         "icon_char": "+",
     },
@@ -118,6 +175,7 @@ IBARRA_CATALOG: list[dict] = [
             "",
             "Solo puedes comprarla una vez.",
         ],
+        "descripcion": "Invulnerable 5 seg con tecla R.",
         "icon_color": (100, 180, 255),
         "icon_char": "M",
     },
@@ -133,6 +191,7 @@ IBARRA_CATALOG: list[dict] = [
             "",
             "Solo puedes comprarla una vez.",
         ],
+        "descripcion": "Congela enemigos 4 seg con Q.",
         "icon_color": (255, 220, 60),
         "icon_char": "~",
     },
@@ -148,10 +207,111 @@ IBARRA_CATALOG: list[dict] = [
             "",
             "Solo puedes comprarla una vez.",
         ],
+        "descripcion": "Doble disparo en paralelo permanente.",
         "icon_color": (255, 140, 40),
         "icon_char": "»",
     },
 ]
+
+
+# ---------------------------------------------------------------------------
+# Tooltip para items de la tienda
+# ---------------------------------------------------------------------------
+class ItemTooltip:
+    """
+    Tooltip que aparece al hacer hover sobre un item de la tienda.
+    Se posiciona cerca del cursor sin salirse de la pantalla.
+    """
+
+    PADDING = 8  # píxeles lógicos de padding interno
+    MAX_WIDTH = 180  # píxeles lógicos de ancho máximo
+    BG_COLOR = (15, 15, 25)
+    BG_ALPHA = 220
+    BORDER_COLOR = (60, 60, 80)
+    TEXT_COLOR = (200, 200, 210)
+    COLOR_AGOTADO = (120, 60, 60)
+
+    def __init__(self, font: pygame.font.Font):
+        self.font = font
+        self.visible = False
+        self.texto = ""
+        self.x = 0
+        self.y = 0
+        self.color = self.TEXT_COLOR
+
+    def mostrar(self, texto: str, mouse_x: int, mouse_y: int,
+                agotado: bool = False) -> None:
+        """Muestra el tooltip con el texto dado."""
+        self.visible = True
+        self.texto = "Agotado" if agotado else texto
+        self.color = self.COLOR_AGOTADO if agotado else self.TEXT_COLOR
+        self._calcular_posicion(mouse_x, mouse_y)
+
+    def ocultar(self) -> None:
+        """Oculta el tooltip."""
+        self.visible = False
+
+    def _calcular_posicion(self, mx: int, my: int) -> None:
+        """Calcula la posición del tooltip cerca del cursor sin salirse de pantalla."""
+        from core.config import Config
+        cfg = Config()
+        LOGICAL_WIDTH = cfg.SCREEN_W
+        LOGICAL_HEIGHT = cfg.SCREEN_H
+
+        offset_x = 15
+        offset_y = -10
+        self.x = mx + offset_x
+        self.y = my + offset_y
+
+        # Ajustar si se sale por la derecha
+        ancho_estimado = self.MAX_WIDTH
+        if self.x + ancho_estimado > LOGICAL_WIDTH - 10:
+            self.x = mx - ancho_estimado - offset_x
+
+        # Ajustar si se sale por arriba
+        if self.y < 10:
+            self.y = my + 20
+
+    def render(self, surface: pygame.Surface) -> None:
+        """Renderiza el tooltip en la superficie."""
+        if not self.visible or not self.texto:
+            return
+
+        # Renderizar texto con word wrap
+        palabras = self.texto.split(" ")
+        lineas = []
+        linea_actual = ""
+
+        for palabra in palabras:
+            prueba = linea_actual + (" " if linea_actual else "") + palabra
+            if self.font.size(prueba)[0] <= self.MAX_WIDTH - self.PADDING * 2:
+                linea_actual = prueba
+            else:
+                if linea_actual:
+                    lineas.append(linea_actual)
+                linea_actual = palabra
+        if linea_actual:
+            lineas.append(linea_actual)
+
+        line_h = self.font.get_height() + 2
+        total_h = len(lineas) * line_h + self.PADDING * 2
+        max_w = max(
+            (self.font.size(l)[0] for l in lineas), default=0
+        ) + self.PADDING * 2
+
+        # Fondo semitransparente
+        bg = pygame.Surface((max_w, total_h), pygame.SRCALPHA)
+        bg.fill((*self.BG_COLOR, self.BG_ALPHA))
+        pygame.draw.rect(bg, self.BORDER_COLOR, (0, 0, max_w, total_h), 1)
+        surface.blit(bg, (self.x, self.y))
+
+        # Renderizar texto
+        for i, linea in enumerate(lineas):
+            txt = self.font.render(linea, False, self.color)
+            surface.blit(txt, (
+                self.x + self.PADDING,
+                self.y + self.PADDING + i * line_h
+            ))
 
 
 # ---------------------------------------------------------------------------
@@ -172,9 +332,9 @@ class ProfesorIbarra:
         self.rect = pygame.Rect(cx - 16, cy - 30, 32, 60)
         self.interact_radius = 28
 
-        # Seleccionar pregunta por zona; cae al comodín si no hay
-        candidates = [p for p in PREGUNTAS if p["zona"] == zona]
-        self.pregunta: dict = candidates[0] if candidates else PREGUNTAS[0]
+        # La pregunta se selecciona cuando inicia la interacción
+        self.pregunta: dict = {}
+        self._pregunta_idx: int = -1
 
         self.estado              = self.IDLE
         self.pregunta_respondida = False
@@ -206,6 +366,36 @@ class ProfesorIbarra:
         self._idle_anim_timer: float = 0.0
         self._IDLE_FRAME_SPEED: float = 0.20  # segundos por frame (idle más lento)
 
+        # --- Typewriter effect para feedback ---
+        self._text_renderer: TextRenderer | None = None
+        self._typewriter_fps: int = 30  # caracteres por segundo
+
+        # --- Tooltip para items de la tienda ---
+        # Se inicializa con un font dummy, se actualiza en draw_screen()
+        self.tooltip = ItemTooltip(pygame.font.SysFont(None, 14))
+        self._item_hover = False  # Rastrea si hay hover activo sobre un item
+
+    # ------------------------------------------------------------------
+    # Selección de preguntas
+    # ------------------------------------------------------------------
+    def _seleccionar_pregunta_aleatoria(self) -> None:
+        """Selecciona una pregunta aleatoria que no haya sido respondida en este run."""
+        preguntas_disponibles = [
+            (i, p) for i, p in enumerate(PREGUNTAS)
+            if i not in progreso_ibarra.preguntas_hechas
+        ]
+
+        if not preguntas_disponibles:
+            # Si todas las preguntas fueron hechas, resetear y seleccionar de todas
+            preguntas_disponibles = list(enumerate(PREGUNTAS))
+
+        if preguntas_disponibles:
+            self._pregunta_idx, self.pregunta = random.choice(preguntas_disponibles)
+        else:
+            # Fallback: usar la primera pregunta
+            self._pregunta_idx = 0
+            self.pregunta = PREGUNTAS[0]
+
     # ------------------------------------------------------------------
     # Interacción
     # ------------------------------------------------------------------
@@ -219,14 +409,27 @@ class ProfesorIbarra:
         return area.colliderect(player_rect)
 
     def iniciar_interaccion(self) -> None:
+        """Inicia interacción: hace nueva pregunta o abre tienda si ya respondió.
+
+        Si está en LISTO (cerró tienda), permite nueva pregunta automáticamente.
+        """
+        # Si está en LISTO, resetear para permitir nueva pregunta
+        if self.estado == self.LISTO:
+            self.pregunta_respondida = False
+
         if self.pregunta_respondida:
+            # Ya respondió esta pregunta, ir directamente a tienda
             self.estado = self.TIENDA
         else:
+            # Primera vez o nueva pregunta: seleccionar pregunta aleatoria
+            self._seleccionar_pregunta_aleatoria()
             self.estado = self.PREGUNTA
 
     def responder(self, opcion_idx: int, player) -> None:
         """Registra la respuesta, otorga recompensa y cambia a FEEDBACK."""
-        if opcion_idx == self.pregunta["correcta"]:
+        fue_correcta = opcion_idx == self.pregunta["correcta"]
+
+        if fue_correcta:
             reward = RECOMPENSA_CORRECTA
             lines  = list(self.pregunta["feedback_correcto"])
         else:
@@ -241,6 +444,19 @@ class ProfesorIbarra:
         lines.append("(Presiona E, Enter o Espacio para abrir la tienda)")
 
         self._feedback_lines   = lines
+
+        # Registrar respuesta en el progreso global (con índice para evitar repetir)
+        progreso_ibarra.registrar_respuesta(fue_correcta, self._pregunta_idx)
+
+        # Crear TextRenderer para el efecto typewriter
+        # Unir líneas con saltos de línea para renderización
+        feedback_text = "\n".join(lines)
+        self._text_renderer = TextRenderer(
+            feedback_text,
+            typewriter_fps=self._typewriter_fps,
+            typewriter_sound_path=None  # Sin sonido para feedback
+        )
+
         self.pregunta_respondida = True
         self.estado              = self.FEEDBACK
 
@@ -249,10 +465,13 @@ class ProfesorIbarra:
         self.estado = self.TIENDA
 
     def cerrar_tienda(self) -> None:
-        """Cierra la tienda y vuelve a LISTO."""
+        """Cierra la tienda y vuelve a LISTO.
+        Permite hacer una nueva pregunta si se interactúa de nuevo."""
         self.estado = self.LISTO
         self._last_msg = ""
         self._msg_timer = 0.0
+        # Resetear para permitir nueva pregunta en próxima interacción
+        self.pregunta_respondida = False
 
     # ------------------------------------------------------------------
     # Manejo de eventos de la tienda carousel
@@ -363,7 +582,12 @@ class ProfesorIbarra:
 
         elif self.estado == self.FEEDBACK:
             if ev.key in (pygame.K_e, pygame.K_RETURN, pygame.K_SPACE):
-                self.estado = self.TIENDA
+                # Si el typewriter aún está en progreso, completarlo
+                if self._text_renderer and not self._text_renderer.is_finished():
+                    self._text_renderer.force_finish()
+                else:
+                    # Si ya terminó, pasar a la tienda
+                    self.estado = self.TIENDA
 
         elif self.estado == self.TIENDA:
             self.handle_tienda_event(ev, player)
@@ -385,6 +609,10 @@ class ProfesorIbarra:
         # Avanzar animación de hablar en estados de conversación
         if self.estado in (self.PREGUNTA, self.FEEDBACK):
             self._tick_talk_anim(real_dt)
+
+        # Actualizar typewriter effect en estado FEEDBACK
+        if self.estado == self.FEEDBACK and self._text_renderer:
+            self._text_renderer.update(real_dt)
 
         # Avanzar animación idle siempre
         if self._idle_frames:
@@ -495,19 +723,68 @@ class ProfesorIbarra:
         self._draw_hologram(surface)
         # Los paneles de diálogo se dibujan en screen via draw_screen()
 
+    def update_hover(self, mouse_pos: tuple[int, int], screen_size: tuple[int, int]) -> None:
+        """
+        Detecta si el mouse está sobre el item actual y actualiza el tooltip.
+        Se llama en cada frame cuando la tienda está abierta.
+        """
+        if self.estado != self.TIENDA:
+            self.tooltip.ocultar()
+            self._item_hover = False
+            return
+
+        mx, my = mouse_pos
+        sw, sh = screen_size
+
+        item = IBARRA_CATALOG[self._carousel_idx]
+        iid = item["id"]
+        bought = self._purchase_counts.get(iid, 0)
+        max_buys = item["max_buys"]
+        agotado = bought >= max_buys
+
+        # Mostrar tooltip si mouse está en región izquierda del panel (donde está el icono)
+        if mx < sw // 2:
+            self.tooltip.mostrar(
+                item["descripcion"],
+                mx, my,
+                agotado
+            )
+            self._item_hover = True
+        else:
+            self.tooltip.ocultar()
+            self._item_hover = False
+
     def draw_screen(self, screen: pygame.Surface) -> None:
         """Dibuja los paneles de diálogo directamente en el screen surface (encima del HUD)."""
         font = self._get_screen_font()
+        screen_size = screen.get_size()
+
+        # Actualizar tooltip si está en tienda
+        if self.estado == self.TIENDA:
+            try:
+                mouse_pos = pygame.mouse.get_pos()
+                self.update_hover(mouse_pos, screen_size)
+            except Exception as e:
+                # Silenciar errores de hover para no romper tienda
+                self.tooltip.ocultar()
+                self._item_hover = False
+
         if self.estado == self.PREGUNTA:
             self._draw_question_ui(screen, font)
         elif self.estado == self.FEEDBACK:
             self._draw_feedback_ui(screen, font)
         elif self.estado == self.TIENDA:
             self._draw_tienda_ui(screen, font)
+            # Renderizar tooltip al final (encima de todo)
+            self.tooltip.render(screen)
 
     def draw_idle_hint(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
         cx, cy = self.pos
-        hint = font.render("E - Hablar con el Profesor Ibarra", True, (140, 210, 255))
+        if self.estado == self.LISTO:
+            # En LISTO, mostrar que puede hacer otra pregunta
+            hint = font.render("E - Otra pregunta", True, (100, 255, 150))
+        else:
+            hint = font.render("E - Hablar con el Profesor Ibarra", True, (140, 210, 255))
         surface.blit(hint, (cx - hint.get_width() // 2, cy - 58))
 
     # --- hologram body ---
@@ -683,15 +960,81 @@ class ProfesorIbarra:
                          (text_x + text_w, py + 8 + lh + 1), 1)
 
         y = py + 8 + lh + 10
-        for line in self._feedback_lines:
-            if line.startswith("+"):
-                color = (100, 255, 140)
-            elif "incorrecto" in line.lower() or "no " in line.lower():
-                color = (255, 160, 100)
-            else:
-                color = (180, 225, 255)
-            surface.blit(font.render(line, True, color), (text_x, y)); y += lh
 
+        # Obtener el texto visible del renderer
+        if self._text_renderer:
+            visible_text = self._text_renderer.current_text()
+            visible_lines = visible_text.split("\n")
+        else:
+            visible_lines = self._feedback_lines
+
+        # Renderizar las líneas visibles con sus colores apropiados
+        for line_idx, line in enumerate(visible_lines):
+            # Determinar color basado en el contenido de la línea
+            if line.startswith("+"):
+                color = (100, 255, 140)  # Verde para recompensa
+            elif "incorrecto" in line.lower() or "no " in line.lower():
+                color = (255, 160, 100)  # Naranja para incorrecto
+            else:
+                color = (180, 225, 255)  # Azul claro para normal
+
+            surface.blit(font.render(line, True, color), (text_x, y))
+            y += lh
+
+        # Mostrar indicador de continuar cuando el typewriter termina
+        if self._text_renderer and self._text_renderer.is_finished():
+            continue_text = font.render("[Presiona E, Enter o Espacio para continuar]", True, (140, 170, 200))
+            surface.blit(continue_text, (text_x, y + 8))
+
+
+    # --- barra de progreso ---
+    def _draw_progress_bar(self, surface: pygame.Surface, font: pygame.font.Font,
+                          x: int, y: int) -> None:
+        """
+        Dibuja la barra de progreso de preguntas respondidas.
+        Muestra iconos individuales por cada pregunta (completada/pendiente).
+        """
+        ICON_SIZE = 14  # píxeles lógicos
+        ICON_GAP = 6    # píxeles entre iconos
+
+        total = progreso_ibarra.MAX_PREGUNTAS
+        respondidas = progreso_ibarra.preguntas_respondidas
+
+        # Título
+        titulo = font.render("Preguntas respondidas", True, (140, 140, 160))
+        surface.blit(titulo, (x, y))
+
+        # Iconos de progreso
+        icon_y = y + titulo.get_height() + 6
+
+        for i in range(total):
+            icon_x = x + i * (ICON_SIZE + ICON_GAP)
+            completado = i < respondidas
+
+            # Colores
+            color_fill = (76, 175, 80) if completado else (25, 25, 40)
+            color_border = (100, 200, 100) if completado else (50, 50, 70)
+
+            # Dibujar cuadrado del icono
+            rect = pygame.Rect(icon_x, icon_y, ICON_SIZE, ICON_SIZE)
+            pygame.draw.rect(surface, color_fill, rect)
+            pygame.draw.rect(surface, color_border, rect, 1)
+
+            # Dibujar checkmark en los completados
+            if completado:
+                cx = icon_x + ICON_SIZE // 2
+                cy = icon_y + ICON_SIZE // 2
+                pygame.draw.line(surface, (255, 255, 255),
+                               (cx - 3, cy), (cx, cy + 3), 1)
+                pygame.draw.line(surface, (255, 255, 255),
+                               (cx, cy + 3), (cx + 4, cy - 3), 1)
+
+        # Contador numérico al lado
+        contador = font.render(f"{respondidas}/{total}", True, (180, 180, 200))
+        surface.blit(contador, (
+            x + total * (ICON_SIZE + ICON_GAP) + 8,
+            icon_y + 1
+        ))
 
     # --- tienda carousel ---
     def _draw_tienda_ui(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
@@ -797,6 +1140,18 @@ class ProfesorIbarra:
             icon_sf.blit(ch, (ICON_SIZE//2-ch.get_width()//2, ICON_SIZE//2-ch.get_height()//2))
             surface.blit(icon_sf, (left_cx - ICON_SIZE//2, icon_y))
 
+        # Overlay de hover semitransparente
+        if self._item_hover and not exhausted:
+            overlay = pygame.Surface((ICON_SIZE, ICON_SIZE), pygame.SRCALPHA)
+            overlay.fill((255, 255, 255, 30))
+            surface.blit(overlay, (left_cx - ICON_SIZE//2, icon_y))
+
+        # Overlay de agotado (más oscuro)
+        if exhausted:
+            overlay = pygame.Surface((ICON_SIZE, ICON_SIZE), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 80))
+            surface.blit(overlay, (left_cx - ICON_SIZE//2, icon_y))
+
         # Flechas
         arr_y = icon_y + ICON_SIZE // 2 - lh // 2
         la = font.render("◀", True, arr_col)
@@ -891,6 +1246,10 @@ class ProfesorIbarra:
             mc  = (70, 255, 130) if "Comprado" in self._last_msg else (255, 80, 80)
             ms  = font.render(self._last_msg, True, mc)
             surface.blit(ms, (rx, ry))
+
+        # ── Barra de progreso de preguntas ───────────────────────────────
+        # Posicionar dentro del panel, cerca del footer
+        self._draw_progress_bar(surface, font, px + 20, py + ph - CTRL_BAR_H - 32)
 
         # ── Barra de controles ───────────────────────────────────────────
         ctrl_y = py + ph - CTRL_BAR_H + (CTRL_BAR_H - lh) // 2
