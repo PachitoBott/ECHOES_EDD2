@@ -638,8 +638,8 @@ class Player(Entity):
         2. Animaciones de disparo (si está disparando):
            - pistol_aim_run_up (corriendo hacia arriba)
            - pistol_aim_run_down (corriendo hacia abajo)
-           - pistol_aim_run (corriendo lateralmente)
-           - pistol_aim (quieto o caminando)
+           - pistol_aim_run (corriendo lateralmente o caminando)
+           - pistol_aim (quieto, congelado en frame 5)
         3. Animaciones de movimiento (si se está moviendo):
            - run (corriendo rápido)
            - walk (caminando)
@@ -657,17 +657,21 @@ class Player(Entity):
         if self._respawn_animating:
             active_name = "death"
         elif is_shooting:
-            # Prioridad: disparar mientras se corre en direcciones específicas
+            # Prioridad: disparar con diferentes animaciones según velocidad
             shoot_dir_x, shoot_dir_y = self._shoot_dir_current
             if is_running:
+                # Corriendo + disparando en direcciones específicas
                 if shoot_dir_y < 0:  # Disparando hacia arriba mientras corre
                     active_name = "pistol_aim_run_up"
                 elif shoot_dir_y > 0:  # Disparando hacia abajo mientras corre
                     active_name = "pistol_aim_run_down"
                 else:  # Disparando horizontalmente mientras corre
                     active_name = "pistol_aim_run"
+            elif is_walking:
+                # Caminando + disparando
+                active_name = "pistol_aim_run"
             else:
-                # Disparando sin correr (quieto o caminando)
+                # Quieto + disparando (congelado en frame 5)
                 active_name = "pistol_aim"
         elif is_running:
             active_name = "run"
