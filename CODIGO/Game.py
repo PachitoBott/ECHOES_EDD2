@@ -894,6 +894,25 @@ class Game:
             room_id = tuple(room_id_raw) if isinstance(room_id_raw, (list, tuple)) else (0, 0)
             if room_id == (self.dungeon.i, self.dungeon.j):
                 room = self.dungeon.current_room
+
+                # [SEGURIDAD] Si hay enemigos restantes, dispara efectos de muerte antes de limpiar
+                if hasattr(room, 'enemies') and room.enemies:
+                    log_game.warning(f"[ROOM_CLEAR] {len(room.enemies)} enemigos aún en sala, disparando efectos...")
+                    for enemy in room.enemies:
+                        try:
+                            # Dispara efecto de muerte si es posible
+                            if self.death_effect_manager:
+                                frame = getattr(enemy, '_get_frame_actual', lambda: None)()
+                                if frame:
+                                    self.death_effect_manager.spawn(enemy.x, enemy.y, frame)
+                        except Exception as e:
+                            log_game.debug(f"Error disparando efecto para enemigo: {e}")
+
+                    # Limpiar todos los enemigos
+                    room.enemies.clear()
+                    log_game.warning(f"[ROOM_CLEAR] Sala limpiada. Ahora tiene {len(room.enemies)} enemigos")
+
+                # Abrir puertas y marcar sala como completada
                 if hasattr(room, "refresh_lock_state"):
                     room.refresh_lock_state()
 
@@ -2923,6 +2942,19 @@ class Game:
         room.draw(self.world, current_tileset)
 
         if hasattr(room, "enemies"):
+            # [SEGURIDAD] Limpiar enemigos muertos que quedaron en la lista
+            # Esto previene sprites congelados si un enemigo no se eliminó correctamente
+            enemigos_a_limpiar = []
+            for i, enemy in enumerate(room.enemies):
+                # Si está muerto según su flag o HP, marcarlo para limpieza
+                if not getattr(enemy, 'vivo', True) or getattr(enemy, 'hp', 1) <= 0:
+                    enemigos_a_limpiar.append(i)
+
+            # Eliminar de atrás hacia adelante para no romper índices
+            for i in reversed(enemigos_a_limpiar):
+                cleaned_enemy = room.enemies.pop(i)
+                log_game.warning(f"[RENDER_CLEANUP] Enemigo {cleaned_enemy.__class__.__name__} en índice {i} limpiado (vivo={getattr(cleaned_enemy, 'vivo', '?')}, hp={getattr(cleaned_enemy, 'hp', '?')})")
+
             # [DIAG] Log cada 60 frames para ver qué se renderiza
             if not hasattr(self, '_diag_render_counter'):
                 self._diag_render_counter = 0
