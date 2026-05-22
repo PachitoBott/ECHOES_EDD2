@@ -12,6 +12,7 @@ Flujo de estado:
 """
 from __future__ import annotations
 import math
+import random
 from pathlib import Path
 import pygame
 from narrative.text_renderer import TextRenderer
@@ -31,21 +32,26 @@ class ProgresoIbarra:
     def __init__(self):
         self.preguntas_respondidas = 0
         self.respuestas_correctas = 0
+        self.preguntas_hechas = set()  # Set de índices de preguntas ya respondidas
 
-    def registrar_respuesta(self, fue_correcta: bool) -> None:
+    def registrar_respuesta(self, fue_correcta: bool, pregunta_idx: int | None = None) -> None:
         """Registra una respuesta a una pregunta del profesor.
 
         Args:
             fue_correcta: True si la respuesta fue correcta
+            pregunta_idx: Índice de la pregunta en la pool (para evitar repetidas)
         """
         self.preguntas_respondidas += 1
         if fue_correcta:
             self.respuestas_correctas += 1
+        if pregunta_idx is not None:
+            self.preguntas_hechas.add(pregunta_idx)
 
     def reset(self) -> None:
         """Reinicia el progreso (llamar al iniciar un nuevo run)."""
         self.preguntas_respondidas = 0
         self.respuestas_correctas = 0
+        self.preguntas_hechas = set()
 
     @property
     def porcentaje(self) -> float:
@@ -326,9 +332,10 @@ class ProfesorIbarra:
         self.rect = pygame.Rect(cx - 16, cy - 30, 32, 60)
         self.interact_radius = 28
 
-        # Seleccionar pregunta por zona; cae al comodín si no hay
-        candidates = [p for p in PREGUNTAS if p["zona"] == zona]
-        self.pregunta: dict = candidates[0] if candidates else PREGUNTAS[0]
+        # Seleccionar pregunta aleatoria (no repetir en este run)
+        self.pregunta: dict = {}
+        self._pregunta_idx: int = -1
+        self._seleccionar_pregunta_aleatoria()
 
         self.estado              = self.IDLE
         self.pregunta_respondida = False
@@ -370,6 +377,27 @@ class ProfesorIbarra:
         self._item_hover = False  # Rastrea si hay hover activo sobre un item
 
     # ------------------------------------------------------------------
+    # Selección de preguntas
+    # ------------------------------------------------------------------
+    def _seleccionar_pregunta_aleatoria(self) -> None:
+        """Selecciona una pregunta aleatoria que no haya sido respondida en este run."""
+        preguntas_disponibles = [
+            (i, p) for i, p in enumerate(PREGUNTAS)
+            if i not in progreso_ibarra.preguntas_hechas
+        ]
+
+        if not preguntas_disponibles:
+            # Si todas las preguntas fueron hechas, resetear y seleccionar de todas
+            preguntas_disponibles = list(enumerate(PREGUNTAS))
+
+        if preguntas_disponibles:
+            self._pregunta_idx, self.pregunta = random.choice(preguntas_disponibles)
+        else:
+            # Fallback: usar la primera pregunta
+            self._pregunta_idx = 0
+            self.pregunta = PREGUNTAS[0]
+
+    # ------------------------------------------------------------------
     # Interacción
     # ------------------------------------------------------------------
     def can_interact(self, player_rect) -> bool:
@@ -383,8 +411,10 @@ class ProfesorIbarra:
 
     def iniciar_interaccion(self) -> None:
         if self.pregunta_respondida:
+            # Ya respondió esta pregunta, ir directamente a tienda
             self.estado = self.TIENDA
         else:
+            # Primera vez que interactúa en esta sala, hacer pregunta
             self.estado = self.PREGUNTA
 
     def responder(self, opcion_idx: int, player) -> None:
@@ -407,8 +437,8 @@ class ProfesorIbarra:
 
         self._feedback_lines   = lines
 
-        # Registrar respuesta en el progreso global
-        progreso_ibarra.registrar_respuesta(fue_correcta)
+        # Registrar respuesta en el progreso global (con índice para evitar repetir)
+        progreso_ibarra.registrar_respuesta(fue_correcta, self._pregunta_idx)
 
         # Crear TextRenderer para el efecto typewriter
         # Unir líneas con saltos de línea para renderización
@@ -1203,7 +1233,8 @@ class ProfesorIbarra:
             surface.blit(ms, (rx, ry))
 
         # ── Barra de progreso de preguntas ───────────────────────────────
-        self._draw_progress_bar(surface, font, px, py + ph - CTRL_BAR_H - 50)
+        # Posicionar dentro del panel, cerca del footer
+        self._draw_progress_bar(surface, font, px + 20, py + ph - CTRL_BAR_H - 32)
 
         # ── Barra de controles ───────────────────────────────────────────
         ctrl_y = py + ph - CTRL_BAR_H + (CTRL_BAR_H - lh) // 2
