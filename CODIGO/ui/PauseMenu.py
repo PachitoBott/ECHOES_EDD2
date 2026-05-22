@@ -19,14 +19,20 @@ class PauseMenuButton:
 class PauseMenu:
     """Menú simple mostrado durante la partida para acciones rápidas (Estilo CyberQuest)."""
 
-    BUTTON_PADDING_X = 36
-    BUTTON_PADDING_Y = 18
-    BUTTON_GAP = 16
-    
-    # Colores Cyberpunk
-    COLOR_NEON_BLUE = (0, 255, 255)
-    COLOR_NEON_PINK = (255, 0, 128)
-    COLOR_TEXT_WHITE = (240, 240, 255)
+    BUTTON_PADDING_X = 32
+    BUTTON_PADDING_Y = 14
+    BUTTON_GAP = 8
+
+    # Botones con tamaño fijo respetando el ratio del sprite (340×106)
+    BUTTON_FIXED_W = 340
+    BUTTON_FIXED_H = 106
+
+    # Paleta crimson/naranja (igual que StartMenu)
+    COLOR_CRIMSON = (210, 35, 55)
+    COLOR_EMBER = (255, 110, 50)
+    COLOR_DARK_BG = (8, 3, 6)
+    COLOR_GRID = (28, 8, 12)
+    COLOR_TEXT_WHITE = (230, 218, 218)
 
     TIPS = [
         "Usa el dash para atravesar proyectiles enemigos sin recibir daño.",
@@ -92,8 +98,12 @@ class PauseMenu:
 
         # --- Carga de Fuentes (Estilo Retro) ---
         self.title_font = self._get_font("VT323-Regular.ttf", 96)
-        self.button_font = font or self._get_font("VT323-Regular.ttf", 48)
+        self.button_font = font or pygame.font.SysFont("arial", 32, bold=True)  # Font diferente para botones
         self.small_font = self._get_font("VT323-Regular.ttf", 32)
+
+        # --- Cargar imágenes de botones ---
+        self.btn_normal = self._load_image("Boton_normal.png")
+        self.btn_hover = self._load_image("Boton_hover.png")
 
         self._button_layout: list[tuple[PauseMenuButton, pygame.Rect]] = []
         self._compute_layout()
@@ -146,6 +156,17 @@ class PauseMenu:
                 pass
         return pygame.font.SysFont("consolas", int(size * 0.7))
 
+    def _load_image(self, filename: str) -> pygame.Surface | None:
+        """Carga una imagen PNG desde assets/ui."""
+        image_path = self._resolve_path(filename)
+        if image_path:
+            try:
+                return pygame.image.load(str(image_path)).convert_alpha()
+            except pygame.error as e:
+                print(f"Error al cargar imagen {filename}: {e}")
+                return None
+        return None
+
     # ------------------------------------------------------------------
     # Configuration helpers
     # ------------------------------------------------------------------
@@ -165,9 +186,8 @@ class PauseMenu:
         if not self.buttons:
             return
 
-        max_label_width = max(self.button_font.size(button.label.upper())[0] for button in self.buttons)
-        button_width = max(max_label_width + self.BUTTON_PADDING_X * 2, 280)
-        button_height = self.button_font.get_height() + self.BUTTON_PADDING_Y * 2
+        button_width = self.BUTTON_FIXED_W
+        button_height = self.BUTTON_FIXED_H
 
         total_height = len(self.buttons) * button_height
         total_height += max(0, len(self.buttons) - 1) * self.BUTTON_GAP
@@ -257,40 +277,49 @@ class PauseMenu:
         overlay.fill((0, 0, 0, 160))
         self.screen.blit(overlay, (0, 0))
 
-        # 3. Título con efecto de sombra (Estilo CyberQuest)
-        # Sombra (Pink)
-        shadow_surf = self.title_font.render(self.title, True, self.COLOR_NEON_PINK)
-        shadow_rect = shadow_surf.get_rect(center=(width // 2 + 4, height // 4 + 4))
+        # 3. Título con efecto de sombra (Estilo Crimson)
+        # Sombra oscura
+        shadow_surf = self.title_font.render(self.title, True, (60, 4, 8))
+        shadow_rect = shadow_surf.get_rect(center=(width // 2 + 5, height // 4 + 5))
         self.screen.blit(shadow_surf, shadow_rect)
-        
-        # Principal (Blue)
-        title_surf = self.title_font.render(self.title, True, self.COLOR_NEON_BLUE)
+
+        # Segunda sombra más cerca
+        shadow2_surf = self.title_font.render(self.title, True, (120, 14, 20))
+        shadow2_rect = shadow2_surf.get_rect(center=(width // 2 + 2, height // 4 + 2))
+        self.screen.blit(shadow2_surf, shadow2_rect)
+
+        # Principal (Naranja Ember)
+        title_surf = self.title_font.render(self.title, True, self.COLOR_EMBER)
         title_rect = title_surf.get_rect(center=(width // 2, height // 4))
         self.screen.blit(title_surf, title_rect)
 
-        # 4. Botones
+        # 4. Botones (con PNG de StartMenu)
         mouse_pos = pygame.mouse.get_pos()
         for button, rect in self._button_layout:
             hovered = rect.collidepoint(mouse_pos)
-            
-            # Fondo botón
-            bg_color = (0, 0, 0, 180) if not hovered else (40, 40, 60, 200)
-            border_color = self.COLOR_NEON_BLUE if not hovered else self.COLOR_NEON_PINK
-            
-            # Dibujar superficie con alpha para el fondo del botón
-            btn_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-            pygame.draw.rect(btn_surf, bg_color, btn_surf.get_rect(), border_radius=4)
-            pygame.draw.rect(btn_surf, border_color, btn_surf.get_rect(), 2, border_radius=4)
-            self.screen.blit(btn_surf, rect)
+
+            # Usar imagen del botón (normal o hover)
+            btn_img = self.btn_hover if hovered else self.btn_normal
+            if btn_img:
+                # Escalar imagen al tamaño del botón
+                scaled_btn = pygame.transform.smoothscale(btn_img, (rect.width, rect.height))
+                self.screen.blit(scaled_btn, rect)
+            else:
+                # Fallback: dibujar rectángulo si la imagen no carga
+                bg_color = self.COLOR_CRIMSON if not hovered else self.COLOR_EMBER
+                btn_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+                pygame.draw.rect(btn_surf, (*bg_color, 230), btn_surf.get_rect(), border_radius=6)
+                pygame.draw.rect(btn_surf, (255, 255, 255, 150), btn_surf.get_rect(), 2, border_radius=6)
+                self.screen.blit(btn_surf, rect)
 
             # Texto botón
-            text_color = self.COLOR_TEXT_WHITE if not hovered else self.COLOR_NEON_BLUE
+            text_color = self.COLOR_TEXT_WHITE
             label_surf = self.button_font.render(button.label.upper(), True, text_color)
             label_rect = label_surf.get_rect(center=rect.center)
             self.screen.blit(label_surf, label_rect)
 
         # 5. Hint
-        hint_text = self.small_font.render("[ ESC PARA REANUDAR ]", True, (150, 150, 150))
+        hint_text = self.small_font.render("[ ESC PARA REANUDAR ]", True, (110, 60, 60))
         hint_rect = hint_text.get_rect(center=(width // 2, title_rect.bottom + 30))
         self.screen.blit(hint_text, hint_rect)
 
@@ -304,21 +333,21 @@ class PauseMenu:
         self.screen.blit(label_surf, label_rect)
 
         track_rect = self.volume_bar_rect
-        pygame.draw.rect(self.screen, (30, 30, 50), track_rect, border_radius=4)
+        pygame.draw.rect(self.screen, (30, 15, 15), track_rect, border_radius=4)
         fill_width = int(track_rect.width * max(0.0, min(1.0, self.volume)))
         if fill_width > 0:
             fill_rect = pygame.Rect(track_rect.left, track_rect.top, fill_width, track_rect.height)
-            pygame.draw.rect(self.screen, self.COLOR_NEON_BLUE, fill_rect, border_radius=4)
+            pygame.draw.rect(self.screen, self.COLOR_CRIMSON, fill_rect, border_radius=4)
 
         handle_rect = self.volume_handle_rect
         handle_surface = pygame.Surface(handle_rect.size, pygame.SRCALPHA)
         pygame.draw.rect(
             handle_surface,
-            self.COLOR_NEON_PINK if self.dragging_volume else self.COLOR_NEON_BLUE,
+            self.COLOR_EMBER if self.dragging_volume else self.COLOR_CRIMSON,
             handle_surface.get_rect(),
             border_radius=6,
         )
-        pygame.draw.rect(handle_surface, (0, 0, 0), handle_surface.get_rect(), 2, border_radius=6)
+        pygame.draw.rect(handle_surface, (255, 255, 255), handle_surface.get_rect(), 2, border_radius=6)
         self.screen.blit(handle_surface, handle_rect)
 
         percent = int(self.volume * 100)
@@ -377,11 +406,11 @@ class PauseMenu:
             self.screen.blit(overlay, (0, 0))
             
             # Dibujar caja del popup
-            pygame.draw.rect(self.screen, (20, 20, 30), popup_rect, border_radius=12)
-            pygame.draw.rect(self.screen, self.COLOR_NEON_BLUE, popup_rect, 3, border_radius=12)
-            
+            pygame.draw.rect(self.screen, (20, 10, 10), popup_rect, border_radius=12)
+            pygame.draw.rect(self.screen, self.COLOR_CRIMSON, popup_rect, 3, border_radius=12)
+
             # Título
-            title_surf = self.button_font.render("CONSEJO", True, self.COLOR_NEON_PINK)
+            title_surf = self.button_font.render("CONSEJO", True, self.COLOR_EMBER)
             title_rect = title_surf.get_rect(center=(popup_rect.centerx, popup_rect.top + 50))
             self.screen.blit(title_surf, title_rect)
             
