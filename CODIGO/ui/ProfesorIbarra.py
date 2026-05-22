@@ -409,7 +409,14 @@ class ProfesorIbarra:
         return area.colliderect(player_rect)
 
     def iniciar_interaccion(self) -> None:
-        """Inicia interacción: hace nueva pregunta o abre tienda si ya respondió."""
+        """Inicia interacción: hace nueva pregunta o abre tienda si ya respondió.
+
+        Si está en LISTO (cerró tienda), permite nueva pregunta automáticamente.
+        """
+        # Si está en LISTO, resetear para permitir nueva pregunta
+        if self.estado == self.LISTO:
+            self.pregunta_respondida = False
+
         if self.pregunta_respondida:
             # Ya respondió esta pregunta, ir directamente a tienda
             self.estado = self.TIENDA
@@ -773,7 +780,11 @@ class ProfesorIbarra:
 
     def draw_idle_hint(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
         cx, cy = self.pos
-        hint = font.render("E - Hablar con el Profesor Ibarra", True, (140, 210, 255))
+        if self.estado == self.LISTO:
+            # En LISTO, mostrar que puede hacer otra pregunta
+            hint = font.render("E - Otra pregunta", True, (100, 255, 150))
+        else:
+            hint = font.render("E - Hablar con el Profesor Ibarra", True, (140, 210, 255))
         surface.blit(hint, (cx - hint.get_width() // 2, cy - 58))
 
     # --- hologram body ---
