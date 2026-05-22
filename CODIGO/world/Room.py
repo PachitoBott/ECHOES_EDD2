@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -912,6 +913,69 @@ class Room:
     # ------------------------------------------------------------------ #
     # Spawning de enemigos (una sola vez por cuarto)
     # ------------------------------------------------------------------ #
+    def _get_enemy_buffer_zone_tiles(self, enemy: Enemy) -> set[tuple[int, int]]:
+        """Retorna el conjunto de baldosas que ocupa el buffer zone del enemigo."""
+        ts = CFG.TILE_SIZE
+        center_x = enemy.x + enemy.w / 2.0
+        center_y = enemy.y + enemy.h / 2.0
+
+        # Calcular cuántas baldosas ocupa el enemigo
+        tiles_wide = math.ceil(enemy.w / ts)
+        tiles_high = math.ceil(enemy.h / ts)
+
+        # Centro en tiles
+        center_tx = int(center_x // ts)
+        center_ty = int(center_y // ts)
+
+        # Recolectar todas las baldosas que ocupa el enemigo
+        zone_tiles = set()
+        half_w = tiles_wide // 2
+        half_h = tiles_high // 2
+        for dy in range(-half_h, half_h + 1):
+            for dx in range(-half_w, half_w + 1):
+                zone_tiles.add((center_tx + dx, center_ty + dy))
+        return zone_tiles
+
+    def _mark_enemy_buffer_zone(self, enemy: Enemy, used_tiles: set[tuple[int, int]]) -> None:
+        """Marca el buffer zone de un enemigo basado en su tamaño actual."""
+        used_tiles.update(self._get_enemy_buffer_zone_tiles(enemy))
+
+    def _is_enemy_fully_inside_room(self, enemy: Enemy) -> bool:
+        """Verifica si el enemigo está completamente dentro de la sala y sin colisiones con obstáculos."""
+        if self.bounds is None:
+            return False
+        rx, ry, rw, rh = self.bounds
+        ts = CFG.TILE_SIZE
+
+        # Límites de la sala en píxeles
+        room_left = rx * ts + ts  # Dejar espacio desde el borde
+        room_top = ry * ts + ts
+        room_right = (rx + rw) * ts - ts
+        room_bottom = (ry + rh) * ts - ts
+
+        # Límites del enemigo
+        enemy_left = enemy.x
+        enemy_top = enemy.y
+        enemy_right = enemy.x + enemy.w
+        enemy_bottom = enemy.y + enemy.h
+
+        # Verificar si está completamente dentro de la sala (con margen)
+        if not (enemy_left >= room_left and
+                enemy_top >= room_top and
+                enemy_right <= room_right and
+                enemy_bottom <= room_bottom):
+            return False
+
+        # Verificar que NO colisiona con obstáculos (con margen extra)
+        enemy_rect = enemy.rect()
+        expanded_enemy_rect = enemy_rect.inflate(ts, ts)  # Expandir para verificar proximidad
+
+        for obstacle in self.obstacles:
+            if expanded_enemy_rect.colliderect(obstacle["rect"]):
+                return False
+
+        return True
+
     def ensure_spawn(self, difficulty: int = 1, zone: int = 1, dungeon=None) -> None:
         if self._spawn_done or self.bounds is None or self.no_spawn:
             return
@@ -930,10 +994,16 @@ class Room:
                 ty = random.randint(ry + 1, ry + rh - 2)
                 if (tx, ty) in used_tiles:
                     continue
-                used_tiles.add((tx, ty))
                 px = tx * ts + ts // 2 - 6
                 py = ty * ts + ts // 2 - 6
                 enemy = factory(px, py)
+
+                # Validar que el enemigo está completamente dentro de la sala
+                if not self._is_enemy_fully_inside_room(enemy):
+                    continue
+
+                # Marcar buffer zone dinámico basado en el tamaño del enemigo
+                self._mark_enemy_buffer_zone(enemy, used_tiles)
 
                 # Variar encuentros: algunos enemigos comienzan patrullando
                 if random.random() < 0.35:
@@ -951,7 +1021,6 @@ class Room:
                 ty = random.randint(ry + 1, ry + rh - 2)
                 if (tx, ty) in used_tiles:
                     continue
-                used_tiles.add((tx, ty))
                 px = tx * ts + ts // 2 - 6
                 py = ty * ts + ts // 2 - 6
 
@@ -968,6 +1037,13 @@ class Room:
                     # Zona 1: FastChaserEnemy por defecto
                     bonus = FastChaserEnemy(px, py)
 
+                # Validar que el enemigo está completamente dentro de la sala
+                if not self._is_enemy_fully_inside_room(bonus):
+                    continue
+
+                # Marcar buffer zone dinámico del enemigo extra
+                self._mark_enemy_buffer_zone(bonus, used_tiles)
+
                 bonus._pick_wander()
                 bonus.state = enemy_mod.WANDER
                 self.enemies.append(bonus)
@@ -976,7 +1052,7 @@ class Room:
         if self.enemies:
             self.locked = True
             self.cleared = False
-         
+
         self._spawn_done = True
 
     def _pick_encounter(self, difficulty: int, zone: int = 1, dungeon=None) -> list[Type[Enemy]]:

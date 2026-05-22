@@ -846,11 +846,22 @@ class Game:
         elif ev.tipo == "estado":
             # Estado remoto del otro jugador — guardar para renderizar
             origen = ev.origen
-            if origen and origen != self.net.rol:  # No guardar nuestro propio estado
+            my_rol = self.net.rol if self.net else None
+
+            # Defensive checks to prevent self-state from being treated as remote
+            if not origen:
+                log_game.warning("[ESTADO] Recibido estado sin origen - ignorando")
+            elif not self.net:
+                log_game.warning("[ESTADO] Recibido estado pero self.net es None - ignorando")
+            elif not my_rol:
+                log_game.warning("[ESTADO] Recibido estado pero self.net.rol no está set - ignorando")
+            elif origen == my_rol:
+                log_game.debug(f"[ESTADO] Ignorando nuestro propio estado ({origen})")
+            else:
+                # Valid remote player state
                 self.remote_players[origen] = ev.datos
-                # [DEBUG] Log para ver qué sala tiene el jugador remoto
                 sala_remota = ev.datos.get("sala", [0, 0])
-                log_game.debug(f"[ESTADO_REMOTO] {origen} está en sala {sala_remota}, pos=({ev.datos.get('pos_x')}, {ev.datos.get('pos_y')})")
+                log_game.debug(f"[ESTADO_REMOTO] {origen} está en sala {sala_remota}")
 
         elif ev.tipo == "enemigo_muerto":
             # Enemigo fue eliminado por otro jugador
@@ -2885,13 +2896,35 @@ class Game:
         # [DIAG] Log para diagnosticar renders invertidos en cliente
         is_client = self.net and not self.net.es_servidor
         if is_client:
-            log_game.debug(f"[RENDER_DIAG] Cliente: self.player en ({self.player.x:.0f}, {self.player.y:.0f}), remote_players keys={list(self.remote_players.keys())}")
+            # Log the LOCAL PLAYER identity and network state
+            self_role = self.net.rol if self.net else "?"
+            es_cliente = self.net._modo == "cliente" if self.net and hasattr(self.net, '_modo') else "?"
+            log_game.debug(f"[RENDER_DIAG] CLIENTE: modo={self.net._modo if self.net and hasattr(self.net, '_modo') else '?'}, mi_rol={self_role}")
+            log_game.debug(f"[RENDER_DIAG] self.player en ({self.player.x:.0f}, {self.player.y:.0f})")
+            log_game.debug(f"[RENDER_DIAG] remote_players={list(self.remote_players.keys())}")
             for rol, datos in self.remote_players.items():
-                log_game.debug(f"[RENDER_DIAG] {rol} en ({datos.get('pos_x', 0)}, {datos.get('pos_y', 0)})")
+                # Extract position carefully, handling both formats
+                if isinstance(datos.get('pos'), (list, tuple)) and len(datos.get('pos')) >= 2:
+                    pos_x, pos_y = datos.get('pos')[0], datos.get('pos')[1]
+                else:
+                    pos_x = datos.get('pos_x', 0)
+                    pos_y = datos.get('pos_y', 0)
+                log_game.debug(f"[RENDER_DIAG] → {rol} en ({pos_x}, {pos_y})")
 
         self.player.draw(self.world)
 
         # --- Dibujar jugadores remotos (cubo negro) ---
+        # Sanity check: make sure self.player is not being treated as remote
+        local_player_pos = (self.player.x, self.player.y)
+        for rol, datos in self.remote_players.items():
+            # Check if this remote player position matches our local player (should never happen)
+            if isinstance(datos.get('pos'), (list, tuple)) and len(datos.get('pos')) >= 2:
+                remote_pos = (datos.get('pos')[0], datos.get('pos')[1])
+            else:
+                remote_pos = (datos.get('pos_x', float('nan')), datos.get('pos_y', float('nan')))
+            if remote_pos == local_player_pos and remote_pos != (float('nan'), float('nan')):
+                log_game.error(f"[SANITY] BUG: Remote player '{rol}' has same position as local player! {local_player_pos}")
+
         for rol, datos in self.remote_players.items():
             # Extraer posición: el protocolo usa "pos": [x, y]
             pos = datos.get("pos")

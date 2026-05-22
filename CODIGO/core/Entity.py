@@ -4,9 +4,41 @@ from Config import CFG
 class Entity:
     def __init__(self, x: float, y: float, w: int, h: int, speed: float) -> None:
         self.x, self.y, self.w, self.h, self.speed = x, y, w, h, speed
+        self._proximity_threshold = 2.0  # distancia en píxeles para detectar proximidad
 
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+
+    def _get_proximity_distance_to_obstacles(self, room) -> tuple[float, str]:
+        """
+        Retorna la distancia mínima a obstáculos y la dirección.
+        Retorna (distancia, dirección) donde dirección es 'x', 'y', o 'none'
+        """
+        if not hasattr(room, 'obstacles') or not room.obstacles:
+            return (float('inf'), 'none')
+
+        rect = self.rect()
+        min_dist = float('inf')
+        closest_axis = 'none'
+
+        for obstacle in room.obstacles:
+            obs_rect = obstacle["rect"]
+
+            # Calcular distancia en X
+            if rect.bottom > obs_rect.top and rect.top < obs_rect.bottom:
+                dist_x = min(abs(rect.right - obs_rect.left), abs(rect.left - obs_rect.right))
+                if dist_x < min_dist:
+                    min_dist = dist_x
+                    closest_axis = 'x'
+
+            # Calcular distancia en Y
+            if rect.right > obs_rect.left and rect.left < obs_rect.right:
+                dist_y = min(abs(rect.bottom - obs_rect.top), abs(rect.top - obs_rect.bottom))
+                if dist_y < min_dist:
+                    min_dist = dist_y
+                    closest_axis = 'y'
+
+        return (min_dist, closest_axis)
 
     def move(self, dx: float, dy: float, dt: float, room) -> None:
         step_x = dx * self.speed * dt
