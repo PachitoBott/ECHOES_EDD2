@@ -154,6 +154,7 @@ IBARRA_CATALOG: list[dict] = [
             "",
             "Puedes comprarla hasta 3 veces.",
         ],
+        "descripcion": "Recupera 2 HP. Comprable 3 veces.",
         "icon_color": (80, 200, 120),
         "icon_char": "+",
     },
@@ -168,6 +169,7 @@ IBARRA_CATALOG: list[dict] = [
             "",
             "Solo puedes comprarla una vez.",
         ],
+        "descripcion": "Invulnerable 5 seg con tecla R.",
         "icon_color": (100, 180, 255),
         "icon_char": "M",
     },
@@ -183,6 +185,7 @@ IBARRA_CATALOG: list[dict] = [
             "",
             "Solo puedes comprarla una vez.",
         ],
+        "descripcion": "Congela enemigos 4 seg con Q.",
         "icon_color": (255, 220, 60),
         "icon_char": "~",
     },
@@ -198,10 +201,111 @@ IBARRA_CATALOG: list[dict] = [
             "",
             "Solo puedes comprarla una vez.",
         ],
+        "descripcion": "Doble disparo en paralelo permanente.",
         "icon_color": (255, 140, 40),
         "icon_char": "»",
     },
 ]
+
+
+# ---------------------------------------------------------------------------
+# Tooltip para items de la tienda
+# ---------------------------------------------------------------------------
+class ItemTooltip:
+    """
+    Tooltip que aparece al hacer hover sobre un item de la tienda.
+    Se posiciona cerca del cursor sin salirse de la pantalla.
+    """
+
+    PADDING = 8  # píxeles lógicos de padding interno
+    MAX_WIDTH = 180  # píxeles lógicos de ancho máximo
+    BG_COLOR = (15, 15, 25)
+    BG_ALPHA = 220
+    BORDER_COLOR = (60, 60, 80)
+    TEXT_COLOR = (200, 200, 210)
+    COLOR_AGOTADO = (120, 60, 60)
+
+    def __init__(self, font: pygame.font.Font):
+        self.font = font
+        self.visible = False
+        self.texto = ""
+        self.x = 0
+        self.y = 0
+        self.color = self.TEXT_COLOR
+
+    def mostrar(self, texto: str, mouse_x: int, mouse_y: int,
+                agotado: bool = False) -> None:
+        """Muestra el tooltip con el texto dado."""
+        self.visible = True
+        self.texto = "Agotado" if agotado else texto
+        self.color = self.COLOR_AGOTADO if agotado else self.TEXT_COLOR
+        self._calcular_posicion(mouse_x, mouse_y)
+
+    def ocultar(self) -> None:
+        """Oculta el tooltip."""
+        self.visible = False
+
+    def _calcular_posicion(self, mx: int, my: int) -> None:
+        """Calcula la posición del tooltip cerca del cursor sin salirse de pantalla."""
+        from core.config import Config
+        cfg = Config()
+        LOGICAL_WIDTH = cfg.SCREEN_W
+        LOGICAL_HEIGHT = cfg.SCREEN_H
+
+        offset_x = 15
+        offset_y = -10
+        self.x = mx + offset_x
+        self.y = my + offset_y
+
+        # Ajustar si se sale por la derecha
+        ancho_estimado = self.MAX_WIDTH
+        if self.x + ancho_estimado > LOGICAL_WIDTH - 10:
+            self.x = mx - ancho_estimado - offset_x
+
+        # Ajustar si se sale por arriba
+        if self.y < 10:
+            self.y = my + 20
+
+    def render(self, surface: pygame.Surface) -> None:
+        """Renderiza el tooltip en la superficie."""
+        if not self.visible or not self.texto:
+            return
+
+        # Renderizar texto con word wrap
+        palabras = self.texto.split(" ")
+        lineas = []
+        linea_actual = ""
+
+        for palabra in palabras:
+            prueba = linea_actual + (" " if linea_actual else "") + palabra
+            if self.font.size(prueba)[0] <= self.MAX_WIDTH - self.PADDING * 2:
+                linea_actual = prueba
+            else:
+                if linea_actual:
+                    lineas.append(linea_actual)
+                linea_actual = palabra
+        if linea_actual:
+            lineas.append(linea_actual)
+
+        line_h = self.font.get_height() + 2
+        total_h = len(lineas) * line_h + self.PADDING * 2
+        max_w = max(
+            (self.font.size(l)[0] for l in lineas), default=0
+        ) + self.PADDING * 2
+
+        # Fondo semitransparente
+        bg = pygame.Surface((max_w, total_h), pygame.SRCALPHA)
+        bg.fill((*self.BG_COLOR, self.BG_ALPHA))
+        pygame.draw.rect(bg, self.BORDER_COLOR, (0, 0, max_w, total_h), 1)
+        surface.blit(bg, (self.x, self.y))
+
+        # Renderizar texto
+        for i, linea in enumerate(lineas):
+            txt = self.font.render(linea, False, self.color)
+            surface.blit(txt, (
+                self.x + self.PADDING,
+                self.y + self.PADDING + i * line_h
+            ))
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +363,11 @@ class ProfesorIbarra:
         # --- Typewriter effect para feedback ---
         self._text_renderer: TextRenderer | None = None
         self._typewriter_fps: int = 30  # caracteres por segundo
+
+        # --- Tooltip para items de la tienda ---
+        # Se inicializa con un font dummy, se actualiza en draw_screen()
+        self.tooltip = ItemTooltip(pygame.font.SysFont(None, 14))
+        self._item_hover = False  # Rastrea si hay hover activo sobre un item
 
     # ------------------------------------------------------------------
     # Interacción
@@ -573,15 +682,64 @@ class ProfesorIbarra:
         self._draw_hologram(surface)
         # Los paneles de diálogo se dibujan en screen via draw_screen()
 
+    def update_hover(self, mouse_pos: tuple[int, int]) -> None:
+        """
+        Detecta si el mouse está sobre el item actual y actualiza el tooltip.
+        Se llama en cada frame cuando la tienda está abierta.
+        """
+        if self.estado != self.TIENDA:
+            self.tooltip.ocultar()
+            self._item_hover = False
+            return
+
+        mx, my = mouse_pos
+        item = IBARRA_CATALOG[self._carousel_idx]
+        iid = item["id"]
+        bought = self._purchase_counts.get(iid, 0)
+        max_buys = item["max_buys"]
+        agotado = bought >= max_buys
+
+        # El item está en el carrusel, detectamos si el mouse está en el área general del panel
+        # Como el carrusel ocupa todo el panel central, simplemente comprobamos si el mouse
+        # está dentro del área de la tienda
+        # Por simplicidad, mostrar tooltip si el mouse está en la región aproximada del icono
+        # (columna izquierda del panel)
+        sw, sh = (1280, 720)  # Valores típicos, se ajustan dinámicamente
+
+        # Aproximación: si mouse está en región izquierda del panel, mostrar tooltip
+        if mx < sw // 2:
+            self.tooltip.mostrar(
+                item["descripcion"],
+                mx, my,
+                agotado
+            )
+            self._item_hover = True
+        else:
+            self.tooltip.ocultar()
+            self._item_hover = False
+
     def draw_screen(self, screen: pygame.Surface) -> None:
         """Dibuja los paneles de diálogo directamente en el screen surface (encima del HUD)."""
         font = self._get_screen_font()
+
+        # Actualizar tooltip si está en tienda
+        if self.estado == self.TIENDA:
+            mouse_pos = pygame.mouse.get_pos()
+            # Convertir a coordenadas lógicas
+            from core.config import Config
+            cfg = Config()
+            logical_mx = mouse_pos[0] // cfg.SCREEN_SCALE
+            logical_my = mouse_pos[1] // cfg.SCREEN_SCALE
+            self.update_hover((logical_mx, logical_my))
+
         if self.estado == self.PREGUNTA:
             self._draw_question_ui(screen, font)
         elif self.estado == self.FEEDBACK:
             self._draw_feedback_ui(screen, font)
         elif self.estado == self.TIENDA:
             self._draw_tienda_ui(screen, font)
+            # Renderizar tooltip al final (encima de todo)
+            self.tooltip.render(screen)
 
     def draw_idle_hint(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
         cx, cy = self.pos
@@ -940,6 +1098,18 @@ class ProfesorIbarra:
             ch = ifont.render(item["icon_char"], True, (255,255,255))
             icon_sf.blit(ch, (ICON_SIZE//2-ch.get_width()//2, ICON_SIZE//2-ch.get_height()//2))
             surface.blit(icon_sf, (left_cx - ICON_SIZE//2, icon_y))
+
+        # Overlay de hover semitransparente
+        if self._item_hover and not exhausted:
+            overlay = pygame.Surface((ICON_SIZE, ICON_SIZE), pygame.SRCALPHA)
+            overlay.fill((255, 255, 255, 30))
+            surface.blit(overlay, (left_cx - ICON_SIZE//2, icon_y))
+
+        # Overlay de agotado (más oscuro)
+        if exhausted:
+            overlay = pygame.Surface((ICON_SIZE, ICON_SIZE), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 80))
+            surface.blit(overlay, (left_cx - ICON_SIZE//2, icon_y))
 
         # Flechas
         arr_y = icon_y + ICON_SIZE // 2 - lh // 2
