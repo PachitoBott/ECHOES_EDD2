@@ -18,8 +18,22 @@
         "fade_out": 0.8
       },
       {
-        "image": "intro_03.png",
-        "texto": "Hasta que el feed vino por ti.",
+        "image": "broflozki_man.png",
+        "texto": "Esa noche, los dos miraron la misma pantalla desde lados distintos. Y la pantalla vino por ellos.",
+        "duracion": 3.0,
+        "fade_in": 1.0,
+        "fade_out": 0.8
+      },
+      {
+        "image": "brochachino_man.png",
+        "texto": "Algo los jalaba desde adentro. La Red los esperaba a los dos.",
+        "duracion": 3.0,
+        "fade_in": 1.0,
+        "fade_out": 0.8
+      },
+      {
+        "image": "brotato_chippers.png",
+        "texto": "Aquí todo lo que se dijo vive y ataca.",
         "duracion": 3.0,
         "fade_in": 1.0,
         "fade_out": 0.8
