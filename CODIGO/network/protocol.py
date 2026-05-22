@@ -250,7 +250,7 @@ def msg_error(descripcion: str) -> Mensaje:
                    origen=Rol.SERVIDOR)
 
 
-def msg_enemigo_muerto(pos_x: float, pos_y: float, tipo: str, sala: tuple[int, int]) -> Mensaje:
+def msg_enemigo_muerto(pos_x: float, pos_y: float, tipo: str, sala: tuple[int, int], enemy_id: str = None) -> Mensaje:
     """
     Evento: Un enemigo fue eliminado.
 
@@ -261,9 +261,10 @@ def msg_enemigo_muerto(pos_x: float, pos_y: float, tipo: str, sala: tuple[int, i
         pos_x, pos_y: Posición del enemigo (para encontrarlo en la otra computadora)
         tipo: Nombre de clase del enemigo (e.g., "BasicEnemy", "TankEnemy")
         sala: Tuple (i, j) indicando en qué sala murió
+        enemy_id: ID único del enemigo (para búsqueda exacta sin confusiones de posición)
 
     Returns:
-        Mensaje EVENTO con evento='enemigo_muerto' + datos de ubicación y tipo
+        Mensaje EVENTO con evento='enemigo_muerto' + datos de ubicación, tipo e ID
     """
     return Mensaje(
         TipoMensaje.EVENTO,
@@ -273,6 +274,7 @@ def msg_enemigo_muerto(pos_x: float, pos_y: float, tipo: str, sala: tuple[int, i
             "pos_y": pos_y,
             "enemy_type": tipo,
             "sala": sala,
+            "enemy_id": enemy_id,  # Nuevo: enviar el ID para búsqueda exacta
         },
         origen=Rol.SERVIDOR,
     )

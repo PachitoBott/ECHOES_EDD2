@@ -1037,33 +1037,44 @@ class Game:
             # [DIAG] Estado ANTES de cualquier operación
             enemigos_antes = len(room.enemies)
             muertos_visibles = sum(1 for e in room.enemies if getattr(e, '_is_dying', False))
-            log_game.debug(f"[MUERTE_REMOTA] ANTES: {enemigos_antes} enemigos en lista ({muertos_visibles} muriendo), buscando {enemy_type}")
-
-            # Buscar enemigo que coincida con posición y tipo
-            # Usar tolerancia amplia para diferencias por latencia de red y desync de simulación
-            # El cliente puede reportar la posición con hasta 100ms de desfase de la simulación
-            # (típicamente 30-40 píxeles de offset)
-            tolerance = 50.0  # píxeles (aumentado de 5 para tolerar desync de red)
+            enemy_id = datos.get("enemy_id")  # NUEVO: obtener el ID del evento
+            log_game.debug(f"[MUERTE_REMOTA] ANTES: {enemigos_antes} enemigos en lista ({muertos_visibles} muriendo), buscando {enemy_type} (ID={enemy_id})")
 
             encontrado = False
             enemy_encontrado = None
             indice_encontrado = -1
-            min_dist = tolerance + 1  # Buscar el más cercano dentro de tolerancia
 
-            for i, enemy in enumerate(room.enemies):
-                dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
-                dying = getattr(enemy, '_is_dying', False)
-                hp = getattr(enemy, 'hp', -1)
-                log_game.debug(f"[MUERTE_REMOTA]   [{i}] {enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}) dist={dist:.1f} hp={hp} dying={dying}")
+            # PASO 1: Buscar por ID si está disponible (búsqueda exacta)
+            if enemy_id:
+                log_game.debug(f"[MUERTE_REMOTA] [PASO 1] Buscando por ID: {enemy_id}")
+                for i, enemy in enumerate(room.enemies):
+                    if getattr(enemy, 'enemy_id', None) == enemy_id:
+                        log_game.warning(f"[MUERTE_REMOTA] [MATCH_BY_ID] Encontrado por ID en índice {i}: {enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f})")
+                        enemy_encontrado = enemy
+                        indice_encontrado = i
+                        encontrado = True
+                        break
 
-                # Buscar el enemigo del tipo correcto MÁS CERCANO dentro de la tolerancia
-                if dist <= tolerance and enemy.__class__.__name__ == enemy_type and dist < min_dist:
-                    # Encontrado enemigo más cercano que coincide
-                    log_game.debug(f"[MUERTE_REMOTA] [MATCH] Encontrado en índice {i}: {enemy.__class__.__name__} dist={dist:.1f}")
-                    enemy_encontrado = enemy
-                    indice_encontrado = i
-                    min_dist = dist
-                    encontrado = True
+            # PASO 2: Si no encontró por ID, buscar por tipo + posición (fallback)
+            if not encontrado:
+                log_game.debug(f"[MUERTE_REMOTA] [PASO 2] Buscando por posición (tolerancia 50px)")
+                tolerance = 50.0  # píxeles
+                min_dist = tolerance + 1
+
+                for i, enemy in enumerate(room.enemies):
+                    dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
+                    dying = getattr(enemy, '_is_dying', False)
+                    hp = getattr(enemy, 'hp', -1)
+                    log_game.debug(f"[MUERTE_REMOTA]   [{i}] {enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}) dist={dist:.1f} hp={hp} dying={dying}")
+
+                    # Buscar el enemigo del tipo correcto MÁS CERCANO dentro de la tolerancia
+                    if dist <= tolerance and enemy.__class__.__name__ == enemy_type and dist < min_dist:
+                        # Encontrado enemigo más cercano que coincide
+                        log_game.debug(f"[MUERTE_REMOTA] [MATCH_BY_POS] Encontrado en índice {i}: {enemy.__class__.__name__} dist={dist:.1f}")
+                        enemy_encontrado = enemy
+                        indice_encontrado = i
+                        min_dist = dist
+                        encontrado = True
 
             if encontrado:
                 # [DIAG] Disparar efecto ANTES de eliminar
@@ -1483,10 +1494,11 @@ class Game:
                     evento_muerte = msg_enemigo_muerto(
                         enemy.x, enemy.y,
                         enemy.__class__.__name__,
-                        (self.dungeon.i, self.dungeon.j)
+                        (self.dungeon.i, self.dungeon.j),
+                        enemy_id=enemy_id  # NUEVO: incluir el ID para búsqueda exacta
                     )
                     self.net.enviar(evento_muerte)
-                    log_game.warning(f"[DISPARO_CLIENTE] [DEATH] Evento de muerte enviado al servidor. Quedarán {enemigos_antes - 1} enemigos")
+                    log_game.warning(f"[DISPARO_CLIENTE] [DEATH] Evento de muerte enviado al servidor con ID={enemy_id}. Quedarán {enemigos_antes - 1} enemigos")
                 else:
                     log_game.debug(f"[DISPARO_CLIENTE] Enemigo sobrevivió (HP={hp_despues})")
                 break
@@ -2321,11 +2333,13 @@ class Game:
                     from network.protocol import msg_enemigo_muerto
                     enemy_type = enemy.__class__.__name__
                     sala = (self.dungeon.i, self.dungeon.j)
+                    enemy_id = getattr(enemy, 'enemy_id', None)
                     event_msg = msg_enemigo_muerto(
                         pos_x=enemy.x,
                         pos_y=enemy.y,
                         tipo=enemy_type,
-                        sala=sala
+                        sala=sala,
+                        enemy_id=enemy_id  # NUEVO: incluir el ID para búsqueda exacta
                     )
                     self.net.enviar(event_msg)
 
