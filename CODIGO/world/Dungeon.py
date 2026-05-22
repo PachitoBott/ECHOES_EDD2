@@ -112,26 +112,25 @@ class Dungeon:
                 },
             ]
 
-            # 3) Definir puertas según vecinos + tallar corredores
-            self._link_neighbors_and_carve()
-
-            # 4) Construir el grafo académico y calcular el mapa de profundidades
-            #    El grafo modela cada sala como nodo y cada puerta como arista.
-            #    bfs_con_distancias() reemplaza el BFS manual de _build_depth_map().
+            # 3) Construir el grafo académico y calcular el mapa de profundidades ANTES de placing
+            #    Necesitamos el depth_map para colocar el boss en la sala más lejana
             self._build_grafo_y_depth_map()
 
-            # 4.5) Asignar zonas narrativas (Fase 5) según profundidad BFS
+            # 3.5) Asignar zonas narrativas (Fase 5) según profundidad BFS
             self._assign_zones()
 
-            # <<< COMENTADO: la tienda antigua se reemplaza por Profesor Ibarra como único NPC de compra
-            # self._place_shop_room()
-
-            # <<< NUEVO: sala del boss en el extremo más lejano de Zona 2
-            # Primero asignamos la posición del boss
+            # 4) CRÍTICO: Colocar el boss ANTES de tallar corredores
+            #    Esto garantiza que la puerta norte del boss esté bloqueada cuando carve_corridors() se ejecute
+            #    Si no hacemos esto, la puerta norte se talla en _link_neighbors_and_carve() y no se puede destallar
             self._place_boss_room()
 
-            # VALIDAR: Verificar que boss room tenga entrada NO-norte
-            # ANTES de que setup_boss_room() bloquee automáticamente la norte
+            # 5) AHORA: Definir puertas según vecinos + tallar corredores
+            #    En este punto, la puerta norte del boss ya está bloqueada en setup_boss_room()
+            #    Así que carve_corridors() respetará ese bloqueo automáticamente
+            self._link_neighbors_and_carve()
+
+            # 6) VALIDAR: Verificar que boss room tenga entrada NO-norte
+            #    En este punto, los corredores ya están tallados y respetan el bloqueo norte
             if self._check_boss_room_would_have_valid_entrance():
                 # Puertas válidas, procedemos
                 # Nota: setup_boss_room() ya fue llamado en _place_boss_room()
@@ -450,32 +449,58 @@ class Dungeon:
 
     def _place_boss_room(self) -> None:
         """
-        Coloca la sala del boss en la sala más lejana de Zona 2 (mayor profundidad BFS).
-        Tamaño fijo: CFG.BOSS_ROOM_W × CFG.BOSS_ROOM_H.
+        Coloca la sala del boss en una sala válida de Zona 2.
+
+        CRITERIOS DE SELECCIÓN (en orden de prioridad):
+        1. NUNCA una sala que tenga un vecino al norte (esto evitaría acceso norte garantizado)
+        2. Sala más lejana (mayor profundidad BFS)
+        3. Preferir salas del camino principal si hay empate de profundidad
+
+        Esto garantiza que el boss nunca será accesible desde arriba.
         """
         if not hasattr(self, "zones"):
             return
 
-        zone2 = [
+        # Obtener candidatos de Zona 2
+        zone2_candidates = [
             pos for pos in self.rooms
             if self.zones.get(pos, 1) == 2 and pos != self.start
         ]
-        if not zone2:
+        if not zone2_candidates:
             return
 
+        # CRÍTICO: Filtrar salas que NO tengan vecino al norte
+        # Una sala con norte vecino significa que hay acceso directo desde arriba
+        valid_candidates = []
+        for pos in zone2_candidates:
+            px, py = pos
+            room_north = self.rooms.get((px, py - 1))
+            if room_north is None:
+                # NO hay sala al norte - ¡VÁLIDA!
+                valid_candidates.append(pos)
+            else:
+                print(f"[DUNGEON] Candidato rechazado {pos}: tiene sala al norte {(px, py - 1)}")
+
+        if not valid_candidates:
+            print(f"[DUNGEON] [WARNING] No hay candidatos válidos en Zona 2 sin norte neighbor")
+            # Si no hay válidos, usar la lógica antigua (fallback)
+            valid_candidates = zone2_candidates
+
+        # Ordenar por profundidad y preferencia de camino principal
         main_set = set(self.main_path)
-        zone2.sort(key=lambda p: (
-            -self.depth_map.get(p, 0),
-            0 if p in main_set else 1,
+        valid_candidates.sort(key=lambda p: (
+            -self.depth_map.get(p, 0),  # Mayor profundidad primero
+            0 if p in main_set else 1,  # Preferir main path
         ))
 
-        boss_pos = zone2[0]
+        boss_pos = valid_candidates[0]
         room = self.rooms.get(boss_pos)
         if room is None:
             return
 
         room.setup_boss_room()
         self.boss_pos = boss_pos
+        print(f"[DUNGEON] Boss colocado en {boss_pos} (profundidad {self.depth_map.get(boss_pos, 0)})")
 
     def _block_north_adjacencies_to_boss(self) -> None:
         """
@@ -501,37 +526,48 @@ class Dungeon:
 
     def _check_boss_room_would_have_valid_entrance(self) -> bool:
         """
-        Verifica QUE LA SALA DESTINADA A SER BOSS tenga al menos una entrada
-        que NO sea por el norte, ANTES de que setup_boss_room() la configure.
+        Verifica que LA SALA ACTUAL DEL BOSS tenga acceso válido (no solo norte).
 
-        Esta validación ocurre ANTES de _place_boss_room(), usando las puertas
-        ya asignadas por _link_neighbors_and_carve().
+        CRÍTICO: Esta validación ocurre DESPUÉS de _link_neighbors_and_carve(),
+        cuando los corredores ya están tallados y las puertas están fijas.
 
-        Retorna True si es válida (tiene S/E/W)
-        Retorna False si solo tiene N (seed será rechazada y regenerada)
+        Cheques realizados:
+        1. NO debe haber una sala directamente al norte del boss
+        2. Debe tener al menos una puerta abierta en S, E o W
+        3. Ambas condiciones garantizan que no hay entrada por norte
+
+        Retorna True si es válida (segura de norte)
+        Retorna False si hay acceso por norte (seed será rechazada)
         """
         if not hasattr(self, "boss_pos"):
             return False
 
+        boss_x, boss_y = self.boss_pos
         boss_room = self.rooms.get(self.boss_pos)
         if boss_room is None:
             return False
 
-        # Verificar puertas ANTES de cualquier modificación
+        # CHEQUEO 1: ¿Hay una sala directamente al norte del boss?
+        room_north = self.rooms.get((boss_x, boss_y - 1))
+        if room_north is not None:
+            print(f"[DUNGEON] [FAIL] Boss room INVALIDO: Existe sala al norte {(boss_x, boss_y - 1)}")
+            return False
+
+        # CHEQUEO 2: Verificar puertas del boss (después de carve_corridors)
         has_south = boss_room.doors.get("S", False)
         has_east = boss_room.doors.get("E", False)
         has_west = boss_room.doors.get("W", False)
         has_north = boss_room.doors.get("N", False)
 
-        # Válido si tiene al menos una entrada NO-norte
+        # Debe tener al menos una entrada NO-norte
         is_valid = has_south or has_east or has_west
         entrances_non_north = sum([has_south, has_east, has_west])
 
         if is_valid:
-            print(f"[DUNGEON] [OK] Boss room VALIDO: {entrances_non_north} entrada(s) "
-                  f"(S={has_south}, E={has_east}, W={has_west})")
+            print(f"[DUNGEON] [OK] Boss room VALIDO: Sin sala al norte, "
+                  f"{entrances_non_north} entrada(s) (S={has_south}, E={has_east}, W={has_west})")
         else:
-            print(f"[DUNGEON] [FAIL] Boss room INVALIDO: SOLO norte={has_north} disponible")
+            print(f"[DUNGEON] [FAIL] Boss room INVALIDO: Sin puertas NO-norte disponibles")
 
         return is_valid
 
