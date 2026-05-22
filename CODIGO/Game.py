@@ -525,10 +525,15 @@ class Game:
     # ------------------------------------------------------------------ #
     # Nueva partida / regenerar dungeon (misma o nueva seed)
     # ------------------------------------------------------------------ #
-    def start_new_run(self, seed: int | None = None, dungeon_params: dict | None = None) -> None:
+    def start_new_run(self, seed: int | None = None, dungeon_params: dict | None = None, modo_coop: bool = False) -> None:
         """
         Crea una nueva dungeon con la seed dada (o aleatoria si None),
         reubica al jugador y resetea estado de runtime.
+
+        Args:
+            seed: seed de la dungeon (None para aleatoria)
+            dungeon_params: parámetros adicionales de la dungeon
+            modo_coop: True si se inicia en modo cooperativo (con cliente conectado)
         """
         finalize_reason = self._stats_pending_reason or "restart"
         self._finalize_run_statistics(finalize_reason)
@@ -576,6 +581,11 @@ class Game:
         if hasattr(self.player, "reset_loadout"):
             self.player.reset_loadout()
         setattr(self.player, "gold", 999)
+
+        # Almacenar referencia de player en el menú para la próxima vez que se abra
+        # (El menú será recreado la próxima vez que se abre _open_start_menu)
+        # Por ahora solo guardamos la referencia en self para usarla después
+        self._last_player_for_lobby = self.player
 
         # Set up shooting callback for network synchronization
         if self.net:
@@ -801,6 +811,22 @@ class Game:
     def _open_start_menu(self) -> bool:
         pygame.mouse.set_visible(True)
         start_menu = StartMenu(self.screen, self.cfg, stats_manager=self.stats_manager)
+
+        # Pasar referencias para el lobby
+        # Net manager para detectar si hay cliente conectado
+        if self.net:
+            start_menu.set_net_manager(self.net)
+
+        # Player (si ya existe de una sesión anterior)
+        player_para_lobby = None
+        if hasattr(self, '_last_player_for_lobby'):
+            player_para_lobby = self._last_player_for_lobby
+        elif hasattr(self, 'player') and self.player:
+            player_para_lobby = self.player
+
+        if player_para_lobby:
+            start_menu.set_player_animation(player_para_lobby)
+
         menu_result = start_menu.run()
         if not menu_result.start_game:
             if self._run_start_time is not None:
@@ -810,7 +836,7 @@ class Game:
             self.running = False
             return False
         pygame.mouse.set_visible(False)
-        self.start_new_run(seed=menu_result.seed)
+        self.start_new_run(seed=menu_result.seed, modo_coop=menu_result.modo_coop)
         self._skip_frame = True
         return True
 
@@ -1037,29 +1063,44 @@ class Game:
             # [DIAG] Estado ANTES de cualquier operación
             enemigos_antes = len(room.enemies)
             muertos_visibles = sum(1 for e in room.enemies if getattr(e, '_is_dying', False))
-            log_game.debug(f"[MUERTE_REMOTA] ANTES: {enemigos_antes} enemigos en lista ({muertos_visibles} muriendo), buscando {enemy_type}")
-
-            # Buscar enemigo que coincida con posición y tipo
-            # Usar tolerancia para diferencias por interpolación cliente
-            tolerance = 5.0  # píxeles
+            enemy_id = datos.get("enemy_id")  # NUEVO: obtener el ID del evento
+            log_game.debug(f"[MUERTE_REMOTA] ANTES: {enemigos_antes} enemigos en lista ({muertos_visibles} muriendo), buscando {enemy_type} (ID={enemy_id})")
 
             encontrado = False
             enemy_encontrado = None
             indice_encontrado = -1
 
-            for i, enemy in enumerate(room.enemies):
-                dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
-                dying = getattr(enemy, '_is_dying', False)
-                hp = getattr(enemy, 'hp', -1)
-                log_game.debug(f"[MUERTE_REMOTA]   [{i}] {enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}) dist={dist:.1f} hp={hp} dying={dying}")
+            # PASO 1: Buscar por ID si está disponible (búsqueda exacta)
+            if enemy_id:
+                log_game.debug(f"[MUERTE_REMOTA] [PASO 1] Buscando por ID: {enemy_id}")
+                for i, enemy in enumerate(room.enemies):
+                    if getattr(enemy, 'enemy_id', None) == enemy_id:
+                        log_game.warning(f"[MUERTE_REMOTA] [MATCH_BY_ID] Encontrado por ID en índice {i}: {enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f})")
+                        enemy_encontrado = enemy
+                        indice_encontrado = i
+                        encontrado = True
+                        break
 
-                if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
-                    # Encontrado enemigo que coincide
-                    log_game.debug(f"[MUERTE_REMOTA] [MATCH] Encontrado en índice {i}: {enemy.__class__.__name__}")
-                    enemy_encontrado = enemy
-                    indice_encontrado = i
-                    encontrado = True
-                    break
+            # PASO 2: Si no encontró por ID, buscar por tipo + posición (fallback)
+            if not encontrado:
+                log_game.debug(f"[MUERTE_REMOTA] [PASO 2] Buscando por posición (tolerancia 50px)")
+                tolerance = 50.0  # píxeles
+                min_dist = tolerance + 1
+
+                for i, enemy in enumerate(room.enemies):
+                    dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
+                    dying = getattr(enemy, '_is_dying', False)
+                    hp = getattr(enemy, 'hp', -1)
+                    log_game.debug(f"[MUERTE_REMOTA]   [{i}] {enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}) dist={dist:.1f} hp={hp} dying={dying}")
+
+                    # Buscar el enemigo del tipo correcto MÁS CERCANO dentro de la tolerancia
+                    if dist <= tolerance and enemy.__class__.__name__ == enemy_type and dist < min_dist:
+                        # Encontrado enemigo más cercano que coincide
+                        log_game.debug(f"[MUERTE_REMOTA] [MATCH_BY_POS] Encontrado en índice {i}: {enemy.__class__.__name__} dist={dist:.1f}")
+                        enemy_encontrado = enemy
+                        indice_encontrado = i
+                        min_dist = dist
+                        encontrado = True
 
             if encontrado:
                 # [DIAG] Disparar efecto ANTES de eliminar
@@ -1086,10 +1127,14 @@ class Game:
                 if enemigos_despues == 0:
                     log_game.debug(f"[MUERTE_REMOTA] [CLEAR] ¡SALA LIMPIA! (era el último)")
             else:
-                log_game.debug(f"[MUERTE_REMOTA] [NOTFOUND] NO ENCONTRADO {enemy_type} @ ({pos_x}, {pos_y}) (tol={tolerance})")
+                log_game.warning(f"[MUERTE_REMOTA] [NOTFOUND] NO ENCONTRADO {enemy_type} @ ({pos_x}, {pos_y}) dentro de tolerancia={tolerance} píxeles")
+                log_game.warning(f"[MUERTE_REMOTA] Esto puede ocurrir si: 1) El enemigo ya fue eliminado, 2) Hay desincronización de red (el cliente reportó posición antigua)")
                 # [DIAG] Mostrar qué había
                 if room.enemies:
+                    closest = min(room.enemies, key=lambda e: ((e.x - pos_x) ** 2 + (e.y - pos_y) ** 2) ** 0.5)
+                    closest_dist = ((closest.x - pos_x) ** 2 + (closest.y - pos_y) ** 2) ** 0.5
                     log_game.debug(f"[MUERTE_REMOTA] Enemigos en sala: {[(e.__class__.__name__, f'({e.x:.0f},{e.y:.0f})', getattr(e, 'hp', '?')) for e in room.enemies]}")
+                    log_game.debug(f"[MUERTE_REMOTA] Enemigo más cercano: {closest.__class__.__name__} a {closest_dist:.1f} píxeles")
                 else:
                     log_game.debug(f"[MUERTE_REMOTA] Sala está vacía (0 enemigos)")
 
@@ -1469,15 +1514,17 @@ class Game:
 
                 # Si el enemigo muere, enviar evento
                 if enemy.hp <= 0:
-                    log_game.debug(f"[DISPARO_CLIENTE] [DEATH] Enemigo muere. Enviando evento enemigo_muerto...")
+                    enemy_id = getattr(enemy, 'enemy_id', '?')
+                    log_game.warning(f"[DISPARO_CLIENTE] [DEATH] Enemigo {enemy_id} muere. Reportando muerte en ({enemy.x:.1f},{enemy.y:.1f})")
                     from network.protocol import msg_enemigo_muerto
                     evento_muerte = msg_enemigo_muerto(
                         enemy.x, enemy.y,
                         enemy.__class__.__name__,
-                        (self.dungeon.i, self.dungeon.j)
+                        (self.dungeon.i, self.dungeon.j),
+                        enemy_id=enemy_id  # NUEVO: incluir el ID para búsqueda exacta
                     )
                     self.net.enviar(evento_muerte)
-                    log_game.debug(f"[DISPARO_CLIENTE] [DEATH] Evento enviado. Quedarán {enemigos_antes - 1} enemigos")
+                    log_game.warning(f"[DISPARO_CLIENTE] [DEATH] Evento de muerte enviado al servidor con ID={enemy_id}. Quedarán {enemigos_antes - 1} enemigos")
                 else:
                     log_game.debug(f"[DISPARO_CLIENTE] Enemigo sobrevivió (HP={hp_despues})")
                 break
@@ -2312,11 +2359,13 @@ class Game:
                     from network.protocol import msg_enemigo_muerto
                     enemy_type = enemy.__class__.__name__
                     sala = (self.dungeon.i, self.dungeon.j)
+                    enemy_id = getattr(enemy, 'enemy_id', None)
                     event_msg = msg_enemigo_muerto(
                         pos_x=enemy.x,
                         pos_y=enemy.y,
                         tipo=enemy_type,
-                        sala=sala
+                        sala=sala,
+                        enemy_id=enemy_id  # NUEVO: incluir el ID para búsqueda exacta
                     )
                     self.net.enviar(event_msg)
 
