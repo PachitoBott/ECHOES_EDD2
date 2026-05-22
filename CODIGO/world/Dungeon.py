@@ -292,6 +292,12 @@ class Dungeon:
             room.doors["S"] = (x, y+1) in self.rooms
             room.doors["W"] = (x-1, y) in self.rooms
             room.doors["E"] = (x+1, y) in self.rooms
+
+            # Especial: sala del boss NO puede tener entrada por arriba (N)
+            # El boss está en la pared superior, así que solo puede entrar por los lados o por abajo
+            if getattr(room, "type", "") == "boss":
+                room.doors["N"] = False
+
             # Corredores visuales
             room.carve_corridors(width_tiles=2, length_tiles=3)
             

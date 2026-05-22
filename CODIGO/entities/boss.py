@@ -36,13 +36,19 @@ def cargar_boss_idle(ruta: str) -> list[pygame.Surface]:
     frame_w, frame_h = 736, 400
     frames = []
 
-    # Extraer frames en orden (izquierda a derecha, arriba a abajo)
+    # Extraer exactamente 12 frames (4 cols x 3 filas) - nunca más
+    frame_count = 0
     for row in range(3):
         for col in range(4):
+            if frame_count >= 12:  # Límite duro: máximo 12 frames
+                break
             x = col * frame_w
             y = row * frame_h
             frame = img.subsurface(pygame.Rect(x, y, frame_w, frame_h))
             frames.append(frame.copy())
+            frame_count += 1
+        if frame_count >= 12:
+            break
 
     print(f"[BOSS] Cargados {len(frames)} frames de {ruta}")
     return frames
