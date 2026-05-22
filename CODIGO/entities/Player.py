@@ -609,6 +609,13 @@ class Player(Entity):
             self._animation_override = "attack"
             self._set_current_animation("attack", force_reset=True)
 
+    def _is_shift_pressed(self) -> bool:
+        """Detecta si Shift está presionado (izquierdo o derecho)."""
+        keys = pygame.key.get_pressed() if self.controls_enabled else None
+        if not keys:
+            return False
+        return keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+
     def _get_input_magnitude(self) -> float:
         """
         Calcula la magnitud del input (0 a ~1.41 en diagonal).
@@ -639,10 +646,11 @@ class Player(Entity):
         4. idle (quieto sin disparar)
         """
         # Calcular estado de movimiento actual
-        input_mag = self._get_input_magnitude()  # 0 a ~150
-        is_running = input_mag > self.run_threshold
-        is_walking = input_mag > 0 and not is_running
+        input_mag = self._get_input_magnitude()  # 0 a ~1.41
         is_moving = input_mag > 0
+        shift_pressed = self._is_shift_pressed()
+        is_running = shift_pressed and is_moving  # Run solo si Shift + movimiento
+        is_walking = is_moving and not is_running
         is_shooting = self._shoot_dir_current != (0, 0)
 
         # Seleccionar animación según prioridad
