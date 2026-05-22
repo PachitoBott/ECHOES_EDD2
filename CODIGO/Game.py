@@ -2252,10 +2252,28 @@ class Game:
                         self._apply_projectile_effects(projectile, room.boss)
                         projectile.alive = False
 
-        # Remote projectiles from other players also hit enemies
+        # [CRITICAL FIX] Remote projectiles from other players also hit enemies
+        # BUT: Only player projectiles, not enemy projectiles
+        #
+        # BUG FIXED: Previously, client was processing ENEMY projectiles here,
+        # which caused enemies to take damage from their own projectiles when they fired,
+        # resulting in them dying immediately after shooting.
+        #
+        # SOLUTION: Check if projectile is a RemoteProjectile (from _handle_enemy_projectiles_state)
+        # If it is, skip it - the server handles all enemy projectile collision detection.
+        # Only player projectiles should hit enemies on the client side.
         for projectile in self.remote_projectiles[:]:
             if not projectile.alive:
                 continue
+
+            # [FIX] Skip enemy projectiles - they shouldn't hit enemies on client
+            # Enemy projectiles are handled server-side only
+            if hasattr(projectile, "_remote_id"):
+                # This is an enemy projectile from _handle_enemy_projectiles_state
+                # Skip it - server handles collision detection
+                log_game.debug(f"[COLLISION_FIX] Saltando proyectil de enemigo ({projectile.x:.0f},{projectile.y:.0f}) - manejado server-side")
+                continue
+
             r_proj = projectile.rect()
             for enemy in room.enemies:
                 if r_proj.colliderect(enemy.rect()):

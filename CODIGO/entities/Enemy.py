@@ -243,6 +243,11 @@ class Enemy(Entity):
                     self._knockback_dir = (nx / mag, ny / mag)
                     self._knockback_speed = max(self._knockback_speed, knockback_strength)
         else:
+            # [DIAG] Mostrar el lugar donde take_damage() fue llamado
+            import traceback
+            stack = traceback.format_stack()
+            caller_line = stack[-2].strip() if len(stack) > 1 else "UNKNOWN"
+            log_enemy.warning(f"[DEATH_TRIGGER] {self.enemy_id} take_damage({amount}) hp={self.hp} desde: {caller_line}")
             log_enemy.warning(f"[DEATH] {self.enemy_id} muere en ({self.x:.0f},{self.y:.0f}). HP final: {self.hp}")
             self._begin_death()
         return self._is_dying
@@ -261,6 +266,12 @@ class Enemy(Entity):
             return
         self._is_dying = True
         self.hp = 0
+
+        # [DIAG] Mostrar stack trace para ver por qué el enemigo muere
+        import traceback
+        stack = traceback.format_stack()
+        caller = stack[-2] if len(stack) > 1 else "UNKNOWN"
+        log_enemy.warning(f"[DEATH_TRACE] {self.enemy_id} _begin_death() llamado desde: {caller.strip()}")
 
         # Reproducir sonido de eliminación
         if self._elimination_sound:
