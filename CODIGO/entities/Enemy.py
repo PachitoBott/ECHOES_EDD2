@@ -2,11 +2,14 @@
 import math
 import random
 import pygame
+import logging
 from pathlib import Path
 
 from core.Entity import Entity
 from Config import CFG
 from core.Projectile import Projectile
+
+log_enemy = logging.getLogger("ENEMY_FIRE")
 from entities.enemy_sprites import (
     EnemyAnimator,
     load_enemy_animation_set,
@@ -501,8 +504,6 @@ class ShooterEnemy(Enemy):
             return False
 
         # [DIAG] El enemigo está disparando
-        import logging
-        log_enemy = logging.getLogger("ENEMY_FIRE")
         log_enemy.warning(f"[SHOOT] {self.enemy_id} disparando, owner_id={self.enemy_id}")
 
         # Normaliza y dispara ráfagas en abanico
