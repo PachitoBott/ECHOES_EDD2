@@ -50,6 +50,7 @@ from dev.debug_console import DebugConsole
 from systems.death_effect import DeathEffectManager
 from systems.power_effects import power_effect_manager
 from systems.spawn_effect import SpawnEffectManager
+from systems.minigame_papers import MinijuegoPapers
 
 
 class RemoteProjectile:
@@ -593,6 +594,11 @@ class Game:
         # Entrar "formalmente" a la sala inicial (dispara on_enter/Shop si aplica)
         if hasattr(self.dungeon, "enter_initial_room"):
             self.dungeon.enter_initial_room(self.player, self.cfg, ShopkeeperCls=Shopkeeper)
+
+        # Minijuego: variables de control
+        self.minijuego_activo = False
+        self.minijuego: MinijuegoPapers | None = None
+        self.ultima_sala_fue_boss = False
 
         self._run_start_time = perf_counter()
 
@@ -1541,6 +1547,41 @@ class Game:
                 )
                 # Consumir efectos pendientes del profesor
                 self._apply_ibarra_pending_effects(prof, room)
+                return
+
+        # --- Minijuego Papers: bloquear gameplay antes del boss ---
+        # Detectar entrada a sala del boss y activar minijuego
+        if getattr(room, "type", "") == "boss" and not self.ultima_sala_fue_boss:
+            # Primera vez que entra a la sala del boss
+            self.minijuego_activo = True
+            self.minijuego = MinijuegoPapers(self.cfg.SCREEN_W, self.cfg.SCREEN_H)
+            self.ultima_sala_fue_boss = True
+            return
+
+        # Si el minijuego está activo, procesarlo y no actualizar el resto del juego
+        if self.minijuego_activo and self.minijuego:
+            for event in events:
+                # Convertir coordenadas de mouse a coordenadas lógicas (sin escala)
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    event.pos = (
+                        event.pos[0] // self.cfg.SCREEN_SCALE,
+                        event.pos[1] // self.cfg.SCREEN_SCALE
+                    )
+                self.minijuego.handle_event(event)
+            self.minijuego.update(dt)
+
+            # Si el minijuego terminó
+            if self.minijuego.terminado:
+                if not self.minijuego.aprobado:
+                    # No aprobó - reiniciar la partida
+                    self._stats_pending_reason = "minigame_failed"
+                    self.start_new_run(seed=self.current_seed)
+                else:
+                    # Aprobó - desactivar minijuego y continuar en la sala del boss
+                    self.minijuego_activo = False
+                    self.minijuego = None
+            else:
+                # El minijuego sigue activo
                 return
 
         self._update_player(dt, room)
@@ -2781,6 +2822,19 @@ class Game:
 
 
     def _render(self) -> None:
+        # Si el minijuego está activo, renderizar solo el minijuego
+        if self.minijuego_activo and self.minijuego:
+            self.minijuego.render(self.world)
+            # Escalar y mostrar la pantalla
+            scaled = pygame.transform.scale(
+                self.world,
+                (self.cfg.SCREEN_W * self.cfg.SCREEN_SCALE,
+                 self.cfg.SCREEN_H * self.cfg.SCREEN_SCALE)
+            )
+            self.screen.blit(scaled, (0, 0))
+            pygame.display.flip()
+            return
+
         self._render_world()
         self._render_ui()
 
