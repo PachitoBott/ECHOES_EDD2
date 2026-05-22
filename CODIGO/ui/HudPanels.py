@@ -56,6 +56,51 @@ def cargar_corazones(ruta: str, render_size: int | None = None) -> dict:
     return estados
 
 
+def cargar_iconos_poderes(ruta: str) -> dict:
+    """
+    Carga los 4 iconos de poderes desde el spritesheet.
+
+    Args:
+        ruta: ruta al archivo iconos_pwr.png (formato: 4 iconos en fila horizontal)
+
+    Returns:
+        Dict con 4 superficies escaladas a 28×28: {
+            "red_apoyo": Surface,      # Index 0 - Green cross
+            "modo_privado": Surface,   # Index 1 - Blue eye
+            "emp": Surface,            # Index 2 - Yellow lightning
+            "eco_señal": Surface       # Index 3 - Red double book
+        }
+
+    El spritesheet contiene 4 frames horizontales, cada uno será
+    escalado a 28×28 píxeles para su uso en el HUD.
+    """
+    try:
+        sheet = pygame.image.load(ruta).convert_alpha()
+    except pygame.error as e:
+        print(f"Error cargando spritesheet de iconos: {e}")
+        raise
+
+    w_total = sheet.get_width()
+    h_total = sheet.get_height()
+    frame_w = w_total // 4  # 4 iconos en horizontal
+    frame_h = h_total
+
+    iconos = {}
+    nombres = ["red_apoyo", "modo_privado", "emp", "eco_señal"]
+
+    for i, nombre in enumerate(nombres):
+        # Extraer frame del spritesheet
+        surface = pygame.Surface((frame_w, frame_h), pygame.SRCALPHA)
+        surface.blit(sheet, (0, 0),
+                     pygame.Rect(i * frame_w, 0, frame_w, frame_h))
+
+        # Escalar a 28×28 píxeles
+        scaled = pygame.transform.scale(surface, (28, 28))
+        iconos[nombre] = scaled
+
+    return iconos
+
+
 def get_estado_corazones(lives: int) -> list:
     """
     Convierte los puntos de vida al estado visual de cada corazón.
@@ -426,6 +471,10 @@ class HUDPanel:
         self._personaje_sprites: dict = {}  # Almacena sprites P2 cuando estén disponibles
         self._cargar_animaciones_personaje()
 
+        # --- Sistema de iconos de poderes ---
+        self._iconos_poderes: dict = {}  # Almacena los 4 iconos escalados
+        self._cargar_iconos_poderes()
+
     def _cargar_panel(self, path: str) -> None:
         """Carga el PNG del panel y lo redimensiona al tamaño estándar."""
         if path and os.path.exists(path):
@@ -474,6 +523,14 @@ class HUDPanel:
             print(f"[WARNING] HUDPanel: No se pudieron cargar animaciones: {e}")
             self._animaciones = {}
 
+    def _cargar_iconos_poderes(self) -> None:
+        """Carga los iconos de poderes del spritesheet."""
+        try:
+            self._iconos_poderes = cargar_iconos_poderes("assets/ui/iconos_pwr.png")
+        except Exception as e:
+            print(f"[WARNING] HUDPanel: No se pudieron cargar iconos de poderes: {e}")
+            self._iconos_poderes = {}
+
     def update(self, dt: float) -> None:
         """Actualiza las animaciones del panel (llamar cada frame del juego)."""
         if "idle" in self._animaciones:
@@ -490,14 +547,18 @@ class HUDPanel:
 
     def render(self, surface: pygame.Surface, player_data: dict, es_p2: bool = False) -> pygame.Rect:
         """
-        Dibuja el panel completo: PNG de fondo + sprite animado + corazones + monedas.
+        Dibuja el panel completo: PNG de fondo + sprite animado + corazones + monedas + iconos de poderes.
 
         Args:
             surface: superficie donde dibujar
             player_data: {
                 "health": int,          # vidas actuales (0-6)
                 "max_health": int,      # vidas máximas (6)
-                "coins": int            # monedas/microchips
+                "coins": int,           # monedas/microchips
+                "red_apoyo": bool,      # tiene Red de Apoyo (opcional)
+                "modo_privado": bool,   # tiene Modo Privado (opcional)
+                "emp": bool,            # tiene EMP (opcional)
+                "eco_señal": bool       # tiene Eco de Señal (opcional)
             }
             es_p2: True si es panel P2 (muestra placeholder si no hay sprites)
 
@@ -517,6 +578,15 @@ class HUDPanel:
         # 4. Monedas (derecha inferior)
         coins = player_data.get("coins", 0)
         self._render_monedas(surface, coins, es_p2=es_p2)
+
+        # 5. Iconos de poderes (columna vertical en el borde derecho)
+        powers = {
+            "red_apoyo": player_data.get("red_apoyo", False),
+            "modo_privado": player_data.get("modo_privado", False),
+            "emp": player_data.get("emp", False),
+            "eco_señal": player_data.get("eco_señal", False)
+        }
+        self._render_iconos_poderes(surface, powers)
 
         return self.rect
 
@@ -684,6 +754,49 @@ class HUDPanel:
             surface.blit(coins_text, (text_x, text_y))
         except Exception as e:
             print(f"[WARNING] HUDPanel: No se pudo renderizar cantidad de monedas: {e}")
+
+    def _render_iconos_poderes(self, surface: pygame.Surface, powers: dict) -> None:
+        """
+        Renderiza los iconos de poderes activos en una columna vertical en el borde derecho del panel.
+
+        Args:
+            surface: superficie donde dibujar
+            powers: dict con estado de poderes {
+                "red_apoyo": bool,
+                "modo_privado": bool,
+                "emp": bool,
+                "eco_señal": bool
+            }
+
+        Los iconos aparecen solo si el poder correspondiente es True (jugador ha comprado el item).
+        Se apilan verticalmente en el lado derecho del panel, con margen pequeño.
+        """
+        if not self._iconos_poderes:
+            return  # Sin iconos cargados, no renderizar
+
+        # Parámetros de posicionamiento
+        ICON_SIZE = 28  # Tamaño de cada icono (ya escalado en cargar_iconos_poderes)
+        MARGEN_DERECHO = 12  # Margen desde el borde derecho del panel
+        MARGEN_SUPERIOR = 70  # Margen desde el borde superior del panel (suficiente para estar debajo de corazones)
+        GAP_VERTICAL = 4  # Separación entre iconos
+
+        # Posición X (alineada al borde derecho del panel, con margen)
+        icon_x = self.rect.right - ICON_SIZE - MARGEN_DERECHO
+
+        # Posición Y inicial (superior del panel, con margen)
+        icon_y = self.rect.y + MARGEN_SUPERIOR
+
+        # Orden de renderizado: red_apoyo, modo_privado, emp, eco_señal
+        orden_iconos = ["red_apoyo", "modo_privado", "emp", "eco_señal"]
+
+        for nombre_poder in orden_iconos:
+            # Solo renderizar si el jugador tiene este poder
+            if powers.get(nombre_poder, False) and nombre_poder in self._iconos_poderes:
+                icono = self._iconos_poderes[nombre_poder]
+                surface.blit(icono, (int(icon_x), int(icon_y)))
+
+                # Mover hacia abajo para el siguiente icono
+                icon_y += ICON_SIZE + GAP_VERTICAL
 
     def set_panel_image(self, path: str) -> None:
         """

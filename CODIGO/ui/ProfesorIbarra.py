@@ -850,13 +850,9 @@ class ProfesorIbarra:
     def _apply_item(self, iid: str, player) -> None:
         """Aplica o almacena el efecto del ítem comprado."""
         if iid == "red_apoyo":
-            # Efecto inmediato: recuperar 2 HP
-            max_hp = getattr(player, "max_hp", getattr(player, "hp", 1))
-            hp     = getattr(player, "hp", max_hp)
-            new_hp = min(max_hp, hp + 2)
-            setattr(player, "hp", new_hp)
-            if hasattr(player, "_hits_taken_current_life"):
-                setattr(player, "_hits_taken_current_life", max(0, max_hp - new_hp))
+            # Se guarda para usar con Z (restaura FULL HP cuando se activa)
+            # NO se aplica efecto inmediato - el jugador decide cuándo usarlo
+            player._ibarra_red_apoyo = True
 
         elif iid == "modo_privado":
             # Se guarda para usar con R

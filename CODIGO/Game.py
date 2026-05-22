@@ -557,6 +557,8 @@ class Game:
                     self._use_ibarra_item("emp")
                 elif e.key == pygame.K_r:
                     self._use_ibarra_item("modo_privado")
+                elif e.key == pygame.K_z:
+                    self._use_ibarra_item("red_apoyo")
                 elif e.key == pygame.K_m:
                     self._stats_pending_reason = "manual_same_seed"
                     self.start_new_run(seed=self.current_seed)
@@ -1505,6 +1507,18 @@ class Game:
                 self.subtitulos.agregar("[Modo Privado] Invulnerable 5s!", duracion=2.5, tipo="apoyo")
             log_game.info("Modo Privado usado: invulnerable 5s")
 
+        elif iid == "red_apoyo":
+            if not getattr(self.player, "_ibarra_red_apoyo", False):
+                return
+            self.player._ibarra_red_apoyo = False
+            # Restaurar FULL HP (todos los corazones)
+            self.player.lives = self.player.max_lives
+            self.player.hp = self.player.max_hp
+            self.player._hits_taken_current_life = 0
+            if hasattr(self, "subtitulos"):
+                self.subtitulos.agregar("[Red de Apoyo] ¡Salud restaurada al máximo!", duracion=2.5, tipo="apoyo")
+            log_game.info("Red de Apoyo usada: salud restaurada a máximo")
+
     def _draw_ibarra_item_hud(self, surface: pygame.Surface) -> None:
         """Dibuja iconos HUD en la esquina inferior derecha para EMP (Q) y Modo Privado (R)."""
         has_emp  = getattr(self.player, "_ibarra_emp", False)
@@ -1811,7 +1825,11 @@ class Game:
         player_data_p1 = {
             "health": getattr(self.player, "lives", 0),
             "max_health": getattr(self.player, "max_lives", 0),
-            "coins": getattr(self.player, "gold", 0)
+            "coins": getattr(self.player, "gold", 0),
+            "red_apoyo": getattr(self.player, "_ibarra_red_apoyo", False),
+            "modo_privado": getattr(self.player, "_ibarra_modo_privado", False),
+            "emp": getattr(self.player, "_ibarra_emp", False),
+            "eco_señal": getattr(self.player, "_ibarra_double_shot", False)
         }
         self.hud_panel_p1.render(self.screen, player_data_p1, es_p2=False)
 
@@ -1823,12 +1841,22 @@ class Game:
                 player_data_p2 = {
                     "health": getattr(remote_player, "lives", 0),
                     "max_health": getattr(remote_player, "max_lives", 0),
-                    "coins": getattr(remote_player, "gold", 0)
+                    "coins": getattr(remote_player, "gold", 0),
+                    "red_apoyo": getattr(remote_player, "_ibarra_red_apoyo", False),
+                    "modo_privado": getattr(remote_player, "_ibarra_modo_privado", False),
+                    "emp": getattr(remote_player, "_ibarra_emp", False),
+                    "eco_señal": getattr(remote_player, "_ibarra_double_shot", False)
                 }
             else:
-                player_data_p2 = {"health": 0, "max_health": 0, "coins": 0}
+                player_data_p2 = {
+                    "health": 0, "max_health": 0, "coins": 0,
+                    "red_apoyo": False, "modo_privado": False, "emp": False, "eco_señal": False
+                }
         else:
-            player_data_p2 = {"health": 0, "max_health": 0, "coins": 0}
+            player_data_p2 = {
+                "health": 0, "max_health": 0, "coins": 0,
+                "red_apoyo": False, "modo_privado": False, "emp": False, "eco_señal": False
+            }
 
         self.hud_panel_p2.render(self.screen, player_data_p2, es_p2=True)
 
