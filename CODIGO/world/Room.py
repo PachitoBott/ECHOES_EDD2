@@ -434,6 +434,9 @@ class Room:
         self.obstacles: list[dict] = []
         self._obstacle_tiles: set[tuple[int, int]] = set()
 
+        # --- BOSS ---
+        self.boss = None  # Se crea cuando se inicializa como sala del boss
+
 
     # ------------------------------------------------------------------ #
     # API estática para sprites de obstáculos
@@ -1362,6 +1365,38 @@ class Room:
         # corredores después para que las puertas sigan siendo accesibles.
         self.build_centered(CFG.BOSS_ROOM_W, CFG.BOSS_ROOM_H)
         self.carve_corridors(width_tiles=2, length_tiles=3)
+
+        # Inicializar el boss después de que la sala esté lista
+        self.inicializar_boss()
+
+    def inicializar_boss(self) -> None:
+        """
+        Crea el boss en la sala si es de tipo boss.
+        Se llama automáticamente en make_boss_room().
+        """
+        if self.type != "boss" or self.bounds is None:
+            return
+
+        from entities.boss import Boss
+
+        # Calcular sala_rect en píxeles
+        rx, ry, rw, rh = self.bounds
+        ts = CFG.TILE_SIZE
+
+        sala_rect = pygame.Rect(
+            rx * ts,
+            ry * ts,
+            rw * ts,
+            rh * ts
+        )
+
+        # pared_y: donde termina la primera fila de tiles (pared superior)
+        # El boss se posiciona un tile abajo del inicio de la sala
+        pared_y = ry * ts + ts
+
+        # Crear el boss
+        self.boss = Boss(sala_rect, pared_y)
+        print(f"[SALA] Boss creado en sala tipo 'boss'")
 
     def _handle_treasure_events(self, events, player) -> None:
         if not self.treasure:

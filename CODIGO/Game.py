@@ -953,6 +953,10 @@ class Game:
             self._spawn_room_enemies(room)
         self._update_room_lock(room)
 
+        # Activar boss si la sala es del tipo boss
+        if hasattr(room, "boss") and room.boss:
+            room.boss.activar()
+
     def _handle_remote_enemy_death(self, ev: EventoRed) -> None:
         """
         Procesa la muerte de un enemigo reportada por otro jugador.
@@ -1780,6 +1784,10 @@ class Game:
             fired = enemy.maybe_shoot(dt, closest_player, room, self.enemy_projectiles)
             if fired and callable(notify):
                 notify()
+
+        # Actualizar boss si existe en la sala
+        if hasattr(room, "boss") and room.boss:
+            room.boss.update(dt)
 
     def _update_remote_enemies(self, dt: float) -> None:
         """
@@ -2800,6 +2808,10 @@ class Game:
 
             for enemy in room.enemies:
                 enemy.draw(self.world)
+
+        # Renderizar boss si existe
+        if hasattr(room, "boss") and room.boss:
+            room.boss.render(self.world)
 
         # Renderizar efectos de muerte
         self.death_effect_manager.render(self.world)
