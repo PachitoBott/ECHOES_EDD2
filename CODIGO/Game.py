@@ -1604,6 +1604,9 @@ class Game:
         if self.net is None or self.net.es_servidor:
             self._spawn_room_enemies(room)
         self._update_enemies(dt, room)
+        # Actualizar boss si existe en la sala
+        if hasattr(room, "boss") and room.boss is not None:
+            room.boss.update(dt)
 
         # En modo servidor: actualizar también enemigos en salas con jugadores remotos
         if self.net and self.net.es_servidor:
@@ -2880,6 +2883,10 @@ class Game:
 
             for enemy in room.enemies:
                 enemy.draw(self.world)
+
+        # Renderizar boss si existe en la sala
+        if hasattr(room, "boss") and room.boss is not None:
+            room.boss.render(self.world)
 
         # Renderizar efectos de muerte
         self.death_effect_manager.render(self.world)
