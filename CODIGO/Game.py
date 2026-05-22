@@ -3443,18 +3443,18 @@ class Game:
         return icon_rect
 
     def _render_boss_health_bar(self) -> None:
-        """Renderiza la barra de vida del boss decorada en el centro superior de la pantalla."""
+        """Renderiza la barra de vida del boss decorada 16 píxeles por encima del boss."""
         room = self.dungeon.current_room
         if not (hasattr(room, "boss") and room.boss is not None):
             return
 
         boss = room.boss
 
-        # Dimensiones y posición de la barra
-        bar_width = 300
+        # Dimensiones y posición de la barra (relativa al boss)
+        bar_width = int(boss.render_w + 20)  # Ancho ligeramente mayor que el sprite
         bar_height = 24
-        bar_x = (self.cfg.SCREEN_W * self.cfg.SCREEN_SCALE - bar_width) // 2
-        bar_y = 30
+        bar_x = int(boss.x + (boss.render_w - bar_width) // 2)  # Centrado sobre el boss
+        bar_y = int(boss.y - 16)  # 16 píxeles por encima del boss
         padding = 4
 
         # --- Fondo decorativo ---
