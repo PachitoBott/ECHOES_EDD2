@@ -1367,6 +1367,7 @@ class Game:
                         enemy.__class__.__name__,
                         (self.dungeon.i, self.dungeon.j)
                     )
+                    log_game.info(f"[DEATH_BULLET] Enviando muerte desde _process_client_bullet: {enemy.enemy_id} en ({enemy.x:.1f}, {enemy.y:.1f}) _is_dying={getattr(enemy, '_is_dying', False)}")
                     self.net.enviar(evento_muerte)
                 break
 
@@ -2134,6 +2135,7 @@ class Game:
                         tipo=enemy_type,
                         sala=sala
                     )
+                    log_game.info(f"[DEATH_READY] Enviando muerte desde update (ready_to_remove): {enemy.enemy_id} en ({enemy.x:.1f}, {enemy.y:.1f})")
                     self.net.enviar(event_msg)
 
                 continue
