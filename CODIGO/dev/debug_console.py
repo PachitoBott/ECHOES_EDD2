@@ -187,6 +187,7 @@ class DebugConsole:
             "rooms":    self._cmd_rooms,
             "log":      self._cmd_log,
             "boss":     self._cmd_boss,
+            "skippapers": self._cmd_skippapers,
         }
 
     # ------------------------------------------------------------------ #
@@ -200,6 +201,7 @@ class DebugConsole:
             "  set hp/gold/lives/speed <n>  modifica atributo del jugador",
             "  teleport <i> <j>      teletransporta a sala (i,j)  [alias: tp]",
             "  boss                  teletransporta directamente a la sala del boss",
+            "  skippapers            skipea el minijuego PAPERS (si está activo)",
             "  clear                 elimina enemigos de la sala actual",
             "  god                   toggle invulnerabilidad",
             "  hitboxes              toggle visualización de hitboxes de enemigos",
@@ -336,6 +338,21 @@ class DebugConsole:
         depth = dungeon.depth_map.get((i, j), -1)
         log_debug.info(f"Teletransportado a sala del BOSS ({i},{j}) profundidad={depth}")
         return f"OK — sala del BOSS en ({i},{j})  profundidad={depth}"
+
+    def _cmd_skippapers(self, args: list[str]) -> str:
+        """Skipea el minijuego PAPERS si está activo."""
+        if not self._game.minijuego_activo:
+            return "ERROR — no hay minijuego PAPERS activo en este momento"
+
+        if self._game.minijuego is None:
+            return "ERROR — estado inconsistente: minijuego_activo=True pero minijuego=None"
+
+        # Marcar como aprobado y terminado para skipear el minijuego
+        self._game.minijuego.aprobado = True
+        self._game.minijuego.terminado = True
+
+        log_debug.info("Minijuego PAPERS skipeado — acceso a sala del boss permitido")
+        return "OK — minijuego PAPERS skipeado. Acceso a sala del boss permitido."
 
     def _cmd_clear(self, args: list[str]) -> str:
         room  = self._game.dungeon.current_room
