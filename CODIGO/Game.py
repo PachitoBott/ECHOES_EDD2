@@ -49,6 +49,7 @@ from dev.debug_console import DebugConsole
 # --- Sistemas de efectos ---
 from systems.death_effect import DeathEffectManager
 from systems.power_effects import power_effect_manager
+from systems.minigame_papers import MinijuegoPapers
 # from systems.player_spawn_effect import SpawnEffectManager  # Ahora manejado internamente en Player
 
 
@@ -365,6 +366,10 @@ class Game:
         self._ZONE_BANNER_DURATION: float = 2.8   # segundos totales
         self._ZONE_BANNER_FADE: float = 0.4        # segundos de fade in/out
         self._boss_banner_shown: bool = False      # banner de boss: solo una vez por run
+
+        # Minijuego Papers (antes del boss)
+        self.minijuego_papers: MinijuegoPapers | None = None
+        self.ultima_sala_fue_boss: bool = False
 
         # ---------- Networking (Fase 3) ----------
         self.net: NetworkManager | None = None
@@ -1547,6 +1552,35 @@ class Game:
                 # Consumir efectos pendientes del profesor
                 self._apply_ibarra_pending_effects(prof, room)
                 return
+
+        # --- Minijuego Papers: bloquear gameplay antes del boss ---
+        # Detectar entrada a sala del boss y activar minijuego
+        if getattr(room, "type", "") == "boss" and not self.ultima_sala_fue_boss:
+            # Primera vez que entra a la sala del boss
+            if self.minijuego_papers is None:
+                self.minijuego_papers = MinijuegoPapers(self.cfg.SCREEN_W, self.cfg.SCREEN_H)
+
+            self.minijuego_papers.tick(dt)
+
+            # Procesar eventos del minijuego
+            for event in events:
+                self.minijuego_papers.handle_event(event)
+
+            # Verificar si completó el minijuego
+            if self.minijuego_papers.terminado:
+                if self.minijuego_papers.aprobado:
+                    # Aprobó - desactivar minijuego y continuar en la sala del boss
+                    self.minijuego_papers = None
+                    self.ultima_sala_fue_boss = True
+                else:
+                    # Falló - reiniciar el minijuego
+                    self.minijuego_papers = MinijuegoPapers(self.cfg.SCREEN_W, self.cfg.SCREEN_H)
+
+            return  # Bloquear actualización de gameplay mientras juega
+
+        # Marcar que salimos de sala del boss (para que vuelva a mostrar minijuego si reentras)
+        if getattr(room, "type", "") != "boss":
+            self.ultima_sala_fue_boss = False
 
         # --- Trigger transiciones de zona (PRIMERO, antes de spawnar enemigos) ---
         self._check_zone_transitions()
@@ -2913,6 +2947,15 @@ class Game:
         if self.dialogue.activo:
             pygame.mouse.set_visible(True)  # Mostrar cursor en diálogos
             self.dialogue.draw(self.screen, screen_scale=self.cfg.SCREEN_SCALE)
+            # Consola de debug encima de todo
+            self.debug_console.draw(self.screen)
+            pygame.display.flip()
+            return
+
+        # --- Dibujar minijuego Papers si está activo ---
+        if self.minijuego_papers is not None:
+            pygame.mouse.set_visible(True)  # Mostrar cursor en minijuego
+            self.minijuego_papers.render(self.screen)
             # Consola de debug encima de todo
             self.debug_console.draw(self.screen)
             pygame.display.flip()
