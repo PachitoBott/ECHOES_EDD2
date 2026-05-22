@@ -525,10 +525,15 @@ class Game:
     # ------------------------------------------------------------------ #
     # Nueva partida / regenerar dungeon (misma o nueva seed)
     # ------------------------------------------------------------------ #
-    def start_new_run(self, seed: int | None = None, dungeon_params: dict | None = None) -> None:
+    def start_new_run(self, seed: int | None = None, dungeon_params: dict | None = None, modo_coop: bool = False) -> None:
         """
         Crea una nueva dungeon con la seed dada (o aleatoria si None),
         reubica al jugador y resetea estado de runtime.
+
+        Args:
+            seed: seed de la dungeon (None para aleatoria)
+            dungeon_params: parámetros adicionales de la dungeon
+            modo_coop: True si se inicia en modo cooperativo (con cliente conectado)
         """
         finalize_reason = self._stats_pending_reason or "restart"
         self._finalize_run_statistics(finalize_reason)
@@ -576,6 +581,11 @@ class Game:
         if hasattr(self.player, "reset_loadout"):
             self.player.reset_loadout()
         setattr(self.player, "gold", 999)
+
+        # Almacenar referencia de player en el menú para la próxima vez que se abra
+        # (El menú será recreado la próxima vez que se abre _open_start_menu)
+        # Por ahora solo guardamos la referencia en self para usarla después
+        self._last_player_for_lobby = self.player
 
         # Set up shooting callback for network synchronization
         if self.net:
@@ -801,6 +811,22 @@ class Game:
     def _open_start_menu(self) -> bool:
         pygame.mouse.set_visible(True)
         start_menu = StartMenu(self.screen, self.cfg, stats_manager=self.stats_manager)
+
+        # Pasar referencias para el lobby
+        # Net manager para detectar si hay cliente conectado
+        if self.net:
+            start_menu.set_net_manager(self.net)
+
+        # Player (si ya existe de una sesión anterior)
+        player_para_lobby = None
+        if hasattr(self, '_last_player_for_lobby'):
+            player_para_lobby = self._last_player_for_lobby
+        elif hasattr(self, 'player') and self.player:
+            player_para_lobby = self.player
+
+        if player_para_lobby:
+            start_menu.set_player_animation(player_para_lobby)
+
         menu_result = start_menu.run()
         if not menu_result.start_game:
             if self._run_start_time is not None:
@@ -810,7 +836,7 @@ class Game:
             self.running = False
             return False
         pygame.mouse.set_visible(False)
-        self.start_new_run(seed=menu_result.seed)
+        self.start_new_run(seed=menu_result.seed, modo_coop=menu_result.modo_coop)
         self._skip_frame = True
         return True
 
