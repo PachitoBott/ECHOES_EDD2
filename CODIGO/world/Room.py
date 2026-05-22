@@ -82,23 +82,10 @@ _GLOBAL_OBSTACLE_SCALE: tuple[float, float] = (1.0, 1.0)
 _OBSTACLE_SCALE_OVERRIDES: dict[str, tuple[float, float]] = {}
 
 _OBSTACLE_LIBRARY: dict[tuple[int, int], dict[str, ObstacleSpriteInfo]] = {
-    (1, 1): {
-        "silla": ObstacleSpriteInfo("silla.png", scale=(2, 2)),
-        "hoyo": ObstacleSpriteInfo("hoyo.png", scale=(2, 2)),
-        "caneca": ObstacleSpriteInfo("caneca.png", scale=(2, 2)),
-    },
-    (1, 2): {
-        "tubo_verde": ObstacleSpriteInfo("tubo_verde_1x2.png", scale=(1, 1)),
-    },
+    # Temporal: solo pantalla-1 (2x1) para nuevos obstáculos animados
+    # Los obstáculos antiguos se reactivarán cuando se agreguen sus versiones animadas
     (2, 1): {
         "pantalla": ObstacleSpriteInfo("pantalla_2x1.png"),
-        "impresora": ObstacleSpriteInfo("impresora_2x1.png"),
-    },
-    (2, 2): {
-        "pantallas": ObstacleSpriteInfo("pantallas_2x2.png"),
-    },
-    (4, 2): {
-        "pantallas_azules": ObstacleSpriteInfo("pantallas_azules_4x2.png", scale=(1, 1)),
     },
 }
 
@@ -107,11 +94,8 @@ _OBSTACLE_VARIANTS: dict[tuple[int, int], list[str]] = {
 }
 
 _OBSTACLE_SIZE_WEIGHTS: list[tuple[tuple[int, int], float]] = [
-    ((1, 1), 0.38),
-    ((2, 1), 0.24),
-    ((1, 2), 0.14),
-    ((2, 2), 0.14),
-    ((4, 2), 0.10),
+    # Temporal: solo pantalla (2x1) mientras se implementan obstáculos animados
+    ((2, 1), 1.0),
 ]
 
 _OBSTACLE_FALLBACK_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
