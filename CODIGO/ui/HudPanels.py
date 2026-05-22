@@ -13,21 +13,22 @@ from core.asset_paths import assets_dir as get_assets_dir
 # Función global para cargar corazones desde spritesheet
 # ========================================================================
 
-def cargar_corazones(ruta: str, render_size: int = 64) -> dict:
+def cargar_corazones(ruta: str, render_size: int | None = None) -> dict:
     """
     Carga los 3 estados del corazón desde el spritesheet.
 
     Args:
-        ruta: ruta al archivo Hearts_sprite_sheet.png (512×171)
-        render_size: tamaño final del corazón escalado (default 64×64)
+        ruta: ruta al archivo corazones.png (72×20)
+        render_size: NO SE USA - los corazones se cargan en tamaño raw (24×20)
 
     Returns:
-        Dict con 3 superficies escaladas: {"lleno", "medio", "vacio"}
+        Dict con 3 superficies sin escalar: {"lleno", "medio", "vacio"}
 
     El spritesheet contiene 3 frames horizontales:
-    - Frame 0 (0-170px): corazón lleno (rojo brillante)
-    - Frame 1 (170-341px): corazón medio (partido)
-    - Frame 2 (341-512px): corazón vacío (solo contorno)
+    - Frame 0 (0-23px): corazón lleno (rojo brillante)
+    - Frame 1 (24-47px): corazón medio (partido)
+    - Frame 2 (48-71px): corazón vacío (solo contorno)
+    Cada frame es exactamente 24×20 píxeles (SIN ESCALAR)
     """
     try:
         sheet = pygame.image.load(ruta).convert_alpha()
@@ -35,24 +36,22 @@ def cargar_corazones(ruta: str, render_size: int = 64) -> dict:
         print(f"Error cargando spritesheet de corazones: {e}")
         raise
 
-    w_total = sheet.get_width()    # 512
-    h_total = sheet.get_height()   # 171
-    frame_w = w_total // 3         # ~170px por corazón
-    frame_h = h_total              # 171px
+    w_total = sheet.get_width()    # 72
+    h_total = sheet.get_height()   # 20
+    frame_w = w_total // 3         # 24px por corazón
+    frame_h = h_total              # 20px
 
     estados = {}
     nombres = ["lleno", "medio", "vacio"]
 
     for i, nombre in enumerate(nombres):
-        # Extraer frame del spritesheet
+        # Extraer frame del spritesheet (sin escalar - raw size 24×20)
         surface = pygame.Surface((frame_w, frame_h), pygame.SRCALPHA)
         surface.blit(sheet, (0, 0),
                      pygame.Rect(i * frame_w, 0, frame_w, frame_h))
 
-        # Escalar a tamaño final con scale (nearest-neighbor para pixel art nítido)
-        estados[nombre] = pygame.transform.scale(
-            surface, (render_size, render_size)
-        )
+        # NO escalar - usar tamaño raw
+        estados[nombre] = surface
 
     return estados
 
@@ -509,10 +508,9 @@ class HUDPanel:
         if not hasattr(self, '_corazones_cargados'):
             global _CORAZONES_CACHE
             if '_CORAZONES_CACHE' not in globals():
-                # Usar ruta relativa desde CODIGO/
+                # Usar ruta relativa desde CODIGO/ - nuevo sprite corazones.png (72×20)
                 _CORAZONES_CACHE = cargar_corazones(
-                    "assets/ui/Hearts_sprite_sheet.png",
-                    render_size=64
+                    "assets/ui/corazones.png"
                 )
             self._corazones_cargados = _CORAZONES_CACHE
 
@@ -521,14 +519,14 @@ class HUDPanel:
         # Obtener los estados de los 3 corazones
         estados = get_estado_corazones(lives)
 
-        # Configuración de posicionamiento
-        CORAZON_W = 64
-        CORAZON_H = 64
-        GAP = 8         # separación entre corazones (píxeles)
-        OFFSET_Y = 35   # margen superior dentro del panel (movido hacia abajo)
+        # Configuración de posicionamiento - raw size 24×20 (SIN ESCALAR)
+        CORAZON_W = 24
+        CORAZON_H = 20
+        GAP = 6         # separación entre corazones (píxeles)
+        OFFSET_Y = 35   # margen superior dentro del panel
 
         # Calcular ancho total de corazones para centrarlos horizontalmente
-        total_hearts_width = 3 * CORAZON_W + 2 * GAP  # 208px
+        total_hearts_width = 3 * CORAZON_W + 2 * GAP  # 78px
         panel_width = self.rect.width
         OFFSET_X = (panel_width - total_hearts_width) // 2  # Centrar horizontalmente
 

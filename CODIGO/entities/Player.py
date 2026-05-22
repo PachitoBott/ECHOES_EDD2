@@ -54,7 +54,7 @@ class Player(Entity):
 
         # --- Atributos de supervivencia y movilidad ---
         self.base_speed = self.speed
-        self.base_max_hp = 1  # 1 golpe = 1 vida perdida (para sistema de corazones)
+        self.base_max_hp = 1  # 1 golpe = 1 vida perdida
         self.max_hp = self.base_max_hp
         self.hp = self.max_hp
         self.base_max_lives = CFG.PLAYER_START_LIVES
@@ -67,6 +67,8 @@ class Player(Entity):
         # Conteo de golpes por vida (cada golpe equivale a 1 punto de vida perdido)
         self._hits_taken_current_life = 0
         self._respawn_animating = False
+        # Track previous lives to detect when a complete corazón is lost
+        self._previous_lives = self.lives
 
         self.sprint_multiplier = 1.35
         self.base_sprint_multiplier = self.sprint_multiplier
@@ -276,8 +278,26 @@ class Player(Entity):
         """Consume una vida. Devuelve True si aún quedan vidas disponibles."""
         if self.lives <= 0:
             return False
+        self._previous_lives = self.lives  # Track before decrement
         self.lives -= 1
         return self.lives > 0
+
+    def should_respawn(self) -> bool:
+        """
+        Determina si se debe hacer respawn (resurrección con animación).
+        Solo devuelve True cuando se pierde un CORAZÓN COMPLETO (cada 2 vidas).
+
+        Sistema:
+        - 6→5: No respawn (vida perdida, corazón 3 a medio)
+        - 5→4: SI respawn (corazón 3 a vacío - corazón 3 perdido)
+        - 4→3: No respawn (vida perdida, corazón 2 a medio)
+        - 3→2: SI respawn (corazón 2 a vacío - corazón 2 perdido)
+        - 2→1: No respawn (vida perdida, corazón 1 a medio)
+        - 1→0: SI respawn (corazón 1 a vacío - corazón 1 perdido)
+        """
+        # Respawn happens when we cross to an even number of lives
+        # (transitioning from odd -> even means a complete heart was lost)
+        return self._previous_lives % 2 == 1 and self.lives % 2 == 0
 
     def reset_lives(self) -> None:
         self.lives = self.max_lives
@@ -307,6 +327,10 @@ class Player(Entity):
 
     def _start_respawn_animation(self) -> None:
         """Inicia la animación de muerte/respawn (ahora llamada 'death')."""
+        # Evitar iniciar la animación múltiples veces
+        if self._respawn_animating:
+            return
+
         self._respawn_animating = True
         self._animation_override = "death"
         self._set_current_animation("death", force_reset=True)
@@ -677,6 +701,7 @@ class Player(Entity):
         self.hp = self.max_hp
         self.max_lives = self.base_max_lives
         self.reset_lives()
+        self._previous_lives = self.lives
         self._hits_taken_current_life = 0
         self.invulnerable_timer = 0.0
         self._dash_timer = 0.0
