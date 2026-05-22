@@ -48,6 +48,7 @@ from dev.debug_console import DebugConsole
 
 # --- Sistemas de efectos ---
 from systems.death_effect import DeathEffectManager
+from systems.power_effects import power_effect_manager
 
 
 class RemoteProjectile:
@@ -656,6 +657,9 @@ class Game:
         if hasattr(self, 'tileset_manager') and self.tileset_manager:
             self.tileset_manager.set_zone(1)
             log_game.debug("✅ Tileset reseteado a zona 1")
+
+        # Limpiar efectos de poderes
+        power_effect_manager.limpiar()
 
         log_game.info("✅ Zona y tileset reseteados a inicio")
 
@@ -1539,6 +1543,7 @@ class Game:
         self._sync_enemy_projectiles_to_client(room)  # Sincronizar balas de enemigos
         self._update_projectiles(dt, room)
         self.death_effect_manager.update(dt)
+        power_effect_manager.update(dt)  # Actualizar efectos de poderes (EMP, invulnerabilidad, cura)
         room.update_obstacles(dt)  # Actualizar animaciones de obstáculos
         player_died = self._handle_collisions(room)
         if player_died:
@@ -2455,6 +2460,7 @@ class Game:
         self.projectiles.clear()
         self.enemy_projectiles.clear()
         self.death_effect_manager.clear()
+        power_effect_manager.limpiar()  # Limpiar efectos de poderes al cambiar sala
 
         new_room = self.dungeon.current_room
         depth = self.dungeon.depth_map.get((self.dungeon.i, self.dungeon.j), -1)
@@ -2502,6 +2508,13 @@ class Game:
                     count += 1
                 except Exception:
                     pass
+
+            # Efecto visual: onda expansiva eléctrica cian
+            power_effect_manager.spawn_emp(
+                self.player.x + self.player.w // 2,
+                self.player.y + self.player.h // 2
+            )
+
             if hasattr(self, "subtitulos"):
                 self.subtitulos.agregar(f"[EMP] {count} enemigos congelados!", duracion=2.5, tipo="apoyo")
             log_game.info("EMP usado: %d enemigos congelados", count)
@@ -2512,6 +2525,10 @@ class Game:
             self.player._ibarra_modo_privado = False
             current = getattr(self.player, "invulnerable_timer", 0.0)
             self.player.invulnerable_timer = max(current, 5.0)
+
+            # Efecto visual: aura dorada pulsante
+            power_effect_manager.spawn_invulnerabilidad(self.player)
+
             if hasattr(self, "subtitulos"):
                 self.subtitulos.agregar("[Modo Privado] Invulnerable 5s!", duracion=2.5, tipo="apoyo")
             log_game.info("Modo Privado usado: invulnerable 5s")
@@ -2527,6 +2544,14 @@ class Game:
             self.player.lives = self.player.max_lives
             self.player.hp = self.player.max_hp
             self.player._hits_taken_current_life = 0
+
+            # Efecto visual: partículas verdes/rosas ascendentes + número flotante
+            power_effect_manager.spawn_cura(
+                self.player.x + self.player.w // 2,
+                self.player.y + self.player.h // 2,
+                cantidad_curada=2  # Vida recuperada (2 corazones completos)
+            )
+
             if hasattr(self, "subtitulos"):
                 self.subtitulos.agregar("[Red de Apoyo] ¡Salud restaurada al máximo!", duracion=2.5, tipo="apoyo")
             log_game.info("Red de Apoyo usada: salud restaurada a máximo")
@@ -2755,6 +2780,9 @@ class Game:
 
         # Renderizar efectos de muerte
         self.death_effect_manager.render(self.world)
+
+        # Renderizar efectos de poderes (EMP, invulnerabilidad, cura)
+        power_effect_manager.render(self.world, camera_offset=(0, 0))
 
         for pickup in getattr(room, "pickups", ()):
             pickup.draw(self.world)
