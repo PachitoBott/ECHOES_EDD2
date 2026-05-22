@@ -95,11 +95,6 @@ class Enemy(Entity):
         self._load_elimination_sound()
         self._attack_sound = None  # Será cargado por subclases que ataquen
 
-        print(f"[SPAWN] tipo={self.__class__.__name__} "
-              f"id={getattr(self, 'enemy_id', 'N/A')} "
-              f"pos=({self.x:.1f},{self.y:.1f}) "
-              f"hp={self.hp}")
-
     def _center(self):
         return (self.x + self.w/2, self.y + self.h/2)
 
@@ -185,12 +180,7 @@ class Enemy(Entity):
         if self._is_dying:
             return False
         if amount > 0:
-            antes = self.hp
             self.hp -= amount
-            print(f"[DAÑO] tipo={self.__class__.__name__} "
-                  f"id={getattr(self, 'enemy_id', 'N/A')} "
-                  f"{antes}→{self.hp} "
-                  f"cantidad={amount}")
             self.hit_flash_timer = max(self.hit_flash_timer, self._hit_flash_duration)
             # Reproducir sonido de daño
             if self._damage_sound:
@@ -220,12 +210,7 @@ class Enemy(Entity):
 
     def _begin_death(self) -> None:
         if self._is_dying:
-            print(f"[MUERTE - ALREADY DYING] tipo={self.__class__.__name__} "
-                  f"id={getattr(self, 'enemy_id', 'N/A')}")
             return
-        print(f"[MUERTE - BEGIN_DEATH] tipo={self.__class__.__name__} "
-              f"id={getattr(self, 'enemy_id', 'N/A')} "
-              f"pos=({self.x:.1f},{self.y:.1f})")
         self._is_dying = True
         self.hp = 0
 
@@ -247,8 +232,6 @@ class Enemy(Entity):
 
         # Marcar como listo para remover (sin esperar animación de muerte)
         self._ready_to_remove = True
-        print(f"[MUERTE - READY_TO_REMOVE=True] tipo={self.__class__.__name__} "
-              f"id={getattr(self, 'enemy_id', 'N/A')}")
 
     def _movement_speed_factor(self) -> float:
         return self._slow_multiplier if self._slow_timer > 0.0 else 1.0

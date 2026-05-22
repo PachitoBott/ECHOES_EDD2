@@ -734,12 +734,6 @@ class Game:
                 dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
                 if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
                     # Encontrado enemigo que coincide — removerlo
-                    print(f"[ENEMY REMOVED - MULTIJUGADOR] "
-                          f"tipo={enemy_type} "
-                          f"id={getattr(enemy, 'enemy_id', 'N/A')} "
-                          f"pos=({enemy.x:.1f},{enemy.y:.1f}) "
-                          f"hp={getattr(enemy, 'hp', 'N/A')} "
-                          f"sala={sala_remota}")
                     log_net.info(f"🗑️ Removiendo {enemy_type} en posición ({pos_x}, {pos_y})")
                     room.enemies.pop(i)
                     break
@@ -1199,11 +1193,6 @@ class Game:
             ready_fn = getattr(enemy, "is_ready_to_remove", None)
             dying_fn = getattr(enemy, "is_dying", None)
             if callable(ready_fn) and ready_fn():
-                print(f"[ENEMY REMOVED - READY_TO_REMOVE] "
-                      f"tipo={enemy.__class__.__name__} "
-                      f"id={getattr(enemy, 'enemy_id', 'N/A')} "
-                      f"pos=({enemy.x:.1f},{enemy.y:.1f}) "
-                      f"hp={getattr(enemy, 'hp', 'N/A')}")
                 self._drop_enemy_coins(enemy, room)
 
                 # Notify other players that this enemy died
@@ -1221,21 +1210,11 @@ class Game:
 
                 continue
             if callable(dying_fn) and dying_fn():
-                print(f"[ENEMY - IS_DYING] "
-                      f"tipo={enemy.__class__.__name__} "
-                      f"id={getattr(enemy, 'enemy_id', 'N/A')} "
-                      f"pos=({enemy.x:.1f},{enemy.y:.1f}) "
-                      f"hp={getattr(enemy, 'hp', 'N/A')}")
                 survivors.append(enemy)
                 continue
             if getattr(enemy, "hp", 1) > 0:
                 survivors.append(enemy)
             else:
-                print(f"[ENEMY REMOVED - HP<=0] "
-                      f"tipo={enemy.__class__.__name__} "
-                      f"id={getattr(enemy, 'enemy_id', 'N/A')} "
-                      f"pos=({enemy.x:.1f},{enemy.y:.1f}) "
-                      f"hp={getattr(enemy, 'hp', 'N/A')}")
                 self._drop_enemy_coins(enemy, room)
         defeated_enemies = max(0, initial_enemy_count - len(survivors))
         if defeated_enemies:
