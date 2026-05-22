@@ -521,7 +521,10 @@ class MinijuegoPapers:
         self._render_header(surface)
         self._render_tarjeta(surface, pub)
         self._render_botones(surface)
-        self._render_progreso(surface)
+
+        # Solo mostrar barra cuando NO está en estado fallido
+        if self.estado != self.ESTADO_FALLIDO:
+            self._render_progreso(surface)
 
         if self.estado in (self.ESTADO_FEEDBACK, self.ESTADO_FALLIDO):
             self._render_feedback(surface, pub)
