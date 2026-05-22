@@ -885,8 +885,13 @@ class Game:
                 log_game.debug(f"[ESTADO] Ignorando nuestro propio estado ({origen})")
             else:
                 # Valid remote player state
-                self.remote_players[origen] = ev.datos
+                pos_data = ev.datos.get("pos", [0, 0])
                 sala_remota = ev.datos.get("sala", [0, 0])
+                # [DIAG] Log de estado remoto
+                log_game.warning(f"[ESTADO_REMOTO_NUEVA] {origen} pos=({pos_data[0]:.0f},{pos_data[1]:.0f}) sala={sala_remota}")
+                # [FIX B] Marcar posición como válida cuando se recibe estado real del cliente
+                ev.datos["posicion_valida"] = True
+                self.remote_players[origen] = ev.datos
                 log_game.debug(f"[ESTADO_REMOTO] {origen} está en sala {sala_remota}")
 
         elif ev.tipo == "enemigo_muerto":
@@ -1058,29 +1063,44 @@ class Game:
             # [DIAG] Estado ANTES de cualquier operación
             enemigos_antes = len(room.enemies)
             muertos_visibles = sum(1 for e in room.enemies if getattr(e, '_is_dying', False))
-            log_game.debug(f"[MUERTE_REMOTA] ANTES: {enemigos_antes} enemigos en lista ({muertos_visibles} muriendo), buscando {enemy_type}")
-
-            # Buscar enemigo que coincida con posición y tipo
-            # Usar tolerancia para diferencias por interpolación cliente
-            tolerance = 5.0  # píxeles
+            enemy_id = datos.get("enemy_id")  # NUEVO: obtener el ID del evento
+            log_game.debug(f"[MUERTE_REMOTA] ANTES: {enemigos_antes} enemigos en lista ({muertos_visibles} muriendo), buscando {enemy_type} (ID={enemy_id})")
 
             encontrado = False
             enemy_encontrado = None
             indice_encontrado = -1
 
-            for i, enemy in enumerate(room.enemies):
-                dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
-                dying = getattr(enemy, '_is_dying', False)
-                hp = getattr(enemy, 'hp', -1)
-                log_game.debug(f"[MUERTE_REMOTA]   [{i}] {enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}) dist={dist:.1f} hp={hp} dying={dying}")
+            # PASO 1: Buscar por ID si está disponible (búsqueda exacta)
+            if enemy_id:
+                log_game.debug(f"[MUERTE_REMOTA] [PASO 1] Buscando por ID: {enemy_id}")
+                for i, enemy in enumerate(room.enemies):
+                    if getattr(enemy, 'enemy_id', None) == enemy_id:
+                        log_game.warning(f"[MUERTE_REMOTA] [MATCH_BY_ID] Encontrado por ID en índice {i}: {enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f})")
+                        enemy_encontrado = enemy
+                        indice_encontrado = i
+                        encontrado = True
+                        break
 
-                if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
-                    # Encontrado enemigo que coincide
-                    log_game.debug(f"[MUERTE_REMOTA] [MATCH] Encontrado en índice {i}: {enemy.__class__.__name__}")
-                    enemy_encontrado = enemy
-                    indice_encontrado = i
-                    encontrado = True
-                    break
+            # PASO 2: Si no encontró por ID, buscar por tipo + posición (fallback)
+            if not encontrado:
+                log_game.debug(f"[MUERTE_REMOTA] [PASO 2] Buscando por posición (tolerancia 50px)")
+                tolerance = 50.0  # píxeles
+                min_dist = tolerance + 1
+
+                for i, enemy in enumerate(room.enemies):
+                    dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
+                    dying = getattr(enemy, '_is_dying', False)
+                    hp = getattr(enemy, 'hp', -1)
+                    log_game.debug(f"[MUERTE_REMOTA]   [{i}] {enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}) dist={dist:.1f} hp={hp} dying={dying}")
+
+                    # Buscar el enemigo del tipo correcto MÁS CERCANO dentro de la tolerancia
+                    if dist <= tolerance and enemy.__class__.__name__ == enemy_type and dist < min_dist:
+                        # Encontrado enemigo más cercano que coincide
+                        log_game.debug(f"[MUERTE_REMOTA] [MATCH_BY_POS] Encontrado en índice {i}: {enemy.__class__.__name__} dist={dist:.1f}")
+                        enemy_encontrado = enemy
+                        indice_encontrado = i
+                        min_dist = dist
+                        encontrado = True
 
             if encontrado:
                 # [DIAG] Disparar efecto ANTES de eliminar
@@ -1107,10 +1127,14 @@ class Game:
                 if enemigos_despues == 0:
                     log_game.debug(f"[MUERTE_REMOTA] [CLEAR] ¡SALA LIMPIA! (era el último)")
             else:
-                log_game.debug(f"[MUERTE_REMOTA] [NOTFOUND] NO ENCONTRADO {enemy_type} @ ({pos_x}, {pos_y}) (tol={tolerance})")
+                log_game.warning(f"[MUERTE_REMOTA] [NOTFOUND] NO ENCONTRADO {enemy_type} @ ({pos_x}, {pos_y}) dentro de tolerancia={tolerance} píxeles")
+                log_game.warning(f"[MUERTE_REMOTA] Esto puede ocurrir si: 1) El enemigo ya fue eliminado, 2) Hay desincronización de red (el cliente reportó posición antigua)")
                 # [DIAG] Mostrar qué había
                 if room.enemies:
+                    closest = min(room.enemies, key=lambda e: ((e.x - pos_x) ** 2 + (e.y - pos_y) ** 2) ** 0.5)
+                    closest_dist = ((closest.x - pos_x) ** 2 + (closest.y - pos_y) ** 2) ** 0.5
                     log_game.debug(f"[MUERTE_REMOTA] Enemigos en sala: {[(e.__class__.__name__, f'({e.x:.0f},{e.y:.0f})', getattr(e, 'hp', '?')) for e in room.enemies]}")
+                    log_game.debug(f"[MUERTE_REMOTA] Enemigo más cercano: {closest.__class__.__name__} a {closest_dist:.1f} píxeles")
                 else:
                     log_game.debug(f"[MUERTE_REMOTA] Sala está vacía (0 enemigos)")
 
@@ -1184,6 +1208,8 @@ class Game:
                 dist = ((enemy.x - pos_x) ** 2 + (enemy.y - pos_y) ** 2) ** 0.5
                 if dist <= tolerance and enemy.__class__.__name__ == enemy_type:
                     # Aplica el daño PERO sin enviar otro evento (para evitar loops infinitos)
+                    # [DIAG] Log de daño remoto aplicado
+                    log_game.warning(f"[DAÑO_REMOTO_APLICADO] {enemy.enemy_id} recibe {damage} daño (evento DAÑO_REMOTO desde otro jugador)")
                     if hasattr(enemy, "take_damage"):
                         enemy.take_damage(damage, None)
                     else:
@@ -1447,6 +1473,13 @@ class Game:
         dir_y = datos.get("dir_y", 1)
         damage = datos.get("damage", 1)
 
+        # [FIX] Ignorar disparos desde posiciones sospechosas o inválidas
+        # El cliente se inicializa en el centro de la sala (~400+, 300+), no en (0,0)
+        # Si un disparo viene desde (0,0) o muy cercano, es un error de sincronización
+        if (x == 0 and y == 0) or (x == 0 or y == 0):
+            log_game.warning(f"[DISPARO_CLIENTE] [FILTRADO] Disparo sospechoso desde ({x:.0f},{y:.0f}) - IGNORADO (posición inicial/inválida)")
+            return
+
         # [DIAG] Log del disparo del cliente
         import time
         ts = time.time()
@@ -1468,7 +1501,7 @@ class Game:
             if bullet_rect.colliderect(enemy_rect):
                 # [DIAG] Colisión detectada
                 hp_antes = getattr(enemy, "hp", -1)
-                log_game.debug(f"[DISPARO_CLIENTE] [HIT] Enemigo[{i}] ({enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}), HP={hp_antes})")
+                log_game.warning(f"[DISPARO_CLIENTE] [HIT] Enemigo[{i}] {enemy.enemy_id} ({enemy.__class__.__name__} @ ({enemy.x:.1f}, {enemy.y:.1f}), HP={hp_antes}) - IMPACTADO POR BALA DESDE ({x:.0f},{y:.0f})")
 
                 # Enemigo golpeado - aplicar daño
                 if hasattr(enemy, "take_damage"):
@@ -1481,15 +1514,17 @@ class Game:
 
                 # Si el enemigo muere, enviar evento
                 if enemy.hp <= 0:
-                    log_game.debug(f"[DISPARO_CLIENTE] [DEATH] Enemigo muere. Enviando evento enemigo_muerto...")
+                    enemy_id = getattr(enemy, 'enemy_id', '?')
+                    log_game.warning(f"[DISPARO_CLIENTE] [DEATH] Enemigo {enemy_id} muere. Reportando muerte en ({enemy.x:.1f},{enemy.y:.1f})")
                     from network.protocol import msg_enemigo_muerto
                     evento_muerte = msg_enemigo_muerto(
                         enemy.x, enemy.y,
                         enemy.__class__.__name__,
-                        (self.dungeon.i, self.dungeon.j)
+                        (self.dungeon.i, self.dungeon.j),
+                        enemy_id=enemy_id  # NUEVO: incluir el ID para búsqueda exacta
                     )
                     self.net.enviar(evento_muerte)
-                    log_game.debug(f"[DISPARO_CLIENTE] [DEATH] Evento enviado. Quedarán {enemigos_antes - 1} enemigos")
+                    log_game.warning(f"[DISPARO_CLIENTE] [DEATH] Evento de muerte enviado al servidor con ID={enemy_id}. Quedarán {enemigos_antes - 1} enemigos")
                 else:
                     log_game.debug(f"[DISPARO_CLIENTE] Enemigo sobrevivió (HP={hp_despues})")
                 break
@@ -1805,12 +1840,19 @@ class Game:
         local_y = self.player.y + self.player.h / 2
         local_dist = math.hypot(local_x - ex, local_y - ey)
 
-        # Distancia al jugador remoto (si existe)
+        # Distancia al jugador remoto (si existe y tiene posición válida)
         remote_dist = float('inf')
         remote_pos = None
 
         if self.remote_players:
             for rol, datos in self.remote_players.items():
+                # [FIX B] Solo considerar jugadores remotos con posición válida
+                # Esto previene targeting incorrecto mientras se sincroniza la posición inicial
+                posicion_valida = datos.get("posicion_valida", True)
+                if not posicion_valida:
+                    log_game.debug(f"[TARGETING] Ignorando {rol}: posición aún no validada")
+                    continue
+
                 sala_list = datos.get("sala", [0, 0])
                 sala_remota = (
                     (sala_list[0], sala_list[1])
@@ -1830,6 +1872,11 @@ class Game:
                         remote_x = float(datos.get("pos_x", 0))
                         remote_y = float(datos.get("pos_y", 0))
 
+                    # [FIX B] Ignorar posiciones en (0,0) que son inválidas
+                    if remote_x == 0 and remote_y == 0:
+                        log_game.debug(f"[TARGETING] Ignorando {rol}: posición (0,0) sospechosa")
+                        continue
+
                     remote_dist = math.hypot(
                         (remote_x + 9) - ex,
                         (remote_y + 12) - ey
@@ -1848,12 +1895,12 @@ class Game:
                     self.h = 24
 
             # [DEBUG] Log de targeting
-            log_game.debug(f"[TARGETING] {enemy.enemy_id} local_dist={local_dist:.1f} remote_dist={remote_dist:.1f} REMOTE ({remote_pos[0]:.0f},{remote_pos[1]:.0f}) en sala {room_pos}")
+            log_game.warning(f"[TARGETING] {enemy.enemy_id} APUNTA A REMOTO: local_dist={local_dist:.1f} remote_dist={remote_dist:.1f} pos_remota=({remote_pos[0]:.0f},{remote_pos[1]:.0f}) sala={room_pos}")
             return RemotePlayer(remote_pos[0], remote_pos[1])
         else:
             # [DEBUG] Log de targeting
             if hasattr(self, 'remote_players') and self.remote_players:
-                log_game.debug(f"[TARGETING] {enemy.enemy_id} local_dist={local_dist:.1f} remote_players={len(self.remote_players)} pero no en sala {room_pos}")
+                log_game.warning(f"[TARGETING] {enemy.enemy_id} APUNTA A LOCAL: dist={local_dist:.1f} remoto_dist={remote_dist:.1f} remoto_existe={len(self.remote_players)>0} remoto_en_sala={remote_pos is not None}")
             return self.player
 
     def _update_enemies(self, dt: float, room) -> None:
@@ -1938,8 +1985,13 @@ class Game:
             # Obtener el jugador más cercano para disparo también
             closest_player = self._get_closest_player_for_enemy(enemy)
             fired = enemy.maybe_shoot(dt, closest_player, room, self.enemy_projectiles)
-            if fired and callable(notify):
-                notify()
+            if fired:
+                # [DIAG] Rastrear cuándo dispara y contra quién
+                target_pos = (closest_player.x, closest_player.y) if closest_player else (0, 0)
+                target_type = "REMOTO" if (closest_player and closest_player != self.player) else "LOCAL"
+                log_game.warning(f"[DISPARO_ENEMIGO] {enemy.enemy_id} disparó hacia {target_type} en ({target_pos[0]:.0f},{target_pos[1]:.0f}), enemigo en ({enemy.x:.0f},{enemy.y:.0f})")
+                if callable(notify):
+                    notify()
 
     def _update_remote_enemies(self, dt: float) -> None:
         """
@@ -2219,6 +2271,13 @@ class Game:
                         projectile.alive = False
                         break
 
+                # Procesar colisión con boss si existe
+                if projectile.alive and hasattr(room, "boss") and room.boss is not None:
+                    if r_proj.colliderect(room.boss.rect):
+                        room.boss.take_damage(1)
+                        self._apply_projectile_effects(projectile, room.boss)
+                        projectile.alive = False
+
         # Remote projectiles from other players also hit enemies
         for projectile in self.remote_projectiles[:]:
             if not projectile.alive:
@@ -2233,6 +2292,13 @@ class Game:
                     self._apply_projectile_effects(projectile, enemy)
                     projectile.alive = False
                     break
+
+            # Procesar colisión con boss si existe
+            if projectile.alive and hasattr(room, "boss") and room.boss is not None:
+                if r_proj.colliderect(room.boss.rect):
+                    room.boss.take_damage(1)
+                    self._apply_projectile_effects(projectile, room.boss)
+                    projectile.alive = False
 
         player_rect = self.player.rect()
         player_invulnerable = getattr(self.player, "is_invulnerable", lambda: False)()
@@ -2293,11 +2359,13 @@ class Game:
                     from network.protocol import msg_enemigo_muerto
                     enemy_type = enemy.__class__.__name__
                     sala = (self.dungeon.i, self.dungeon.j)
+                    enemy_id = getattr(enemy, 'enemy_id', None)
                     event_msg = msg_enemigo_muerto(
                         pos_x=enemy.x,
                         pos_y=enemy.y,
                         tipo=enemy_type,
-                        sala=sala
+                        sala=sala,
+                        enemy_id=enemy_id  # NUEVO: incluir el ID para búsqueda exacta
                     )
                     self.net.enviar(event_msg)
 
@@ -2308,6 +2376,8 @@ class Game:
             if getattr(enemy, "hp", 1) > 0:
                 survivors.append(enemy)
             else:
+                # [DIAG] Enemigo muere por HP <= 0
+                log_game.warning(f"[ENEMIES_CLEANUP] {enemy.enemy_id} eliminado: hp={enemy.hp}, dying={callable(dying_fn) and dying_fn()}, ready_to_remove={callable(ready_fn) and ready_fn()}")
                 self._drop_enemy_coins(enemy, room)
         defeated_enemies = max(0, initial_enemy_count - len(survivors))
         if defeated_enemies:
@@ -3106,6 +3176,11 @@ class Game:
         )
         self.screen.blit(scaled, (0, 0))
 
+        # Renderizar barra de vida del boss si existe en la sala actual
+        room = self.dungeon.current_room
+        if hasattr(room, "boss") and room.boss is not None and room.boss.vivo:
+            self._render_boss_health_bar()
+
         # --- Dibujar cinemáticas si están activas ---
         if self.cinematics.activo:
             # Llenar pantalla de negro para ocultar el juego de fondo
@@ -3448,6 +3523,88 @@ class Game:
 
         # Munición eliminada: el jugador dispara infinitamente con cadencia fija
         return icon_rect
+
+    def _render_boss_health_bar(self) -> None:
+        """Renderiza la barra de vida del boss decorada inmóvil en el centro superior."""
+        room = self.dungeon.current_room
+        if not (hasattr(room, "boss") and room.boss is not None):
+            return
+
+        boss = room.boss
+
+        # Dimensiones y posición de la barra (inmóvil en centro superior)
+        bar_width = 600
+        bar_height = 24
+        bar_x = (self.cfg.SCREEN_W * self.cfg.SCREEN_SCALE - bar_width) // 2  # Centrado en pantalla
+        bar_y = 150  # Más abajo para estar por encima del tileset
+        padding = 4
+
+        # --- Fondo decorativo ---
+        # Sombra exterior
+        pygame.draw.rect(self.screen, (0, 0, 0), (bar_x - 2, bar_y - 2, bar_width + 4, bar_height + 4))
+
+        # Fondo principal (gris oscuro)
+        pygame.draw.rect(self.screen, (30, 30, 40), (bar_x, bar_y, bar_width, bar_height))
+
+        # Borde dorado/amarillo
+        pygame.draw.rect(self.screen, (200, 160, 60), (bar_x, bar_y, bar_width, bar_height), 2)
+
+        # Borde interior más sutil
+        pygame.draw.rect(self.screen, (100, 80, 30), (bar_x + 1, bar_y + 1, bar_width - 2, bar_height - 2), 1)
+
+        # --- Barra de vida ---
+        if boss.max_hp > 0:
+            hp_ratio = max(0.0, boss.hp / boss.max_hp)
+            health_width = int((bar_width - 2 * padding) * hp_ratio)
+
+            # Color: rojo si HP bajo, amarillo si medio, verde si alto
+            if hp_ratio > 0.5:
+                color = (0, 200, 80)  # Verde
+            elif hp_ratio > 0.25:
+                color = (200, 180, 0)  # Amarillo
+            else:
+                color = (200, 40, 40)  # Rojo
+
+            # Fondo de la barra
+            bar_bg_rect = pygame.Rect(bar_x + padding, bar_y + padding, bar_width - 2 * padding, bar_height - 2 * padding)
+            pygame.draw.rect(self.screen, (20, 20, 25), bar_bg_rect)
+
+            # Barra de vida
+            if health_width > 0:
+                health_rect = pygame.Rect(bar_x + padding, bar_y + padding, health_width, bar_height - 2 * padding)
+                pygame.draw.rect(self.screen, color, health_rect)
+
+                # Efecto de brillo en la barra
+                pygame.draw.line(self.screen, (255, 255, 255),
+                                (bar_x + padding, bar_y + padding),
+                                (bar_x + padding + health_width, bar_y + padding), 1)
+
+        # --- Nombre del boss: ECHO ---
+        try:
+            title_font = pygame.font.SysFont("arial", 18, bold=True)
+            echo_text = title_font.render("ECHO", True, (200, 160, 60))
+            echo_rect = echo_text.get_rect()
+            echo_rect.center = (bar_x + bar_width // 2, bar_y - 18)
+
+            # Sombra del texto
+            shadow_text = title_font.render("ECHO", True, (0, 0, 0))
+            shadow_rect = shadow_text.get_rect(center=(echo_rect.centerx + 1, echo_rect.centery + 1))
+            self.screen.blit(shadow_text, shadow_rect)
+
+            # Texto principal
+            self.screen.blit(echo_text, echo_rect)
+        except Exception:
+            pass
+
+        # --- Texto de HP (opcional) ---
+        try:
+            hp_font = pygame.font.SysFont("arial", 10)
+            hp_text = hp_font.render(f"{int(boss.hp)} / {int(boss.max_hp)}", True, (200, 200, 200))
+            hp_text_rect = hp_text.get_rect()
+            hp_text_rect.center = (bar_x + bar_width // 2, bar_y + bar_height // 2 - 1)
+            self.screen.blit(hp_text, hp_text_rect)
+        except Exception:
+            pass
 
     # MÉTODOS DE BATERÍAS REMOVIDOS - Reemplazados con sistema de corazones en HUDPanel
     # - _load_battery_states()
