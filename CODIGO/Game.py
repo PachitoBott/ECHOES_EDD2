@@ -918,6 +918,7 @@ class Game:
         self._update_enemies(dt, room)
         self._update_projectiles(dt, room)
         self.death_effect_manager.update(dt)
+        room.update_obstacles(dt)  # Actualizar animaciones de obstáculos
         player_died = self._handle_collisions(room)
         if player_died:
             return

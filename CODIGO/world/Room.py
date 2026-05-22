@@ -398,13 +398,33 @@ class Room:
         ts = CFG.TILE_SIZE
         rect = pygame.Rect(tx * ts, ty * ts, w_tiles * ts, h_tiles * ts)
         tiles = {(tx + dx, ty + dy) for dy in range(h_tiles) for dx in range(w_tiles)}
-        self.obstacles.append({
+
+        # Diccionario base del obstáculo
+        obstacle_dict = {
             "rect": rect,
             "tiles": tiles,
             "size": (w_tiles, h_tiles),
             "variant": (variant or "").lower().strip() or "default",
-        })
+        }
+
+        # Si es una pantalla (2x1) animada, crear instancia de ObstaculoPantalla
+        if obstacle_dict["variant"] == "pantalla" and w_tiles == 2 and h_tiles == 1:
+            from entities.obstacles import ObstaculoPantalla
+            animated_instance = ObstaculoPantalla(rect.x, rect.y, ts)
+            obstacle_dict["_animated_instance"] = animated_instance
+
+        self.obstacles.append(obstacle_dict)
         self._obstacle_tiles.update(tiles)
+
+    def update_obstacles(self, dt: float) -> None:
+        """
+        Actualiza la animación de obstáculos animados (e.g., ObstaculoPantalla).
+
+        Llamar esto cada frame desde Game._update().
+        """
+        for obstacle in self.obstacles:
+            if "_animated_instance" in obstacle:
+                obstacle["_animated_instance"].update(dt)
 
     def generate_obstacles(self, rng: random.Random | None = None, max_density: float = 0.08) -> None:
         if self.bounds is None:
@@ -1057,16 +1077,22 @@ class Room:
 
         if self.obstacles:
             for obstacle in self.obstacles:
-                sprite = _load_obstacle_sprite(obstacle["size"], obstacle.get("variant"))
-                variant_slug = (obstacle.get("variant") or "").lower().strip() or "default"
-                offset = _OBSTACLE_SPRITE_OFFSETS.get((obstacle["size"], variant_slug), (0, 0))
-                surf.blit(
-                    sprite,
-                    (
-                        obstacle["rect"].x + offset[0],
-                        obstacle["rect"].y + offset[1],
-                    ),
-                )
+                # Si tiene una instancia animada (e.g., ObstaculoPantalla), renderizarla
+                if "_animated_instance" in obstacle:
+                    animated_obs = obstacle["_animated_instance"]
+                    animated_obs.render(surf, camera_offset=(0, 0))
+                else:
+                    # Fallback: renderizar sprite estático como antes
+                    sprite = _load_obstacle_sprite(obstacle["size"], obstacle.get("variant"))
+                    variant_slug = (obstacle.get("variant") or "").lower().strip() or "default"
+                    offset = _OBSTACLE_SPRITE_OFFSETS.get((obstacle["size"], variant_slug), (0, 0))
+                    surf.blit(
+                        sprite,
+                        (
+                            obstacle["rect"].x + offset[0],
+                            obstacle["rect"].y + offset[1],
+                        ),
+                    )
 
         if self.type == "treasure" and self.treasure:
             self._draw_treasure(surf)
