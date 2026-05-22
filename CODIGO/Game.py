@@ -2051,6 +2051,13 @@ class Game:
                 r_proj = projectile.rect()
                 for enemy in room.enemies:
                     if r_proj.colliderect(enemy.rect()):
+                        # [FIX] No permitir que un enemigo se dañe con sus propios proyectiles
+                        enemy_id = getattr(enemy, "enemy_id", None)
+                        projectile_owner = getattr(projectile, "owner_id", None)
+                        if projectile_owner and enemy_id == projectile_owner:
+                            # Este es el enemigo que disparó el proyectil — ignorar
+                            continue
+
                         if hasattr(enemy, "take_damage"):
                             enemy.take_damage(1, (projectile.dx, projectile.dy))
                         else:
@@ -2066,6 +2073,13 @@ class Game:
             r_proj = projectile.rect()
             for enemy in room.enemies:
                 if r_proj.colliderect(enemy.rect()):
+                    # [FIX] No permitir que un enemigo se dañe con sus propios proyectiles (incluso remotos)
+                    enemy_id = getattr(enemy, "enemy_id", None)
+                    projectile_owner = getattr(projectile, "owner_id", None)
+                    if projectile_owner and enemy_id == projectile_owner:
+                        # Este es el enemigo que disparó el proyectil — ignorar
+                        continue
+
                     if hasattr(enemy, "take_damage"):
                         enemy.take_damage(1, (projectile.dx, projectile.dy))
                     else:
