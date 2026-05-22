@@ -82,10 +82,15 @@ _GLOBAL_OBSTACLE_SCALE: tuple[float, float] = (1.0, 1.0)
 _OBSTACLE_SCALE_OVERRIDES: dict[str, tuple[float, float]] = {}
 
 _OBSTACLE_LIBRARY: dict[tuple[int, int], dict[str, ObstacleSpriteInfo]] = {
-    # Temporal: solo pantalla-1 (2x1) para nuevos obstáculos animados
-    # Los obstáculos antiguos se reactivarán cuando se agreguen sus versiones animadas
+    # Obstáculos animados basados en código (proporciones y clases en entities/obstacles.py)
     (2, 1): {
-        "pantalla": ObstacleSpriteInfo("pantalla_2x1.png"),
+        "pantalla": ObstacleSpriteInfo("pantalla_2x1.png"),  # ObstaculoPantalla
+    },
+    (2, 2): {
+        "pantalla2": ObstacleSpriteInfo("pantalla_2x2.png"),  # ObstaculoPantalla2
+    },
+    (1, 2): {
+        "tubo": ObstacleSpriteInfo("tubo_1x2.png"),  # ObstaculoTubo
     },
 }
 
@@ -94,8 +99,10 @@ _OBSTACLE_VARIANTS: dict[tuple[int, int], list[str]] = {
 }
 
 _OBSTACLE_SIZE_WEIGHTS: list[tuple[tuple[int, int], float]] = [
-    # Temporal: solo pantalla (2x1) mientras se implementan obstáculos animados
-    ((2, 1), 1.0),
+    # Mezcla aleatoria de obstáculos animados
+    ((2, 1), 0.40),   # Pantalla 2x1
+    ((2, 2), 0.30),   # Pantalla grande 2x2
+    ((1, 2), 0.30),   # Tubo 1x2
 ]
 
 _OBSTACLE_FALLBACK_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
@@ -407,10 +414,25 @@ class Room:
             "variant": (variant or "").lower().strip() or "default",
         }
 
-        # Si es una pantalla (2x1) animada, crear instancia de ObstaculoPantalla
-        if obstacle_dict["variant"] == "pantalla" and w_tiles == 2 and h_tiles == 1:
+        # Crear instancia animada según el tipo de obstáculo
+        variant_lower = obstacle_dict["variant"]
+
+        if variant_lower == "pantalla" and w_tiles == 2 and h_tiles == 1:
+            # Pantalla 2x1
             from entities.obstacles import ObstaculoPantalla
             animated_instance = ObstaculoPantalla(rect.x, rect.y, ts)
+            obstacle_dict["_animated_instance"] = animated_instance
+
+        elif variant_lower == "pantalla2" and w_tiles == 2 and h_tiles == 2:
+            # Pantalla grande 2x2
+            from entities.obstacles import ObstaculoPantalla2
+            animated_instance = ObstaculoPantalla2(rect.x, rect.y, ts)
+            obstacle_dict["_animated_instance"] = animated_instance
+
+        elif variant_lower == "tubo" and w_tiles == 1 and h_tiles == 2:
+            # Tubo 1x2
+            from entities.obstacles import ObstaculoTubo
+            animated_instance = ObstaculoTubo(rect.x, rect.y, ts)
             obstacle_dict["_animated_instance"] = animated_instance
 
         self.obstacles.append(obstacle_dict)
