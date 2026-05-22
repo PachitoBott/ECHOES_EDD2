@@ -492,7 +492,12 @@ class Boss:
                 jugador_objetivo,
                 self.proyectiles
             )
-        # Los demás ataques (zigzag, laser, emp) se implementarán en Paso 4-5
+        elif nombre == "zigzag":
+            ataque = AtaqueZigzag(
+                boca_x, boca_y,
+                self.proyectiles
+            )
+        # Los demás ataques (laser, emp) se implementarán en Paso 5-6
         else:
             print(f"[BOSS] Ataque '{nombre}' aún no implementado")
             return
@@ -866,6 +871,100 @@ class AtaqueFanout(AtaqueBoss):
                 velocidad=self.VELOCIDAD_HIJO
             )
             self.lista_proyectiles.append(hijo)
+
+    def render(self, surface: pygame.Surface,
+               camera_offset=(0, 0)) -> None:
+        """Los proyectiles se renderizan solos en _render_ataques()."""
+        pass
+
+
+# ============================================================================
+# ATAQUE 2: ZIGZAG DE BALAS
+# ============================================================================
+
+class AtaqueZigzag(AtaqueBoss):
+    """
+    Dispara 12 proyectiles en rápida sucesión (cada 0.08 segundos)
+    con un patrón zigzag descendente.
+    Los proyectiles se desvían alternadamente izquierda/derecha.
+    """
+
+    N_BALAS = 12
+    INTERVALO = 0.08  # segundos entre disparos
+    VELOCIDAD = 320  # px/segundo
+    ANG_BASE = 90  # grados (casi vertical hacia abajo)
+    DESVIACION = 35  # grados alternados (+/-)
+    DAÑO = 1
+    RADIO = 7
+
+    def __init__(self, boca_x: float, boca_y: float,
+                 lista_proyectiles: list):
+        """
+        Args:
+            boca_x, boca_y: Posición donde se generan los proyectiles
+            lista_proyectiles: Lista donde se añaden los proyectiles generados
+        """
+        super().__init__()
+        self.boca_x = boca_x
+        self.boca_y = boca_y
+        self.lista_proyectiles = lista_proyectiles
+
+        # Control del disparo
+        self.balas_disparadas = 0
+        self.timer_bala = 0.0
+        self.lado = 1  # Alterna +1 (derecha) y -1 (izquierda)
+
+        print(f"[ATAQUE] AtaqueZigzag: {self.N_BALAS} balas en zigzag")
+
+    def update(self, dt: float, jugadores: list) -> None:
+        """
+        Dispara una bala cada intervalo.
+        Termina cuando se han disparado todas las balas.
+        """
+        if self.balas_disparadas >= self.N_BALAS:
+            self.terminado = True
+            return
+
+        self.timer_bala += dt
+        if self.timer_bala >= self.INTERVALO:
+            self.timer_bala -= self.INTERVALO
+            self._disparar_bala()
+
+    def _disparar_bala(self) -> None:
+        """
+        Dispara una bala individual del zigzag.
+        Varía el ángulo entre 90±35 grados para efecto de zigzag.
+        """
+        # Ángulo: casi vertical con desviación alternada
+        ang_deg = self.ANG_BASE + self.lado * self.DESVIACION
+        ang_rad = math.radians(ang_deg)
+
+        # Convertir ángulo a vector de dirección
+        dx = math.cos(ang_rad)
+        dy = math.sin(ang_rad)
+
+        # Posición X ligeramente aleatoria (dentro de 80px)
+        # para dar más variedad al patrón
+        offset_x = random.uniform(-80, 80)
+
+        # Crear proyectil
+        proj = ProyectilBoss(
+            x=self.boca_x + offset_x,
+            y=self.boca_y,
+            dx=dx,
+            dy=dy,
+            daño=self.DAÑO,
+            radio=self.RADIO,
+            color=(200, 50, 200),  # Púrpura
+            color_borde=(255, 180, 255),  # Púrpura claro
+            puede_explotar=False,
+            velocidad=self.VELOCIDAD
+        )
+        self.lista_proyectiles.append(proj)
+
+        # Contabilizar disparo y alternar lado
+        self.balas_disparadas += 1
+        self.lado *= -1  # Alternar dirección (izquierda <-> derecha)
 
     def render(self, surface: pygame.Surface,
                camera_offset=(0, 0)) -> None:
