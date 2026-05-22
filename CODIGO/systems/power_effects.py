@@ -15,13 +15,13 @@ import random
 class EfectoEMP:
     """
     Onda expansiva circular que se expande desde el centro del jugador.
-    Color: azul eléctrico cian.
+    Color: amarillo eléctrico.
     Duración: ~0.8 segundos.
     """
 
-    COLOR_PRINCIPAL = (0, 200, 255)      # cian eléctrico
-    COLOR_SECUNDARIO = (100, 100, 255)   # azul eléctrico
-    COLOR_BORDE = (200, 240, 255)        # blanco azulado
+    COLOR_PRINCIPAL = (255, 255, 0)      # amarillo brillante
+    COLOR_SECUNDARIO = (255, 200, 0)     # amarillo naranja
+    COLOR_BORDE = (255, 255, 180)        # amarillo claro
 
     VELOCIDAD_EXPANSION = 600   # px/segundo
     RADIO_MAXIMO = 400          # px — hasta dónde llega la onda
@@ -132,20 +132,20 @@ class EfectoEMP:
             px2 = px + int(math.cos(angulo + 0.3) * chispa["largo"])
             py2 = py + int(math.sin(angulo + 0.3) * chispa["largo"])
 
-            pygame.draw.line(surface, (0, 200, 255, chispa["alpha"]), (px, py), (px2, py2), 2)
+            pygame.draw.line(surface, (255, 255, 0, chispa["alpha"]), (px, py), (px2, py2), 2)
 
 
 class EfectoInvulnerabilidad:
     """
-    Aura pulsante dorada que rodea al jugador mientras
+    Aura pulsante azul que rodea al jugador mientras
     está protegido. Emite destellos de luz. Flash al recibir impacto.
-    Color: dorado (#FFD700).
+    Color: azul (#0088FF).
     Duración: 5 segundos (sincronizada con invulnerable_timer).
     """
 
-    COLOR_AURA = (255, 215, 0)        # dorado
-    COLOR_DESTELLO = (255, 255, 180)  # blanco dorado
-    COLOR_INTERIOR = (255, 180, 0)    # naranja dorado
+    COLOR_AURA = (0, 136, 255)        # azul brillante
+    COLOR_DESTELLO = (180, 220, 255)  # azul claro
+    COLOR_INTERIOR = (0, 200, 255)    # azul cian
 
     RADIO_BASE = 32       # px — radio del aura alrededor del jugador
     PULSO_VELOCIDAD = 3.0  # Hz — veces que pulsa por segundo
@@ -198,13 +198,12 @@ class EfectoInvulnerabilidad:
                 self.terminado = True
 
     def render(self, surface: pygame.Surface, camera_offset=(0, 0)):
-        """Renderiza aura pulsante + destellos + explosión final."""
+        """Renderiza aura pulsante + destellos."""
         cx = int(self.jugador.x - camera_offset[0] + self.jugador.w // 2)
         cy = int(self.jugador.y - camera_offset[1] + self.jugador.h // 2)
 
-        # Si está terminando, mostrar explosión
+        # Si está terminando, no mostrar nada (sin rastros)
         if self.terminando:
-            self._render_explosion_final(surface, cx, cy)
             return
 
         # Pulso senoidal
@@ -242,14 +241,15 @@ class EfectoInvulnerabilidad:
             pygame.draw.line(surface, (*self.COLOR_DESTELLO, alpha), (x1, y1), (x2, y2), 2)
 
     def _render_explosion_final(self, surface, cx, cy):
-        """Explosión de partículas doradas al terminar."""
+        """Explosión de partículas azules al terminar (muy tenue)."""
         for p in self.particulas_fin:
             if p["alpha"] <= 0:
                 continue
             dist = self.timer_fin * p["velocidad"]
             px = cx + int(math.cos(p["angulo"]) * dist)
             py = cy + int(math.sin(p["angulo"]) * dist)
-            alpha = max(0, int(p["alpha"]))
+            # Reducir alpha drásticamente para que sea casi invisible
+            alpha = max(0, int(p["alpha"] * 0.3))  # Solo 30% de opacidad
             pygame.draw.rect(surface, (*self.COLOR_AURA, alpha), (px, py, p["size"], p["size"]))
 
 
