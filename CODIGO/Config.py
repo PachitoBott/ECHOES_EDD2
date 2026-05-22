@@ -54,7 +54,7 @@ class Config:
     SCREEN_SCALE: int = 2
     FPS: int = 120
 
-    PLAYER_START_LIVES: int = 10
+    PLAYER_START_LIVES: int = 6  # 3 corazones x 2 puntos = 6 vidas (para sistema de corazones)
     
     ROOM_W_MIN: int = 12
     ROOM_W_MAX: int = 18
