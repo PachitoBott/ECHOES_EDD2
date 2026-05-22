@@ -26,6 +26,9 @@ class WeaponSpec:
 class Weapon:
     """Instancia runtime de un arma concreta."""
 
+    # Factor de cuánto momentum hereda la bala (0.0 = sin momentum, 0.65 = fuerte)
+    BALA_MOMENTUM_FACTOR = 0.65
+
     def __init__(self, spec: WeaponSpec, cooldown_scale: float = 1.0) -> None:
         self.spec = spec
         self._cooldown = 0.0
@@ -47,13 +50,16 @@ class Weapon:
     # ----------------------------- Estado (Munición eliminada) ---------
 
     # ------------------------ Generación balas -----------------------
-    def fire(self, origin: tuple[float, float], direction: tuple[int, int]) -> List[Projectile]:
+    def fire(self, origin: tuple[float, float], direction: tuple[int, int],
+             player_vel_x: float = 0.0, player_vel_y: float = 0.0) -> List[Projectile]:
         """Dispara proyectiles en una dirección cardinal.
 
         Args:
             origin: (ox, oy) - posición de origen del disparo
             direction: (dir_x, dir_y) - dirección cardinal (0,-1) arriba, (0,1) abajo,
                                        (-1,0) izquierda, (1,0) derecha
+            player_vel_x: velocidad X actual del jugador para momentum heredado
+            player_vel_y: velocidad Y actual del jugador para momentum heredado
         """
         if not self.can_fire():
             return []
@@ -70,14 +76,34 @@ class Weapon:
             spawn_x = ox + dir_x * self.spec.forward_spawn + perp_x * offset
             spawn_y = oy + dir_y * self.spec.forward_spawn + perp_y * offset
 
+            # Velocidad base de la bala en la dirección de disparo
+            vel_x_base = float(dir_x) * self.spec.bullet_speed
+            vel_y_base = float(dir_y) * self.spec.bullet_speed
+
+            # Aplicar momentum heredado del movimiento del jugador
+            # La bala recibe una fracción de la velocidad del jugador
+            vel_x_final = vel_x_base + player_vel_x * self.BALA_MOMENTUM_FACTOR
+            vel_y_final = vel_y_base + player_vel_y * self.BALA_MOMENTUM_FACTOR
+
+            # Recalcular dx, dy normalizados con la velocidad final
+            vel_mag = math.hypot(vel_x_final, vel_y_final)
+            if vel_mag > 0:
+                dx_final = vel_x_final / vel_mag
+                dy_final = vel_y_final / vel_mag
+                speed_final = vel_mag
+            else:
+                dx_final = float(dir_x)
+                dy_final = float(dir_y)
+                speed_final = self.spec.bullet_speed
+
             # En sistema cardinal, sin spread angular
             bullets.append(
                 Projectile(
                     spawn_x,
                     spawn_y,
-                    float(dir_x),  # Dirección cardinal pura, sin desviación
-                    float(dir_y),
-                    speed=self.spec.bullet_speed,
+                    dx_final,  # Dirección con momentum incluido
+                    dy_final,
+                    speed=speed_final,
                     radius=self.spec.projectile_radius,
                     color=self.spec.projectile_color,
                     effects=[dict(effect) for effect in self.spec.on_hit_effects],
