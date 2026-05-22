@@ -525,7 +525,7 @@ class HUDPanel:
         CORAZON_W = 64
         CORAZON_H = 64
         GAP = 8         # separación entre corazones (píxeles)
-        OFFSET_Y = 15   # margen superior dentro del panel
+        OFFSET_Y = 35   # margen superior dentro del panel (movido hacia abajo)
 
         # Calcular ancho total de corazones para centrarlos horizontalmente
         total_hearts_width = 3 * CORAZON_W + 2 * GAP  # 208px
