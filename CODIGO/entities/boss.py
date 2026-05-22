@@ -6,6 +6,8 @@ Se desplaza lateralmente con animación idle.
 """
 
 import os
+import math
+import random
 import pygame
 from typing import Optional
 
@@ -306,3 +308,181 @@ class Boss:
             self.render_w,
             self.render_h
         )
+
+
+# ============================================================================
+# SISTEMA DE ATAQUES DEL BOSS
+# ============================================================================
+
+class AtaqueBoss:
+    """
+    Clase base para todos los ataques del boss.
+    Cada ataque hereda de esta clase y define su comportamiento único.
+    """
+    def __init__(self):
+        self.activo = True
+        self.terminado = False
+
+    def update(self, dt: float, jugadores: list):
+        """
+        Actualiza el estado del ataque.
+
+        Args:
+            dt: Delta time en segundos
+            jugadores: Lista de objetos jugador (pueden ser None)
+        """
+        raise NotImplementedError
+
+    def render(self, surface: pygame.Surface, camera_offset=(0, 0)):
+        """
+        Renderiza los efectos visuales del ataque.
+
+        Args:
+            surface: Superficie donde renderizar
+            camera_offset: Offset de cámara (x, y)
+        """
+        raise NotImplementedError
+
+
+class ProyectilBoss:
+    """
+    Proyectil específico del boss.
+    Soporta movimiento normal y comportamientos especiales
+    (pausa antes de explotar, etc.).
+    """
+
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        dx: float,
+        dy: float,
+        daño: int = 1,
+        radio: int = 8,
+        color=(255, 80, 80),
+        color_borde=(255, 200, 200),
+        puede_explotar: bool = False,
+        tiempo_explosion: float = 0.0,
+        velocidad: float = 180.0
+    ):
+        """
+        Args:
+            x, y: Posición inicial
+            dx, dy: Dirección normalizada (rangos -1 a 1)
+            daño: Daño que inflige al jugador
+            radio: Radio visual del proyectil
+            color: Color RGB del cuerpo
+            color_borde: Color RGB del borde
+            puede_explotar: Si puede entrar en fase de explosión
+            tiempo_explosion: Segundos antes de pausarse y explotar
+            velocidad: Velocidad en píxeles/segundo
+        """
+        self.x = x
+        self.y = y
+        self.dx = dx  # dirección normalizada X
+        self.dy = dy  # dirección normalizada Y
+        self.velocidad = velocidad  # se multiplica por dx/dy
+        self.daño = daño
+        self.radio = radio
+        self.color = color
+        self.color_borde = color_borde
+        self.activo = True
+
+        # Sistema de explosión (para ataque fanout)
+        self.puede_explotar = puede_explotar
+        self.tiempo_explosion = tiempo_explosion
+        self.timer_vida = 0.0
+        self.pausado = False
+        self.timer_pausa = 0.0
+        self.DURACION_PAUSA = 0.4  # segundos quieto antes de explotar
+        self.explotar_flag = False
+
+        # Pulso visual
+        self.timer_pulso = 0.0
+
+    @property
+    def rect(self) -> pygame.Rect:
+        """Rect del proyectil para colisiones."""
+        return pygame.Rect(
+            int(self.x) - self.radio,
+            int(self.y) - self.radio,
+            self.radio * 2,
+            self.radio * 2
+        )
+
+    def update(self, dt: float):
+        """Actualiza posición y estado del proyectil."""
+        if not self.activo:
+            return
+
+        self.timer_vida += dt
+        self.timer_pulso += dt
+
+        # Lógica de pausa y explosión
+        if self.puede_explotar:
+            # Si no está pausado, verificar si debe empezar a pausarse
+            if (not self.pausado and
+                    self.timer_vida >= self.tiempo_explosion):
+                self.pausado = True
+                self.timer_pausa = 0.0
+                return  # No se mueve mientras está pausado
+
+            # Si está pausado, contar el tiempo
+            if self.pausado:
+                self.timer_pausa += dt
+                if self.timer_pausa >= self.DURACION_PAUSA:
+                    self.explotar_flag = True
+                    self.activo = False
+                return
+
+        # Movimiento normal (cuando no está pausado)
+        self.x += self.dx * self.velocidad * dt
+        self.y += self.dy * self.velocidad * dt
+
+        # Eliminar si sale de la pantalla (con margen)
+        MARGEN = 100
+        if (self.x < -MARGEN or self.x > 960 + MARGEN or
+                self.y < -MARGEN or self.y > 640 + MARGEN):
+            self.activo = False
+
+    def render(self, surface: pygame.Surface, camera_offset=(0, 0)):
+        """Renderiza el proyectil con efectos visuales."""
+        if not self.activo:
+            return
+
+        px = int(self.x - camera_offset[0])
+        py = int(self.y - camera_offset[1])
+
+        # Pulso de tamaño sutil
+        pulso = math.sin(self.timer_pulso * 8) * 2
+        r = self.radio + int(pulso)
+
+        # Halo exterior semitransparente
+        halo = pygame.Surface((r * 4, r * 4), pygame.SRCALPHA)
+        pygame.draw.circle(
+            halo,
+            (*self.color, 40),
+            (r * 2, r * 2),
+            r * 2
+        )
+        surface.blit(halo, (px - r * 2, py - r * 2))
+
+        # Cuerpo del proyectil
+        pygame.draw.circle(surface, self.color, (px, py), r)
+
+        # Borde brillante
+        pygame.draw.circle(surface, self.color_borde, (px, py), r, 2)
+
+        # Indicador de explosión pendiente (anillo de alerta)
+        if self.pausado:
+            progreso = self.timer_pausa / self.DURACION_PAUSA
+            alpha = int(200 * progreso)
+            warn = pygame.Surface((r * 6, r * 6), pygame.SRCALPHA)
+            pygame.draw.circle(
+                warn,
+                (255, 255, 0, alpha),
+                (r * 3, r * 3),
+                int(r * (1 + progreso * 2)),
+                2
+            )
+            surface.blit(warn, (px - r * 3, py - r * 3))
