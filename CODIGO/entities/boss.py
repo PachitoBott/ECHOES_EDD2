@@ -1267,6 +1267,7 @@ class AtaqueEMP(AtaqueBoss):
     Emite 3 ondas de choque circulares expansivas en sucesión rápida.
     Las ondas se expanden desde el centro del boss y dañan al jugador
     cuando las cruza.
+    Incluye telegraph visual con pulso azul de aviso.
     """
 
     N_ONDAS = 3
@@ -1275,6 +1276,7 @@ class AtaqueEMP(AtaqueBoss):
     RADIO_MAX = 500  # píxeles máximo
     GROSOR = 12  # píxeles de grosor del anillo
     DAÑO = 1
+    TELEGRAPH = 0.5  # segundos de aviso visual
 
     def __init__(self, boca_x: float, boca_y: float,
                  lista_proyectiles: list):
@@ -1294,25 +1296,39 @@ class AtaqueEMP(AtaqueBoss):
         self.timer_onda = 0.0
         self.ondas_activas = []  # lista de dicts con radio, alpha, dañado
 
-        print(f"[ATAQUE] AtaqueEMP: {self.N_ONDAS} ondas expansivas")
+        # Fase de telegraph
+        self.fase = "telegraph"  # telegraph → activo → terminado
+        self.timer_fase = 0.0
+
+        print(f"[ATAQUE] AtaqueEMP: {self.N_ONDAS} ondas expansivas (con telegraph)")
 
     def update(self, dt: float, jugadores: list) -> None:
         """
-        Crea nuevas ondas en intervalos y expande las existentes.
-        Aplica daño cuando el jugador cruza una onda.
+        Actualiza el ataque EMP: telegraph → ondas expansivas → terminado.
         """
-        # Crear nuevas ondas en intervalos
-        if self.ondas_creadas < self.N_ONDAS:
-            self.timer_onda += dt
-            if self.timer_onda >= self.INTERVALO_ONDAS:
-                self.timer_onda -= self.INTERVALO_ONDAS
-                # Nueva onda: radio 0, alpha 255, sin jugadores dañados
-                self.ondas_activas.append({
-                    "radio": 0.0,
-                    "alpha": 255,
-                    "dañado": set()  # IDs de jugadores dañados por esta onda
-                })
-                self.ondas_creadas += 1
+        self.timer_fase += dt
+
+        # Fase de telegraph: mostrar aviso visual
+        if self.fase == "telegraph":
+            if self.timer_fase >= self.TELEGRAPH:
+                self.fase = "activo"
+                self.timer_fase = 0.0
+            return
+
+        # Fase activa: crear y expandir ondas
+        if self.fase == "activo":
+            # Crear nuevas ondas en intervalos
+            if self.ondas_creadas < self.N_ONDAS:
+                self.timer_onda += dt
+                if self.timer_onda >= self.INTERVALO_ONDAS:
+                    self.timer_onda -= self.INTERVALO_ONDAS
+                    # Nueva onda: radio 0, alpha 255, sin jugadores dañados
+                    self.ondas_activas.append({
+                        "radio": 0.0,
+                        "alpha": 255,
+                        "dañado": set()  # IDs de jugadores dañados por esta onda
+                    })
+                    self.ondas_creadas += 1
 
         # Expandir ondas existentes y verificar colisiones
         for onda in self.ondas_activas:
@@ -1360,12 +1376,50 @@ class AtaqueEMP(AtaqueBoss):
     def render(self, surface: pygame.Surface,
                camera_offset=(0, 0)) -> None:
         """
-        Renderiza las ondas expansivas con efectos visuales.
+        Renderiza telegraph visual (pulso azul de aviso) y las ondas expansivas.
         Cada onda es un anillo de cian eléctrico que se expande.
         """
         cx = int(self.cx - camera_offset[0])
         cy = int(self.cy - camera_offset[1])
 
+        # Renderizar telegraph visual (pulso azul)
+        if self.fase == "telegraph":
+            progreso = self.timer_fase / self.TELEGRAPH
+            alpha = int(150 * (1 - progreso))  # Se desvanece
+            radio_pulso = int(50 * progreso)  # Crece desde pequeño
+
+            # Pulso azul expandiéndose
+            pulso_surf = pygame.Surface(
+                (radio_pulso * 2 + 100, radio_pulso * 2 + 100),
+                pygame.SRCALPHA
+            )
+            pulso_centro = (radio_pulso + 50, radio_pulso + 50)
+
+            # Anillo azul pulsante
+            pygame.draw.circle(
+                pulso_surf,
+                (100, 200, 255, alpha),
+                pulso_centro,
+                radio_pulso + 30,
+                3
+            )
+
+            # Anillo interno más brillante
+            pygame.draw.circle(
+                pulso_surf,
+                (150, 220, 255, alpha),
+                pulso_centro,
+                radio_pulso + 15,
+                2
+            )
+
+            # Blittear el pulso
+            surface.blit(
+                pulso_surf,
+                (cx - radio_pulso - 50, cy - radio_pulso - 50)
+            )
+
+        # Renderizar ondas activas
         for onda in self.ondas_activas:
             radio = int(onda["radio"])
             alpha = max(0, onda["alpha"])
