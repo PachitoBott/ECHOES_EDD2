@@ -417,10 +417,16 @@ class Game:
         if self.net:
             self.player.on_shoot = self._on_player_shoot
 
-        # Reset de runtime
+        # Reset de runtime (proyectiles, contadores, etc)
         self._reset_runtime_state()
 
-        # Reset del progreso del Profesor Ibarra
+        # Reset de poderes comprados en la tienda del Profesor Ibarra
+        self._reset_player_powers(self.player)
+
+        # Reset de zona y tileset a inicio (zona 1)
+        self._reset_zone_and_tileset()
+
+        # Reset del progreso del Profesor Ibarra (preguntas/respuestas)
         from ui.ProfesorIbarra import progreso_ibarra
         progreso_ibarra.reset()
 
@@ -447,6 +453,56 @@ class Game:
         self.cleared = False
         self._run_gold_spent = 0
         self._run_kills = 0
+
+    def _reset_player_powers(self, player) -> None:
+        """
+        Resetea todos los poderes comprados del jugador.
+        Se llama al reiniciar el run para limpiar los items de Ibarra.
+        """
+        # Resetear todos los atributos de poderes de Ibarra
+        atributos_poderes = [
+            '_ibarra_red_apoyo',      # Contador de curaciones
+            '_ibarra_modo_privado',   # Invulnerabilidad temporal
+            '_ibarra_emp',            # Congelamiento de enemigos
+            '_ibarra_double_shot',    # Disparo doble
+        ]
+
+        for attr in atributos_poderes:
+            if hasattr(player, attr):
+                # Resetear a 0 o False según el tipo
+                if attr == '_ibarra_red_apoyo':
+                    setattr(player, attr, 0)  # Contador
+                else:
+                    setattr(player, attr, False)  # Booleanos
+
+        # Resetear efectos activos de poderes
+        if hasattr(player, 'invulnerable_timer'):
+            player.invulnerable_timer = 0.0
+        if hasattr(player, 'stun_timer'):
+            player.stun_timer = 0.0
+
+        log_game.info("✅ Poderes del jugador reseteados")
+
+    def _reset_zone_and_tileset(self) -> None:
+        """
+        Resetea la zona a 1 y fuerza el tileset y paleta de colores a zona 1.
+        Necesario para que al reiniciar desde zona 2+ no quede el color/tileset anterior.
+        """
+        # Resetear variable de zona actual
+        self._current_zone = 1
+        self._zones_cinematics_shown = set()
+
+        # Forzar el fondo matrix a zona 1
+        if self.matrix_bg:
+            self.matrix_bg.set_zona(1)
+            log_game.debug("✅ Fondo matrix reseteado a zona 1")
+
+        # Resetear tileset a zona 1
+        if hasattr(self, 'tileset_manager') and self.tileset_manager:
+            self.tileset_manager.set_zone(1)
+            log_game.debug("✅ Tileset reseteado a zona 1")
+
+        log_game.info("✅ Zona y tileset reseteados a inicio")
 
     def _register_gold_spent(self, amount: int) -> None:
         if amount <= 0:
@@ -1508,9 +1564,12 @@ class Game:
             log_game.info("Modo Privado usado: invulnerable 5s")
 
         elif iid == "red_apoyo":
-            if not getattr(self.player, "_ibarra_red_apoyo", False):
+            # Verificar si tiene curaciones acumuladas (ahora es un contador)
+            cantidad = getattr(self.player, "_ibarra_red_apoyo", 0)
+            if cantidad <= 0:
                 return
-            self.player._ibarra_red_apoyo = False
+            # Restar 1 cura
+            self.player._ibarra_red_apoyo = cantidad - 1
             # Restaurar FULL HP (todos los corazones)
             self.player.lives = self.player.max_lives
             self.player.hp = self.player.max_hp
@@ -1826,7 +1885,7 @@ class Game:
             "health": getattr(self.player, "lives", 0),
             "max_health": getattr(self.player, "max_lives", 0),
             "coins": getattr(self.player, "gold", 0),
-            "red_apoyo": getattr(self.player, "_ibarra_red_apoyo", False),
+            "red_apoyo": getattr(self.player, "_ibarra_red_apoyo", 0),  # Contador de curaciones acumuladas
             "modo_privado": getattr(self.player, "_ibarra_modo_privado", False),
             "emp": getattr(self.player, "_ibarra_emp", False),
             "eco_señal": getattr(self.player, "_ibarra_double_shot", False)
@@ -1842,7 +1901,7 @@ class Game:
                     "health": getattr(remote_player, "lives", 0),
                     "max_health": getattr(remote_player, "max_lives", 0),
                     "coins": getattr(remote_player, "gold", 0),
-                    "red_apoyo": getattr(remote_player, "_ibarra_red_apoyo", False),
+                    "red_apoyo": getattr(remote_player, "_ibarra_red_apoyo", 0),  # Contador de curaciones acumuladas
                     "modo_privado": getattr(remote_player, "_ibarra_modo_privado", False),
                     "emp": getattr(remote_player, "_ibarra_emp", False),
                     "eco_señal": getattr(remote_player, "_ibarra_double_shot", False)
@@ -1850,12 +1909,12 @@ class Game:
             else:
                 player_data_p2 = {
                     "health": 0, "max_health": 0, "coins": 0,
-                    "red_apoyo": False, "modo_privado": False, "emp": False, "eco_señal": False
+                    "red_apoyo": 0, "modo_privado": False, "emp": False, "eco_señal": False
                 }
         else:
             player_data_p2 = {
                 "health": 0, "max_health": 0, "coins": 0,
-                "red_apoyo": False, "modo_privado": False, "emp": False, "eco_señal": False
+                "red_apoyo": 0, "modo_privado": False, "emp": False, "eco_señal": False
             }
 
         self.hud_panel_p2.render(self.screen, player_data_p2, es_p2=True)
