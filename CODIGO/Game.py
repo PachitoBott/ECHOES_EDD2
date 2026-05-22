@@ -2811,9 +2811,8 @@ class Game:
         for pickup in getattr(room, "pickups", ()):
             pickup.draw(self.world)
 
-        # Obtener alpha del flash del spawn effect
-        flash_alpha = self.spawn_effect_manager.get_player1_flash_alpha()
-        self.player.draw(self.world, flash_alpha=flash_alpha)
+        # Flash effect ahora manejado internamente en Player._render_revival()
+        self.player.draw(self.world)
 
         # --- Dibujar jugadores remotos (cubo negro) ---
         for rol, datos in self.remote_players.items():

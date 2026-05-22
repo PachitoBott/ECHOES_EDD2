@@ -1,4 +1,5 @@
 import math
+import random
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,7 @@ from Config import CFG
 from core.Projectile import Projectile
 from entities.Weapons import WeaponFactory
 from systems.animation import Animation, AnimationManager
+from systems.death_effect import DeathParticle
 
 
 PLAYER_SPRITE_SIZE = (64, 64)
@@ -78,6 +80,11 @@ class Player(Entity):
         self.revival_fps = 10  # frames por segundo
         self.revival_duracion = 7 / 10  # 7 frames a 10fps = 0.7 segundos
         self.frames_revival = []  # Se carga al inicializar animaciones
+        self.revival_particle_effect = None  # Efecto de partículas blancas durante revival
+
+        # --- Sistema de flash blanco cuando recibe daño ---
+        self.hit_flash_timer = 0.0
+        self._hit_flash_duration = 0.1  # 100ms de flash blanco
 
         self.sprint_multiplier = 1.35
         self.base_sprint_multiplier = self.sprint_multiplier
@@ -165,6 +172,7 @@ class Player(Entity):
 
         keys = pygame.key.get_pressed() if self.controls_enabled else None
         self.invulnerable_timer = max(0.0, self.invulnerable_timer - dt)
+        self.hit_flash_timer = max(0.0, self.hit_flash_timer - dt)
         self._dash_timer = max(0.0, self._dash_timer - dt)
         self._dash_cooldown_timer = max(0.0, self._dash_cooldown_timer - dt)
         self._recent_enemy_shot_timer = max(0.0, self._recent_enemy_shot_timer - dt)
@@ -294,6 +302,8 @@ class Player(Entity):
         prev_hp = self.hp
         self.hp = max(0, self.hp - amount)
         self.invulnerable_timer = max(self.invulnerable_timer, self.post_hit_invulnerability)
+        # Activar flash blanco al recibir daño
+        self.hit_flash_timer = max(self.hit_flash_timer, self._hit_flash_duration)
         if prev_hp != self.hp:
             self._hits_taken_current_life = self.max_hp - self.hp
             # Reproducir sonido de daño
@@ -368,13 +378,58 @@ class Player(Entity):
     def _iniciar_revival(self) -> None:
         """
         Inicia el estado de revivir.
-        Activa la animación de revival y la invulnerabilidad.
+        Activa la animación de revival, invulnerabilidad y partículas blancas.
         """
         self.reviviendo = True
         self.revival_timer = 0.0
         self.revival_frame = 0
         self.revival_frame_timer = 0.0
         self.invulnerable_timer = self.respawn_invulnerability
+
+        # Crear efecto de partículas blancas
+        self._create_revival_particles()
+
+    def _create_revival_particles(self) -> None:
+        """Crea el efecto de partículas blancas durante el revival."""
+        center_x = self.x + self.w / 2
+        center_y = self.y + self.h / 2
+
+        # Lista de colores blancos con variaciones
+        white_palette = [
+            (255, 255, 255),  # Blanco puro
+            (220, 220, 220),  # Blanco con gris claro
+            (240, 240, 240),  # Blanco muy claro
+        ]
+
+        # Crear partículas blancas
+        self.revival_particle_effect = []
+        num_particles = 25
+
+        for _ in range(num_particles):
+            # Dirección aleatoria (radiante)
+            angle = random.uniform(0, math.tau)
+            speed = random.uniform(100.0, 250.0)  # velocidad de las partículas
+
+            vx = math.cos(angle) * speed
+            vy = math.sin(angle) * speed
+
+            # Offset ligeramente aleatorio desde el centro
+            offset_x = random.uniform(-self.w / 4, self.w / 4)
+            offset_y = random.uniform(-self.h / 4, self.h / 4)
+
+            # Color blanco aleatorio de la paleta
+            particle_color = random.choice(white_palette)
+
+            particle = DeathParticle(
+                center_x + offset_x,
+                center_y + offset_y,
+                vx,
+                vy,
+                lifetime=0.7,  # duracion de las partículas
+                size=random.randint(2, 4),
+                color=particle_color
+            )
+            self.revival_particle_effect.append(particle)
 
     def update_revival(self, dt: float) -> None:
         """
@@ -383,6 +438,12 @@ class Player(Entity):
         """
         if not self.reviviendo:
             return
+
+        # Actualizar partículas blancas
+        if self.revival_particle_effect:
+            for particle in self.revival_particle_effect:
+                if particle.is_alive():
+                    particle.update(dt)
 
         # Avanzar frame de animación
         self.revival_frame_timer += dt
@@ -403,6 +464,9 @@ class Player(Entity):
         """
         self.reviviendo = False
         self.revival_frame = 0
+
+        # Limpiar partículas
+        self.revival_particle_effect = None
 
         # Restaurar animación a idle
         self._set_current_animation("idle")
@@ -493,12 +557,19 @@ class Player(Entity):
         sprite_rect = sprite.get_rect()
         sprite_rect.centerx = int(round(self.x + self.w / 2))
         sprite_rect.centery = int(round(self.y + self.h / 2 - PLAYER_SPRITE_CENTER_OFFSET_Y))
+
+        # Aplicar flash blanco si acaba de recibir daño
+        if self.hit_flash_timer > 0.0:
+            flash_overlay = pygame.Surface(sprite.get_size(), pygame.SRCALPHA)
+            flash_overlay.fill((255, 255, 255, 220))
+            sprite.blit(flash_overlay, (0, 0), special_flags=pygame.BLEND_ADD)
+
         surf.blit(sprite, sprite_rect)
 
     def _render_revival(self, surf: pygame.Surface) -> None:
         """
         Renderiza la animación especial de revival.
-        Sprite invertido + destello blanco alrededor.
+        Sprite normal + partículas blancas dispersas.
         """
         if not self.frames_revival or self.revival_frame >= len(self.frames_revival):
             return
@@ -507,77 +578,25 @@ class Player(Entity):
         frame_idx = min(self.revival_frame, len(self.frames_revival) - 1)
         frame = self.frames_revival[frame_idx]
 
-        # Progreso de la animación (0.0 al inicio, 1.0 al final)
-        progreso = frame_idx / max(1, len(self.frames_revival) - 1)
-
-        # 1. Destello blanco alrededor del sprite
-        self._render_destello_blanco(surf, progreso, frame)
-
-        # 2. Sprite con overlay blanco que se desvanece
-        # Al inicio (progreso=0): completamente blanco
-        # Al final (progreso=1): color normal
-        alpha_blanco = int(255 * (1.0 - progreso))
-
+        # Posición del sprite
         sprite_rect = frame.get_rect()
         sprite_rect.centerx = int(round(self.x + self.w / 2))
         sprite_rect.centery = int(round(self.y + self.h / 2 - PLAYER_SPRITE_CENTER_OFFSET_Y))
 
-        if alpha_blanco > 10:
-            # Crear versión con overlay blanco
-            frame_con_flash = frame.copy()
-            overlay = pygame.Surface(frame.get_size(), pygame.SRCALPHA)
-            overlay.fill((255, 255, 255, alpha_blanco))
-            frame_con_flash.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-            surf.blit(frame_con_flash, sprite_rect)
-        else:
-            # Sin overlay — color normal
-            surf.blit(frame, sprite_rect)
+        # Aplicar flash blanco si acaba de recibir daño (durante revival también)
+        if self.hit_flash_timer > 0.0:
+            flash_overlay = pygame.Surface(frame.get_size(), pygame.SRCALPHA)
+            flash_overlay.fill((255, 255, 255, 220))
+            frame.blit(flash_overlay, (0, 0), special_flags=pygame.BLEND_ADD)
 
-    def _render_destello_blanco(self, surf: pygame.Surface,
-                                  progreso: float, frame: pygame.Surface) -> None:
-        """
-        Destello/aura blanco alrededor del sprite.
-        Más intenso al inicio, se desvanece al final.
-        """
-        # El destello es más fuerte al inicio del revival
-        intensidad = 1.0 - progreso
-        if intensidad <= 0.05:
-            return
+        # Renderizar sprite normal (sin overlay)
+        surf.blit(frame, sprite_rect)
 
-        w = frame.get_width()
-        h = frame.get_height()
-
-        # Aura expansiva: el sprite blanco escalado ligeramente
-        EXPANSION = int(8 * intensidad)  # máximo 8px de expansión
-
-        if EXPANSION <= 0:
-            return
-
-        # Crear versión blanca del sprite
-        sprite_blanco = pygame.Surface(
-            (w + EXPANSION*2, h + EXPANSION*2),
-            pygame.SRCALPHA
-        )
-        frame_escalado = pygame.transform.scale(
-            frame,
-            (w + EXPANSION*2, h + EXPANSION*2)
-        )
-        # Colorear completamente blanco
-        frame_escalado.fill(
-            (255, 255, 255, int(180 * intensidad)),
-            special_flags=pygame.BLEND_RGBA_MULT
-        )
-        sprite_blanco.blit(frame_escalado, (0, 0))
-
-        # Dibujar aura detrás del sprite principal
-        sprite_rect = frame.get_rect()
-        sprite_rect.centerx = int(round(self.x + self.w / 2))
-        sprite_rect.centery = int(round(self.y + self.h / 2 - PLAYER_SPRITE_CENTER_OFFSET_Y))
-
-        surf.blit(
-            sprite_blanco,
-            (sprite_rect.x - EXPANSION, sprite_rect.y - EXPANSION)
-        )
+        # Renderizar partículas blancas
+        if self.revival_particle_effect:
+            for particle in self.revival_particle_effect:
+                if particle.is_alive():
+                    particle.render(surf)
 
     def _prepare_sprite(self, base_sprite: pygame.Surface) -> pygame.Surface:
         """Aplica transformaciones al sprite (flip horizontal si mira izquierda)."""
@@ -716,16 +735,19 @@ class Player(Entity):
     def _cargar_frames_revival(self) -> None:
         """
         Extrae los frames de la animación death_spawn para el efecto de revival.
-        Los frames ya están en orden inverso en la animación.
+        Aplica los frame_indices [6,5,4,3,2,1,0] para reproducir en orden inverso.
         """
         if "death_spawn" not in self._animations:
             return
 
         # Obtener la animación de revival
         anim_revival = self._animations["death_spawn"]
-        # Acceder a los frames del animation (esto es un acceso directo a los frames cargados)
-        if hasattr(anim_revival, '_frames_pool') and anim_revival._frames_pool:
-            self.frames_revival = anim_revival._frames_pool
+        # Acceder a los frames del animation y aplicar los frame_indices
+        if hasattr(anim_revival, '_frames_pool') and hasattr(anim_revival, '_frame_indices'):
+            frames_pool = anim_revival._frames_pool
+            frame_indices = anim_revival._frame_indices
+            # Aplicar los indices para obtener frames en orden inverso
+            self.frames_revival = [frames_pool[idx] for idx in frame_indices if idx < len(frames_pool)]
         else:
             # Fallback: crear lista vacía
             self.frames_revival = []
