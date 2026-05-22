@@ -582,6 +582,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
     # --- Caso especial: yellow_shooter usa spritesheets para las animaciones ---
     elif variant_slug == "yellow_shooter":
         # Cargar animación "walk" desde yellow_walk.png - 5 columnas, 22 frames
+        # Frames de 96x96 en el spritesheet, pero escalados a 64x64 en el juego
         walk_frames = cargar_spritesheet_cuadricula(
             ruta="assets/yellow_walk.png",
             frame_w=96,
@@ -589,7 +590,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             cols=5,
             frames_a_usar=22,
             flip_horizontal=False,
-            tamaño_logico=96  # Mantener tamaño original, no escalar
+            tamaño_logico=64  # Escalar a 64x64 para mostrar en el juego
         )
         if walk_frames:
             # idle y walk comparten la misma animación (sin copiar, misma referencia)
@@ -600,6 +601,7 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             frames["run"] = _load_state_frames(base_dir, "run", 4, color)
 
         # Cargar animación "shoot" desde yellow_attack.png - 4 columnas, 16 frames
+        # Frames de 96x96 en el spritesheet, pero escalados a 64x64 en el juego
         shoot_frames = cargar_spritesheet_cuadricula(
             ruta="assets/yellow_attack.png",
             frame_w=96,
@@ -607,10 +609,59 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             cols=4,
             frames_a_usar=16,
             flip_horizontal=False,
-            tamaño_logico=96  # Mantener tamaño original, no escalar
+            tamaño_logico=64  # Escalar a 64x64 para mostrar en el juego
         )
         if shoot_frames:
             frames["shoot"] = shoot_frames
+        else:
+            frames["shoot"] = _load_state_frames(base_dir, "shoot", 4, color)
+
+    # --- Caso especial: telefono usa spritesheets desde enemigos2 ---
+    elif variant_slug == "telefono":
+        # Cargar animación "idle" desde assets/enemigos/enemigos2/enemigo telefono idle.png
+        # Spritesheet: 320x256 = 5 cols × 4 rows de 64x64 (20 frames disponibles, usar primeros 4)
+        idle_frames = cargar_spritesheet_cuadricula(
+            ruta="assets/enemigos/enemigos2/enemigo telefono idle.png",
+            frame_w=64,
+            frame_h=64,
+            cols=5,
+            frames_a_usar=4,
+            flip_horizontal=False,
+            tamaño_logico=64
+        )
+        if idle_frames:
+            frames["idle"] = idle_frames
+        else:
+            frames["idle"] = _load_state_frames(base_dir, "idle", 4, color)
+
+        # Cargar animación "run" (walk) desde assets/enemigos/enemigos2/enemigo telefono walk.png
+        # Spritesheet: 320x256 = 5 cols × 4 rows de 64x64 (20 frames disponibles, usar primeros 4)
+        walk_frames = cargar_spritesheet_cuadricula(
+            ruta="assets/enemigos/enemigos2/enemigo telefono walk.png",
+            frame_w=64,
+            frame_h=64,
+            cols=5,
+            frames_a_usar=4,
+            flip_horizontal=False,
+            tamaño_logico=64
+        )
+        if walk_frames:
+            frames["run"] = walk_frames
+        else:
+            frames["run"] = _load_state_frames(base_dir, "run", 4, color)
+
+        # Cargar animación "shoot" desde assets/enemigos/enemigos2/enemigo telefono attack.png
+        attack_frames = cargar_spritesheet_cuadricula(
+            ruta="assets/enemigos/enemigos2/enemigo telefono attack.png",
+            frame_w=64,
+            frame_h=64,
+            cols=4,
+            frames_a_usar=4,
+            flip_horizontal=False,
+            tamaño_logico=64
+        )
+        if attack_frames:
+            frames["shoot"] = attack_frames
         else:
             frames["shoot"] = _load_state_frames(base_dir, "shoot", 4, color)
     else:

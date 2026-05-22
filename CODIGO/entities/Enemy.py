@@ -565,10 +565,10 @@ class BasicEnemy(Enemy):
     def __init__(self, x, y):
         super().__init__(x, y, hp=3, gold_reward=5)
 
-        # Ajustar hitbox para que coincida con el sprite de 96×96 (75% = 72×72)
+        # Ajustar hitbox para que coincida con el sprite de 64×64 (75% = 48×48)
         cx, cy = self.x + self.w / 2.0, self.y + self.h / 2.0
-        self.w = 72
-        self.h = 72
+        self.w = 48
+        self.h = 48
         self.x = cx - self.w / 2.0
         self.y = cy - self.h / 2.0
 
