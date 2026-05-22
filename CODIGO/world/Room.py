@@ -1364,6 +1364,11 @@ class Room:
         # build_centered sobreescribe los tiles, así que re-tallamos los
         # corredores después para que las puertas sigan siendo accesibles.
         self.build_centered(CFG.BOSS_ROOM_W, CFG.BOSS_ROOM_H)
+
+        # CRÍTICO: Bloquear entrada por arriba (norte) del boss
+        # El boss está pegado al techo, solo puede entrar por lados (E/W) o abajo (S)
+        self.doors["N"] = False
+
         self.carve_corridors(width_tiles=2, length_tiles=3)
 
         # Inicializar el boss después de que la sala esté lista
