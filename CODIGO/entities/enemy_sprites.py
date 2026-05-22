@@ -664,47 +664,6 @@ def load_enemy_animation_set(variant: str) -> EnemyAnimationSet:
             frames["shoot"] = attack_frames
         else:
             frames["shoot"] = _load_state_frames(base_dir, "shoot", 4, color)
-
-    # --- Caso especial: faker usa spritesheets desde enemigos2 ---
-    elif variant_slug == "faker":
-        # Cargar animación "idle" desde assets/enemigos/enemigos2/Faker idle.png
-        # Spritesheet: 256x256 = 2 cols × 2 rows de 96x96 (4 frames)
-        idle_frames = cargar_spritesheet_cuadricula(
-            ruta="assets/enemigos/enemigos2/Faker idle.png",
-            frame_w=96,
-            frame_h=96,
-            cols=2,
-            frames_a_usar=4,
-            flip_horizontal=False,
-            tamaño_logico=96
-        )
-        if idle_frames:
-            frames["idle"] = idle_frames
-        else:
-            frames["idle"] = _load_state_frames(base_dir, "idle", 4, color)
-
-        # Cargar animación "run" desde el mismo spritesheet que idle
-        # (el idle es la misma animación de movimiento)
-        if idle_frames:
-            frames["run"] = idle_frames
-        else:
-            frames["run"] = _load_state_frames(base_dir, "run", 4, color)
-
-        # Cargar animación "shoot" (attack) desde assets/enemigos/enemigos2/faker attack.png
-        # Spritesheet: 256x256 = 2 cols × 2 rows de 96x96 (4 frames)
-        attack_frames = cargar_spritesheet_cuadricula(
-            ruta="assets/enemigos/enemigos2/faker attack.png",
-            frame_w=96,
-            frame_h=96,
-            cols=2,
-            frames_a_usar=4,
-            flip_horizontal=False,
-            tamaño_logico=96
-        )
-        if attack_frames:
-            frames["shoot"] = attack_frames
-        else:
-            frames["shoot"] = _load_state_frames(base_dir, "shoot", 4, color)
     else:
         # Para otros enemigos, cargar normalmente
         pass
