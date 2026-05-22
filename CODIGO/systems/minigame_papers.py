@@ -5,10 +5,186 @@ El jugador debe clasificar 5 publicaciones correctamente para entrar al boss.
 
 from __future__ import annotations
 
+import json
+import os
 import random
 from typing import Optional
 
 import pygame
+
+
+# ============================================================================
+# POOL DE POSTS (Sistema de selección aleatoria)
+# ============================================================================
+
+class PostsPool:
+    """
+    Gestiona el pool de 30 posts y la selección
+    aleatoria de 5 para cada partida del minijuego.
+    """
+
+    POSTS_POR_PARTIDA = 5
+    MIN_ACOSO = 3  # mínimo posts de acoso por partida
+    MAX_ACOSO = 4  # máximo posts de acoso por partida
+    RUTA_JSON = "assets/data/posts_pool.json"
+
+    def __init__(self):
+        self.todos_los_posts = []
+        self.historial_run = set()  # IDs vistos en este run
+        self._cargar_pool()
+
+    def _cargar_pool(self):
+        """Carga los posts desde el archivo JSON."""
+        try:
+            ruta = self.RUTA_JSON
+            if not os.path.exists(ruta):
+                print(f"[POSTS POOL] No encontrado: {ruta}")
+                self._usar_fallback()
+                return
+
+            with open(ruta, "r", encoding="utf-8") as f:
+                self.todos_los_posts = json.load(f)
+
+            print(f"[POSTS POOL] Cargados {len(self.todos_los_posts)} posts")
+
+        except Exception as e:
+            print(f"[POSTS POOL] Error al cargar: {e}")
+            self._usar_fallback()
+
+    def _usar_fallback(self):
+        """
+        Posts mínimos de fallback si no existe el JSON.
+        El juego no debe crashear por un archivo faltante.
+        """
+        self.todos_los_posts = [
+            {
+                "id": 1, "seed": 101, "es_acoso": True,
+                "texto": "jajaja vieron lo que hizo?? que asco",
+                "accion_correcta": "REPORTAR",
+                "feedback_correcto": "Correcto. Esto es acoso directo.",
+                "feedback_incorrecto": "Incorrecto. Esto es acoso directo.",
+                "nivel_actividad": 0.8,
+                "porcentaje": 20
+            },
+            {
+                "id": 2, "seed": 202, "es_acoso": False,
+                "texto": "esto no es verdad, dejen de compartir.",
+                "accion_correcta": "IGNORAR",
+                "feedback_correcto": "Correcto. Este es un mensaje de apoyo.",
+                "feedback_incorrecto": "Incorrecto. Este es un mensaje de apoyo.",
+                "nivel_actividad": 0.2,
+                "porcentaje": 40
+            },
+            {
+                "id": 3, "seed": 303, "es_acoso": True,
+                "texto": "yo solo lo comparto por si acaso",
+                "accion_correcta": "REPORTAR",
+                "feedback_correcto": "Correcto. Compartir rumores es acoso pasivo.",
+                "feedback_incorrecto": "Incorrecto. Compartir rumores es acoso pasivo.",
+                "nivel_actividad": 0.6,
+                "porcentaje": 60
+            },
+            {
+                "id": 4, "seed": 404, "es_acoso": True,
+                "texto": "claro que si, todo fue un accidente >_>",
+                "accion_correcta": "REPORTAR",
+                "feedback_correcto": "Correcto. El sarcasmo hostil es acoso.",
+                "feedback_incorrecto": "Incorrecto. El sarcasmo hostil es acoso.",
+                "nivel_actividad": 0.7,
+                "porcentaje": 80
+            },
+            {
+                "id": 5, "seed": 505, "es_acoso": True,
+                "texto": "yo no opino pero el video habla solo ...",
+                "accion_correcta": "REPORTAR",
+                "feedback_correcto": "Correcto. Insinuar tambien hace dano.",
+                "feedback_incorrecto": "Incorrecto. Insinuar tambien hace dano.",
+                "nivel_actividad": 0.55,
+                "porcentaje": 100
+            },
+        ]
+        print(f"[POSTS POOL] Usando fallback con {len(self.todos_los_posts)} posts")
+
+    def seleccionar_para_partida(self) -> list:
+        """
+        Selecciona 5 posts del pool siguiendo las reglas:
+        - Balance acoso/no-acoso (3-4 acoso, 1-2 no-acoso)
+        - Sin repetición en la misma partida
+        - Evitar posts ya vistos en este run si es posible
+        - Ordenados por nivel_actividad (más fácil primero)
+        - Asignar porcentajes: 20%, 40%, 60%, 80%, 100%
+
+        Returns:
+            Lista de 5 dicts de posts listos para usar
+        """
+        # Separar en acoso y no-acoso
+        # Preferir posts no vistos en este run
+        pool_acoso = [p for p in self.todos_los_posts
+                      if p["es_acoso"] and p["id"] not in self.historial_run]
+        pool_no_acoso = [p for p in self.todos_los_posts
+                         if not p["es_acoso"] and p["id"] not in self.historial_run]
+
+        # Si se agotaron los no vistos, resetear historial y usar todos
+        if len(pool_acoso) < self.MIN_ACOSO:
+            print("[POSTS POOL] Pool acoso agotado, reseteando historial")
+            self.historial_run.clear()
+            pool_acoso = [p for p in self.todos_los_posts if p["es_acoso"]]
+
+        if len(pool_no_acoso) < 1:
+            print("[POSTS POOL] Pool no-acoso agotado, reseteando historial")
+            self.historial_run.clear()
+            pool_no_acoso = [p for p in self.todos_los_posts if not p["es_acoso"]]
+
+        # Seleccionar cantidad de cada tipo
+        # Aleatorio entre MIN_ACOSO y MAX_ACOSO
+        n_acoso = random.randint(self.MIN_ACOSO, self.MAX_ACOSO)
+        n_no_acoso = self.POSTS_POR_PARTIDA - n_acoso
+
+        # Selección aleatoria sin repetición
+        seleccionados_acoso = random.sample(
+            pool_acoso, min(n_acoso, len(pool_acoso))
+        )
+        seleccionados_no_acoso = random.sample(
+            pool_no_acoso, min(n_no_acoso, len(pool_no_acoso))
+        )
+
+        seleccion = seleccionados_acoso + seleccionados_no_acoso
+
+        # Completar si faltan posts (caso extremo)
+        if len(seleccion) < self.POSTS_POR_PARTIDA:
+            restantes = [p for p in self.todos_los_posts if p not in seleccion]
+            faltan = self.POSTS_POR_PARTIDA - len(seleccion)
+            seleccion += random.sample(restantes, min(faltan, len(restantes)))
+
+        # Ordenar por nivel_actividad ascendente (más fáciles primero)
+        seleccion.sort(key=lambda p: p["nivel_actividad"])
+
+        # Asignar porcentajes: 20%, 40%, 60%, 80%, 100%
+        porcentajes = [20, 40, 60, 80, 100]
+        for i, post in enumerate(seleccion):
+            post["porcentaje"] = porcentajes[i]
+
+        # Registrar en historial del run
+        for post in seleccion:
+            self.historial_run.add(post["id"])
+
+        ids_seleccionados = [p["id"] for p in seleccion]
+        print(f"[POSTS POOL] Seleccionados: {ids_seleccionados} "
+              f"(acoso: {n_acoso}, no-acoso: {n_no_acoso})")
+
+        return seleccion
+
+    def reset_run(self):
+        """
+        Limpiar historial al reiniciar el run.
+        Los mismos posts pueden aparecer en el siguiente run.
+        """
+        self.historial_run.clear()
+        print("[POSTS POOL] Historial limpiado")
+
+
+# Instancia global
+posts_pool = PostsPool()
 
 
 # ============================================================================
@@ -56,119 +232,10 @@ COLOR_FEEDBACK_BAD = (255, 60, 60)  # rojo feedback
 
 
 # ============================================================================
-# DATOS DE PUBLICACIONES
+# DATOS DE PUBLICACIONES (cargados dinámicamente del pool)
 # ============================================================================
-
-PUBLICACIONES = [
-    {
-        "id": 1,
-        "seed": 42,
-        "es_acoso": True,
-        "texto": (
-            "jajaja vieron lo que hizo?? "
-            "qué asco de persona, merece "
-            "todo lo que le pasa lol"
-        ),
-        "accion_correcta": "REPORTAR",
-        "feedback_correcto": (
-            "Correcto. Burlarse y desear daño "
-            "a alguien es acoso directo."
-        ),
-        "feedback_incorrecto": (
-            "Incorrecto. Esto es acoso directo. "
-            "Reportar protege a la víctima."
-        ),
-        "nivel_actividad": 0.85,
-        "porcentaje": 20,
-    },
-    {
-        "id": 2,
-        "seed": 77,
-        "es_acoso": False,
-        "texto": (
-            "esto no es verdad, conozco a "
-            "esta persona y nunca haría eso. "
-            "por favor dejen de compartir."
-        ),
-        "accion_correcta": "IGNORAR",
-        "feedback_correcto": (
-            "Correcto. Este mensaje defiende "
-            "a la víctima. No es acoso."
-        ),
-        "feedback_incorrecto": (
-            "Incorrecto. Este mensaje es de apoyo. "
-            "Reportarlo silenciaría a un aliado."
-        ),
-        "nivel_actividad": 0.25,
-        "porcentaje": 40,
-    },
-    {
-        "id": 3,
-        "seed": 13,
-        "es_acoso": True,
-        "texto": (
-            "no sé si creerle pero bueno... "
-            "yo solo lo comparto por si acaso, "
-            "cada quien que opine lo que quiera"
-        ),
-        "accion_correcta": "REPORTAR",
-        "feedback_correcto": (
-            "Correcto. Compartir rumores "
-            "sin verificar es acoso pasivo."
-        ),
-        "feedback_incorrecto": (
-            "Incorrecto. Difundir rumores "
-            "amplifica el daño aunque 'no opines'."
-        ),
-        "nivel_actividad": 0.60,
-        "porcentaje": 60,
-    },
-    {
-        "id": 4,
-        "seed": 99,
-        "es_acoso": True,
-        "texto": (
-            "claro que sí, 'accidentalmente' "
-            "le tomaron la foto jajaja todo "
-            "fue un accidente obvio 🙄🙄"
-        ),
-        "accion_correcta": "REPORTAR",
-        "feedback_correcto": (
-            "Correcto. El sarcasmo hostil "
-            "y la burla también son acoso."
-        ),
-        "feedback_incorrecto": (
-            "Incorrecto. Aunque no insulte "
-            "directamente, el sarcasmo hostil "
-            "es acoso encubierto."
-        ),
-        "nivel_actividad": 0.72,
-        "porcentaje": 80,
-    },
-    {
-        "id": 5,
-        "seed": 55,
-        "es_acoso": True,
-        "texto": (
-            "yo no opino ni me meto "
-            "pero la verdad el video "
-            "está ahí y habla solo. "
-            "no digo más 👀"
-        ),
-        "accion_correcta": "REPORTAR",
-        "feedback_correcto": (
-            "Correcto. Insinuar sin decir "
-            "directamente también hace daño."
-        ),
-        "feedback_incorrecto": (
-            "Incorrecto. El silencio cómplice "
-            "con insinuación es acoso pasivo. "
-            "Los 👀 no son neutrales."
-        ),
-        "nivel_actividad": 0.55,
-        "porcentaje": 100,
-    },
-]
+# PUBLICACIONES ahora se carga dinámicamente del JSON en PostsPool
+# Cada partida obtiene 5 posts aleatorios del pool de 30
 
 
 # ============================================================================
@@ -363,6 +430,9 @@ class MinijuegoPapers:
         self.rect_btn_reportar = pygame.Rect(0, 0, 0, 0)
         self.rect_btn_ignorar = pygame.Rect(0, 0, 0, 0)
 
+        # Publicaciones dinámicas del pool
+        self.publicaciones = []
+
         # Mostrar cursor del ratón durante el minijuego
         pygame.mouse.set_visible(True)
 
@@ -387,7 +457,10 @@ class MinijuegoPapers:
             self.font_feed = f
 
     def reset(self):
-        """Reiniciar desde el principio."""
+        """Reiniciar desde el principio con nuevos posts del pool."""
+        # Seleccionar 5 posts aleatorios del pool
+        self.publicaciones = posts_pool.seleccionar_para_partida()
+
         self.pub_actual = 0
         self.correctas = 0
         self.estado = self.ESTADO_JUGANDO
@@ -395,6 +468,9 @@ class MinijuegoPapers:
         self.card_animando = True
         self.card_dir = -1
         self._update_button_rects()
+
+        print(f"[MINIJUEGO] Nueva partida con posts: "
+              f"{[p['id'] for p in self.publicaciones]}")
 
     def _update_button_rects(self):
         """Actualizar posiciones y rects de los botones."""
@@ -418,7 +494,7 @@ class MinijuegoPapers:
         if self.estado != self.ESTADO_JUGANDO:
             return
 
-        pub = PUBLICACIONES[self.pub_actual]
+        pub = self.publicaciones[self.pub_actual]
         self.ultima_accion = accion
         self.ultimo_correcto = accion == pub["accion_correcta"]
 
@@ -452,7 +528,7 @@ class MinijuegoPapers:
                     self.card_offset_x = self.lw
                     self.pub_actual += 1
 
-                    if self.pub_actual >= len(PUBLICACIONES):
+                    if self.pub_actual >= len(self.publicaciones):
                         self.estado = self.ESTADO_COMPLETADO
                         self.aprobado = True
                         self.terminado = True
@@ -522,7 +598,7 @@ class MinijuegoPapers:
             return
 
         # Tarjeta con offset de animación
-        pub = PUBLICACIONES[min(self.pub_actual, len(PUBLICACIONES) - 1)]
+        pub = self.publicaciones[min(self.pub_actual, len(self.publicaciones) - 1)]
         self._render_header(surface)
         self._render_tarjeta(surface, pub)
         self._render_botones(surface)
@@ -771,10 +847,10 @@ class MinijuegoPapers:
 
     def _render_progreso(self, surface):
         """Indicador de progreso — barra horizontal clara."""
-        pub = PUBLICACIONES[min(self.pub_actual, len(PUBLICACIONES) - 1)]
+        pub = self.publicaciones[min(self.pub_actual, len(self.publicaciones) - 1)]
         porcentaje = pub["porcentaje"]
         actual = self.pub_actual + 1
-        total = len(PUBLICACIONES)
+        total = len(self.publicaciones)
 
         # Mostrar número y porcentaje
         txt = self.font_stats.render(
