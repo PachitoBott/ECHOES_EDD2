@@ -26,8 +26,8 @@ class WeaponSpec:
 class Weapon:
     """Instancia runtime de un arma concreta."""
 
-    # Factor de cuánto momentum hereda la bala (0.0 = sin momentum, 0.35 = moderado)
-    BALA_MOMENTUM_FACTOR = 0.35
+    # Factor de cuánto momentum hereda la bala (0.0 = sin momentum, 0.55 = pronunciado)
+    BALA_MOMENTUM_FACTOR = 0.55
 
     def __init__(self, spec: WeaponSpec, cooldown_scale: float = 1.0) -> None:
         self.spec = spec
