@@ -54,7 +54,7 @@ class Player(Entity):
 
         # --- Atributos de supervivencia y movilidad ---
         self.base_speed = self.speed
-        self.base_max_hp = 3
+        self.base_max_hp = 1  # 1 golpe = 1 vida perdida (para sistema de corazones)
         self.max_hp = self.base_max_hp
         self.hp = self.max_hp
         self.base_max_lives = CFG.PLAYER_START_LIVES
