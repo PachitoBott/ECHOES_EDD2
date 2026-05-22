@@ -87,7 +87,7 @@ PREGUNTAS: list[dict] = [
             "2. Guardar capturas, enlaces y buscar apoyo.",
             "3. Responder atacando a todos.",
         ],
-        "correcta": 1,   # índice 0-based → opción 2
+        "correcta": 1,
         "feedback_correcto": [
             "Correcto. La evidencia y el apoyo son",
             "la mejor forma de empezar a defenderte.",
@@ -108,7 +108,7 @@ PREGUNTAS: list[dict] = [
             "2. Ignorarlo siempre.",
             "3. No compartir, reportar y apoyar a la persona afectada.",
         ],
-        "correcta": 2,   # índice 0-based → opción 3
+        "correcta": 2,
         "feedback_correcto": [
             "Bien. No todo se combate con fuerza.",
             "A veces la mejor defensa es guardar pruebas y pedir ayuda.",
@@ -119,7 +119,7 @@ PREGUNTAS: list[dict] = [
         ],
     },
     {
-        "zona": 0,   # Zona 0 = alternativa/comodín
+        "zona": 0,
         "texto": [
             "¿Por qué no deberías compartir una publicación",
             "ofensiva aunque parezca graciosa?",
@@ -129,7 +129,7 @@ PREGUNTAS: list[dict] = [
             "2. Porque las redes se dañan.",
             "3. Porque pierdes monedas automáticamente.",
         ],
-        "correcta": 0,   # índice 0-based → opción 1
+        "correcta": 0,
         "feedback_correcto": [
             "Exacto. Compartir aumenta el alcance del daño.",
             "Detenerlo empieza por no propagarlo.",
@@ -137,6 +137,330 @@ PREGUNTAS: list[dict] = [
         "feedback_incorrecto": [
             "No es eso. Compartir contenido ofensivo amplifica el daño",
             "real sobre la persona afectada.",
+        ],
+    },
+    {
+        "zona": 1,
+        "texto": [
+            "¿Cuál es la mejor forma de proteger tu privacidad",
+            "en redes sociales?",
+        ],
+        "opciones": [
+            "1. Compartir todo públicamente para demostrar confianza.",
+            "2. Revisar configuración de privacidad y limitar quién ve tu contenido.",
+            "3. No usar redes sociales nunca.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. Controlar quién ve tu información es clave",
+            "para mantenerte seguro en línea.",
+        ],
+        "feedback_incorrecto": [
+            "No exactamente. Puedes usar redes pero con cuidado.",
+            "Revisa tu privacidad regularmente.",
+        ],
+    },
+    {
+        "zona": 2,
+        "texto": [
+            "Si alguien te pide enviar fotos íntimas, ¿qué haces?",
+        ],
+        "opciones": [
+            "1. Las envías porque es normal entre amigos.",
+            "2. Rechazas, bloqueas y avisas a un adulto.",
+            "3. Las envías pero pides que no las compartan.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. Tu cuerpo es tuyo. Nunca compartas imágenes íntimas,",
+            "aunque confíes en quien las pide.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. Ninguna condición es segura.",
+            "Aún si confías, las fotos pueden compartirse sin tu consentimiento.",
+        ],
+    },
+    {
+        "zona": 0,
+        "texto": [
+            "¿Qué es el ciberacoso?",
+        ],
+        "opciones": [
+            "1. Solo bromas sin intención de dañar.",
+            "2. Acosar, amenazar o humillar a alguien en línea, a menudo de forma repetida.",
+            "3. Ignorar mensajes de gente que no conoces.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. El ciberacoso es acoso digital intencional",
+            "que causa daño emocional.",
+        ],
+        "feedback_incorrecto": [
+            "No. El ciberacoso es más que bromas.",
+            "Es acoso intencional que causa daño real.",
+        ],
+    },
+    {
+        "zona": 1,
+        "texto": [
+            "Si un extraño en línea te dice que eres especial",
+            "y quiere ser tu amigo secreto, ¿qué significa?",
+        ],
+        "opciones": [
+            "1. Que realmente le caes bien.",
+            "2. Es una estrategia común de depredadores para ganarse tu confianza.",
+            "3. Que deberías compartir tu información personal.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. Los depredadores usan halagos y secretos para",
+            "ganarse la confianza. Avisa a un adulto de inmediato.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. Desconfía de extraños que ofrecen amistad especial.",
+            "Es una bandera roja de peligro.",
+        ],
+    },
+    {
+        "zona": 2,
+        "texto": [
+            "¿Cuál es el riesgo de usar la misma contraseña",
+            "en todas tus cuentas?",
+        ],
+        "opciones": [
+            "1. Ninguno, es más fácil de recordar.",
+            "2. Si una cuenta es hackeada, todas quedan comprometidas.",
+            "3. Las redes sociales lo recomiendan.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. Si una contraseña se filtra, los hackers pueden",
+            "acceder a TODAS tus cuentas.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. Usar contraseñas únicas es más seguro.",
+            "Así si una se compromete, las otras siguen protegidas.",
+        ],
+    },
+    {
+        "zona": 0,
+        "texto": [
+            "¿Qué debe hacer si recibes un mensaje amenazante?",
+        ],
+        "opciones": [
+            "1. Responder con más amenazas.",
+            "2. Ignorarlo y esperar que se vaya.",
+            "3. Guardar evidencia, no responder y reportar a las autoridades.",
+        ],
+        "correcta": 2,
+        "feedback_correcto": [
+            "Correcto. Las amenazas son delitos.",
+            "Guarda pruebas y reporta a adultos de confianza.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. Las amenazas son serias.",
+            "Nunca respondas. Busca ayuda de adultos.",
+        ],
+    },
+    {
+        "zona": 1,
+        "texto": [
+            "¿Por qué es peligroso compartir tu ubicación en línea?",
+        ],
+        "opciones": [
+            "1. No es peligroso, todos hacen check-in.",
+            "2. Puede permitir que personas malintencionadas te localicen físicamente.",
+            "3. Solo es peligroso si eres famoso.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. Compartir ubicación puede poner en riesgo tu seguridad física.",
+            "Desactiva ubicación en redes sociales.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. La ubicación en línea puede usarse para acosarte.",
+            "Es riesgo para cualquiera, no solo famosos.",
+        ],
+    },
+    {
+        "zona": 2,
+        "texto": [
+            "¿Qué es el grooming?",
+        ],
+        "opciones": [
+            "1. Arreglarse y verse bien.",
+            "2. Cuando un adulto gana confianza de un menor para explotarlo sexualmente.",
+            "3. Un juego en línea muy popular.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. El grooming es estrategia de depredadores.",
+            "Si esto ocurre, denuncia inmediatamente.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. El grooming es un delito grave.",
+            "Un adulto que gana confianza de un menor para explotarlo.",
+        ],
+    },
+    {
+        "zona": 0,
+        "texto": [
+            "Si ves que publican una foto tuya sin permiso, ¿qué haces?",
+        ],
+        "opciones": [
+            "1. Dejas que se viralice, total es gratis publicidad.",
+            "2. Reportas la foto y pides que la remuevan.",
+            "3. Publicas fotos de esa persona en represalia.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. Reportar es lo adecuado.",
+            "También puedes avisar a un adulto si es grave.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. Tu imagen es tuya. Reporta y busca ayuda.",
+            "No represalias, eso empeora las cosas.",
+        ],
+    },
+    {
+        "zona": 1,
+        "texto": [
+            "¿Cuándo es apropiado creer en algo que ves en redes sin verificar?",
+        ],
+        "opciones": [
+            "1. Siempre. Todo en internet es verdad.",
+            "2. Nunca. Debes verificar la fuente antes de creer o compartir.",
+            "3. Solo si está en mayúsculas.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. La información falsa se propaga rápido.",
+            "Siempre verifica antes de compartir.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. Mucha desinformación circula en línea.",
+            "Antes de creer algo, busca fuentes confiables.",
+        ],
+    },
+    {
+        "zona": 2,
+        "texto": [
+            "¿Cuál es un buen indicador de que una app solicita permisos sospechosos?",
+        ],
+        "opciones": [
+            "1. Pide acceso a tu cámara, micrófono y ubicación sin razón clara.",
+            "2. Es normal que todas las apps lo hagan.",
+            "3. Solo es problema si la app es nueva.",
+        ],
+        "correcta": 0,
+        "feedback_correcto": [
+            "Correcto. Si una app pide permisos sin necesidad clara,",
+            "rechaza y busca alternativa más segura.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. Lee siempre qué permisos solicita una app.",
+            "Rechaza si parece innecesario.",
+        ],
+    },
+    {
+        "zona": 0,
+        "texto": [
+            "¿Qué debes hacer si un amigo está siendo acosado?",
+        ],
+        "opciones": [
+            "1. Ignorarlo para no meterte en problemas.",
+            "2. Apoyarlo, guardar evidencia y reportar con él.",
+            "3. Publicar su historia sin permiso.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. El apoyo es fundamental para víctimas de acoso.",
+            "Juntos pueden reportar a las autoridades.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. Tu amigo necesita apoyo.",
+            "No estar solo es lo más importante.",
+        ],
+    },
+    {
+        "zona": 1,
+        "texto": [
+            "¿Por qué es peligroso aceptar solicitudes de amigos",
+            "de personas desconocidas?",
+        ],
+        "opciones": [
+            "1. No es peligroso, es bueno tener muchos amigos.",
+            "2. Puede dar acceso a personas malintencionadas a tu información.",
+            "3. Solo es peligroso si publicas mucho.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. Extraños pueden reunir información para estafarte",
+            "o acosarte.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. Sé selectivo con tus conexiones.",
+            "Solo acepta de gente que realmente conoces.",
+        ],
+    },
+    {
+        "zona": 2,
+        "texto": [
+            "¿Qué es una suplantación de identidad en línea?",
+        ],
+        "opciones": [
+            "1. Cuando alguien crea una cuenta falsa pretendiendo ser tú.",
+            "2. Un juego de rol inofensivo.",
+            "3. Cambiar tu nombre de usuario.",
+        ],
+        "correcta": 0,
+        "feedback_correcto": [
+            "Correcto. Alguien suplanta tu identidad para estafar o dañar.",
+            "Reporta estas cuentas inmediatamente.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. La suplantación es un delito.",
+            "Puede usarse para estafar a tus amigos.",
+        ],
+    },
+    {
+        "zona": 0,
+        "texto": [
+            "¿Cuál es la mejor respuesta ante un comentario hiriente en línea?",
+        ],
+        "opciones": [
+            "1. Responder con otro insulto igual o peor.",
+            "2. Ignorar, bloquear y reportar si es grave.",
+            "3. Publicar la conversación para que todos lo vean.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. No responder evita escalar el conflicto.",
+            "Bloquear elimina el contacto.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. Responder agrede más la situación.",
+            "Lo mejor es desengancharse.",
+        ],
+    },
+    {
+        "zona": 1,
+        "texto": [
+            "¿Por qué los jóvenes son blanco frecuente de ciberdelincuentes?",
+        ],
+        "opciones": [
+            "1. No lo son, es un mito.",
+            "2. Porque suelen ser menos desconfiados y más abiertos en línea.",
+            "3. Porque no tienen dinero.",
+        ],
+        "correcta": 1,
+        "feedback_correcto": [
+            "Correcto. Los jóvenes son blanco porque pueden ser más confiados.",
+            "Por eso es vital que desarrolles habilidades digitales seguras.",
+        ],
+        "feedback_incorrecto": [
+            "Incorrecto. Los jóvenes sí son blanco común.",
+            "Por eso es importante estar alerta.",
         ],
     },
 ]
@@ -1248,8 +1572,8 @@ class ProfesorIbarra:
             surface.blit(ms, (rx, ry))
 
         # ── Barra de progreso de preguntas ───────────────────────────────
-        # Posicionar dentro del panel, cerca del footer
-        self._draw_progress_bar(surface, font, px + 20, py + ph - CTRL_BAR_H - 32)
+        # Posicionar dentro del panel, cerca del footer (más abajo)
+        self._draw_progress_bar(surface, font, px + 20, py + ph - CTRL_BAR_H - 55)
 
         # ── Barra de controles ───────────────────────────────────────────
         ctrl_y = py + ph - CTRL_BAR_H + (CTRL_BAR_H - lh) // 2

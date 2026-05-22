@@ -1604,8 +1604,8 @@ class Game:
             # --- Cambiar paleta del fondo matrix según la zona ---
             self.matrix_bg.set_zona(new_zone)
 
-            # Cinemática: solo una vez por zona por partida
-            if new_zone not in self._zones_cinematics_shown:
+            # Cinemática: solo una vez por zona por partida (excepto Zona 2)
+            if new_zone not in self._zones_cinematics_shown and new_zone != 2:
                 self._zones_cinematics_shown.add(new_zone)
                 cinematic_id = f"zone_transition_{new_zone}"
                 self.cinematics.reproducir(cinematic_id)
@@ -1667,9 +1667,9 @@ class Game:
         title_surf = font_title.render(self._zone_banner_text, True, (230, 220, 200))
         sub_surf = font_sub.render(self._zone_banner_sub, True, (170, 155, 135)) if self._zone_banner_sub else None
 
-        # Franja horizontal semitransparente centrada
+        # Franja horizontal semitransparente en tercio superior
         banner_h = title_surf.get_height() + (sub_surf.get_height() + 8 if sub_surf else 0) + 28
-        banner_y = sh // 2 - banner_h // 2
+        banner_y = sh // 3 - banner_h // 2  # Posicionar en tercio superior en lugar de centro
 
         banner = pygame.Surface((sw, banner_h), pygame.SRCALPHA)
         banner.fill((0, 0, 0, int(160 * alpha / 255)))

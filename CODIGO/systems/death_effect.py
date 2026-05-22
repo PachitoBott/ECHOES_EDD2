@@ -1,6 +1,7 @@
 """
-Sistema de efectos de muerte basado en código (particles + flash blanco).
+Sistema de efectos de muerte basado en código (particles + flash rojo).
 Reemplaza las animaciones de muerte por efectos visuales procedurales.
+Paleta de colores: Rojo en distintas intensidades (brillante → oscuro).
 """
 
 import random
@@ -65,7 +66,13 @@ class DeathParticle:
 
 
 class DeathEffect:
-    """Maneja un evento de muerte: flash blanco + partículas dispersas."""
+    """Maneja un evento de muerte: flash rojo + partículas dispersas en paleta roja."""
+
+    # Paleta de rojos — colores consistentes para todo el juego
+    COLOR_HEAD    = (255, 40,  40)   # rojo brillante (partículas recientes)
+    COLOR_MID     = (200, 25,  25)   # rojo medio
+    COLOR_TAIL    = (120, 10,  10)   # rojo oscuro (partículas viejas)
+    COLOR_DEEP    = (60,  5,   5)    # rojo casi negro (desvaneciendo)
 
     def __init__(
         self,
@@ -77,7 +84,7 @@ class DeathEffect:
         num_particles: int = 20,
         particle_speed_min: float = 80.0,
         particle_speed_max: float = 200.0,
-        particle_color: Tuple[int, int, int] = (255, 100, 100)
+        particle_color: Tuple[int, int, int] = (255, 40, 40)
     ):
         self.x = x
         self.y = y
@@ -86,8 +93,8 @@ class DeathEffect:
         self.lifetime = lifetime
         self.age = 0.0
 
-        # Flash blanco (primeros frames)
-        self.flash_duration = 0.15  # 150ms de flash blanco
+        # Flash rojo (primeros frames) — paleta consistente con enemigos
+        self.flash_duration = 0.15  # 150ms de flash rojo
 
         # Partículas dispersas
         self.particles: List[DeathParticle] = []
@@ -105,9 +112,15 @@ class DeathEffect:
         speed_max: float,
         color: Tuple[int, int, int]
     ) -> None:
-        """Genera partículas en direcciones aleatorias."""
+        """
+        Genera partículas en direcciones aleatorias con paleta roja.
+        Los tonos de rojo varían de brillante (reciente) a oscuro (desvaneciendo).
+        """
         center_x = self.x + self.sprite_width / 2
         center_y = self.y + self.sprite_height / 2
+
+        # Paleta de rojos disponibles
+        red_palette = [self.COLOR_HEAD, self.COLOR_MID, self.COLOR_TAIL, self.COLOR_DEEP]
 
         for _ in range(count):
             # Dirección aleatoria (radiante)
@@ -121,6 +134,9 @@ class DeathEffect:
             offset_x = random.uniform(-self.sprite_width / 4, self.sprite_width / 4)
             offset_y = random.uniform(-self.sprite_height / 4, self.sprite_height / 4)
 
+            # Color rojo aleatorio de la paleta (para variación visual)
+            particle_color = random.choice(red_palette)
+
             particle = DeathParticle(
                 center_x + offset_x,
                 center_y + offset_y,
@@ -128,7 +144,7 @@ class DeathEffect:
                 vy,
                 lifetime=self.lifetime,
                 size=random.randint(2, 4),
-                color=color
+                color=particle_color
             )
             self.particles.append(particle)
 
@@ -144,7 +160,7 @@ class DeathEffect:
         return self.age < self.lifetime
 
     def should_flash(self) -> bool:
-        """Retorna True si el flash blanco debe mostrarse."""
+        """Retorna True si el flash rojo debe mostrarse."""
         return self.age < self.flash_duration
 
     def render(self, surf: pygame.Surface) -> None:
@@ -168,9 +184,9 @@ class DeathEffectManager:
         sprite_height: int = 96,
         lifetime: float = 0.5,
         num_particles: int = 25,
-        particle_color: Tuple[int, int, int] = (255, 100, 100)
+        particle_color: Tuple[int, int, int] = (255, 40, 40)
     ) -> None:
-        """Crea un nuevo efecto de muerte."""
+        """Crea un nuevo efecto de muerte con partículas rojo brillante."""
         effect = DeathEffect(
             x,
             y,
