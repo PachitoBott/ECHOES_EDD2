@@ -2896,14 +2896,20 @@ class Game:
         # [DIAG] Log para diagnosticar renders invertidos en cliente
         is_client = self.net and not self.net.es_servidor
         if is_client:
-            # Log the LOCAL PLAYER identity
+            # Log the LOCAL PLAYER identity and network state
             self_role = self.net.rol if self.net else "?"
-            log_game.debug(f"[RENDER_DIAG] mi_rol={self_role}, self.player pos=({self.player.x:.0f}, {self.player.y:.0f})")
-            log_game.debug(f"[RENDER_DIAG] remote_players roles: {list(self.remote_players.keys())}")
+            es_cliente = self.net._modo == "cliente" if self.net and hasattr(self.net, '_modo') else "?"
+            log_game.debug(f"[RENDER_DIAG] CLIENTE: modo={self.net._modo if self.net and hasattr(self.net, '_modo') else '?'}, mi_rol={self_role}")
+            log_game.debug(f"[RENDER_DIAG] self.player en ({self.player.x:.0f}, {self.player.y:.0f})")
+            log_game.debug(f"[RENDER_DIAG] remote_players={list(self.remote_players.keys())}")
             for rol, datos in self.remote_players.items():
-                pos_x = datos.get('pos_x') or (datos.get('pos')[0] if isinstance(datos.get('pos'), (list, tuple)) else 0)
-                pos_y = datos.get('pos_y') or (datos.get('pos')[1] if isinstance(datos.get('pos'), (list, tuple)) and len(datos.get('pos')) > 1 else 0)
-                log_game.debug(f"[RENDER_DIAG] remote {rol} en ({pos_x}, {pos_y})")
+                # Extract position carefully, handling both formats
+                if isinstance(datos.get('pos'), (list, tuple)) and len(datos.get('pos')) >= 2:
+                    pos_x, pos_y = datos.get('pos')[0], datos.get('pos')[1]
+                else:
+                    pos_x = datos.get('pos_x', 0)
+                    pos_y = datos.get('pos_y', 0)
+                log_game.debug(f"[RENDER_DIAG] → {rol} en ({pos_x}, {pos_y})")
 
         self.player.draw(self.world)
 
