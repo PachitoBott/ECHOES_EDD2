@@ -217,6 +217,7 @@ class Game:
         port: int = 5555,
         host: str = "127.0.0.1",
         role: str = "victim",
+        skip_intro: bool = False,
     ) -> None:
         pygame.init()
         self.cfg = cfg
@@ -225,6 +226,7 @@ class Game:
         self._net_port = port
         self._net_host = host
         self._net_role = role
+        self._skip_intro = skip_intro
 
         # ---------- Ventana ----------
         self.screen = pygame.display.set_mode(
@@ -1685,7 +1687,9 @@ class Game:
         # --- Trigger intro cinemática en primer frame ---
         if not self._intro_played:
             self._intro_played = True
-            self.cinematics.reproducir("intro")
+            # [FEATURE] Skip intro si se especificó --skip-intro
+            if not self._skip_intro:
+                self.cinematics.reproducir("intro")
             return
 
         room = self.dungeon.current_room
@@ -1745,7 +1749,20 @@ class Game:
         self._update_enemies(dt, room)
         # Actualizar boss si existe en la sala
         if hasattr(room, "boss") and room.boss is not None:
-            room.boss.update(dt)
+            # Preparar lista de jugadores activos (local + remotos)
+            jugadores_activos = [self.player]
+
+            # Agregar jugadores remotos si existen
+            for remote_player in self.remote_players.values():
+                if hasattr(remote_player, 'x') and hasattr(remote_player, 'y'):
+                    jugadores_activos.append(remote_player)
+
+            # Actualizar boss con lista de jugadores
+            room.boss.update(dt, jugadores_activos)
+
+            # Verificar colisiones de ataques del boss con cada jugador
+            for jugador in jugadores_activos:
+                room.boss.verificar_colisiones_jugador(jugador)
 
         # En modo servidor: actualizar también enemigos en salas con jugadores remotos
         if self.net and self.net.es_servidor:
@@ -2278,10 +2295,28 @@ class Game:
                         self._apply_projectile_effects(projectile, room.boss)
                         projectile.alive = False
 
-        # Remote projectiles from other players also hit enemies
+        # [CRITICAL FIX] Remote projectiles from other players also hit enemies
+        # BUT: Only player projectiles, not enemy projectiles
+        #
+        # BUG FIXED: Previously, client was processing ENEMY projectiles here,
+        # which caused enemies to take damage from their own projectiles when they fired,
+        # resulting in them dying immediately after shooting.
+        #
+        # SOLUTION: Check if projectile is a RemoteProjectile (from _handle_enemy_projectiles_state)
+        # If it is, skip it - the server handles all enemy projectile collision detection.
+        # Only player projectiles should hit enemies on the client side.
         for projectile in self.remote_projectiles[:]:
             if not projectile.alive:
                 continue
+
+            # [FIX] Skip enemy projectiles - they shouldn't hit enemies on client
+            # Enemy projectiles are handled server-side only
+            if hasattr(projectile, "_remote_id"):
+                # This is an enemy projectile from _handle_enemy_projectiles_state
+                # Skip it - server handles collision detection
+                log_game.debug(f"[COLLISION_FIX] Saltando proyectil de enemigo ({projectile.x:.0f},{projectile.y:.0f}) - manejado server-side")
+                continue
+
             r_proj = projectile.rect()
             for enemy in room.enemies:
                 if r_proj.colliderect(enemy.rect()):

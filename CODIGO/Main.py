@@ -37,11 +37,12 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Ejemplos:\n"
-            "  python Main.py                        # inicio normal con menú\n"
-            "  python Main.py --seed 1234            # seed fija, con menú\n"
-            "  python Main.py --skip-menu            # seed aleatoria, sin menú\n"
-            "  python Main.py --seed 1234 --room 5,3 # seed + sala específica\n"
-            "  python Main.py --debug                # activa consola F1\n"
+            "  python Main.py                           # inicio normal con menú\n"
+            "  python Main.py --seed 1234               # seed fija, con menú\n"
+            "  python Main.py --skip-menu               # seed aleatoria, sin menú\n"
+            "  python Main.py --skip-intro              # menú + juego (sin cinemática intro)\n"
+            "  python Main.py --seed 1234 --room 5,3    # seed + sala específica\n"
+            "  python Main.py --debug                   # activa consola F1\n"
             "\n"
             "Multijugador (Cliente-Servidor):\n"
             "  python Main.py --server --port 5555 --skip-menu\n"
@@ -73,6 +74,12 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="skip_menu",
         action="store_true",
         help="Salta el menú principal e inicia directamente con seed aleatoria",
+    )
+    parser.add_argument(
+        "--skip-intro",
+        dest="skip_intro",
+        action="store_true",
+        help="Salta la cinemática de intro pero mantiene el menú (para presentación)",
     )
     # --- Networking ---
     parser.add_argument(
@@ -156,10 +163,12 @@ if __name__ == "__main__":
         log_game.info(f"Modo cliente: {role_normalizado} @ {args.host}:{args.port}")
 
     # Crear instancia del juego con el modo de red
-    game = Game(CFG, debug_mode=args.debug, mode=net_mode, **net_params)
+    game = Game(CFG, debug_mode=args.debug, mode=net_mode, skip_intro=args.skip_intro, **net_params)
 
     # Decidir si saltar el menú
-    skip_menu = args.skip_menu or (start_room is not None) or (args.seed is not None) or args.server or args.client
+    # CAMBIO: Permitir menú incluso con --server/--client (útil para presentaciones)
+    # Solo saltar menú si se especifica explícitamente --skip-menu, o si se especifica sala/seed
+    skip_menu = args.skip_menu or (start_room is not None) or (args.seed is not None)
 
     if skip_menu:
         # Si es cliente, esperar a que obtenga la seed del servidor
