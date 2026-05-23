@@ -31,7 +31,16 @@
       "Bash(Get-ChildItem -Recurse -Depth 2 -Directory)",
       "Bash(Select-Object -First 30)",
       "Bash(Format-Table FullName)",
-      "PowerShell(Head -20)"
+      "PowerShell(Head -20)",
+      "Bash(awk '/^class.*Enemy|def maybe_shoot/{print NR\": \" $0}' \"CODIGO/entities/Enemy.py\")",
+      "Bash(python test_enemy_fire_bug_fix.py)",
+      "Bash(Get-ChildItem -Path \"F:\\\\martin\\\\Universidad\\\\ECHOES_EDD2\" -Recurse -Name)",
+      "Bash(Select-Object -First 50)",
+      "Bash(python -m py_compile Main.py)",
+      "Bash(python -m py_compile ui/StartMenu.py)",
+      "Bash(python test_menu_network.py)",
+      "PowerShell(Get-Job -Name \"GameServer\")",
+      "PowerShell(Stop-Job -Force)"
     ]
   }
 }
