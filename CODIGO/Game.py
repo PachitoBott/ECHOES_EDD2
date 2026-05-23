@@ -375,6 +375,8 @@ class Game:
         self._current_zone: int = 1
         self._intro_played: bool = False
         self._zones_cinematics_shown: set = set()  # zonas cuya cinemática ya se mostró esta run
+        self._boss_defeat_cinematics_queued: bool = False  # flag para cinematicas post-boss
+        self._cinematics_queue: list = []  # cola de cinematics para reproducir en secuencia
 
         # Banner de zona (estilo Binding of Isaac)
         self._zone_banner_text: str = ""
@@ -665,6 +667,8 @@ class Game:
         self._zone_banner_sub = ""
         self._zone_banner_timer = 0.0
         self._boss_banner_shown = False
+        self._boss_defeat_cinematics_queued = False
+        self._cinematics_queue = []
 
     def _reset_runtime_state(self) -> None:
         self.projectiles.clear()
@@ -1765,6 +1769,17 @@ class Game:
                         # Espacio: avanza panel / completa texto
                         self.cinematics.siguiente_panel()
             self.cinematics.tick(dt)
+
+            # Procesar cola de cinematics si la actual terminó
+            if not self.cinematics.activo and self._cinematics_queue:
+                next_cinematic = self._cinematics_queue.pop(0)
+                def make_callback(remaining_cinematics):
+                    def callback():
+                        if remaining_cinematics:
+                            self._play_next_cinematic_from_queue()
+                    return callback
+                callback = make_callback(self._cinematics_queue)
+                self.cinematics.reproducir(next_cinematic, callback_fin=callback)
             return
 
         # --- Diálogos ---
@@ -1914,6 +1929,11 @@ class Game:
             # Verificar colisiones de ataques del boss con cada jugador
             for jugador in jugadores_activos:
                 room.boss.verificar_colisiones_jugador(jugador)
+
+            # Detectar muerte del boss y queue cinematicas post-boss
+            if not room.boss.vivo and not self._boss_defeat_cinematics_queued:
+                self._boss_defeat_cinematics_queued = True
+                self._queue_boss_defeat_cinematics()
 
         # En modo servidor: actualizar también enemigos en salas con jugadores remotos
         if self.net and self.net.es_servidor:
@@ -3182,6 +3202,49 @@ class Game:
             return
         self._boss_banner_shown = True
         self._show_zone_banner("SALA DEL BOSS", "¿Estás listo?")
+
+    def _queue_boss_defeat_cinematics(self) -> None:
+        """
+        Encola las 4 cinematicas post-boss para reproducirlas en secuencia:
+        1. boss_defeat
+        2. boss_defeat_unmasked_pixel
+        3. regresando_al_mundo_verdad
+        4. nigoria
+
+        Usa una cola que se procesa cada frame para evitar problemas de timing con callbacks.
+        """
+        cinematics_list = [
+            "boss_defeat",
+            "boss_defeat_unmasked_pixel",
+            "regresando_al_mundo_verdad",
+            "nigoria"
+        ]
+
+        # Limpiar cola anterior y agregar nuevas cinematics
+        self._cinematics_queue = cinematics_list[1:]  # Todas excepto la primera
+
+        # Crear callback para procesar la cola
+        def process_queue_callback():
+            if self._cinematics_queue:
+                self._play_next_cinematic_from_queue()
+
+        # Iniciar con la primera cinematics
+        if cinematics_list:
+            self.cinematics.reproducir(cinematics_list[0], callback_fin=process_queue_callback)
+
+    def _play_next_cinematic_from_queue(self) -> None:
+        """Reproduce la siguiente cinematics de la cola."""
+        if not self._cinematics_queue:
+            return
+
+        next_cinematic = self._cinematics_queue.pop(0)
+
+        # Crear callback para procesar el resto de la cola
+        def process_queue_callback():
+            if self._cinematics_queue:
+                self._play_next_cinematic_from_queue()
+
+        self.cinematics.reproducir(next_cinematic, callback_fin=process_queue_callback)
 
     def _show_zone_banner(self, title: str, subtitle: str = "") -> None:
         """Activa el banner de zona con el texto dado."""
