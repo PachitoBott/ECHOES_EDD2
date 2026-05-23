@@ -379,6 +379,7 @@ class Game:
         self._boss_defeat_cinematics_queued: bool = False  # flag para cinematicas post-boss
         self._cinematics_queue: list = []  # cola de cinematics para reproducir en secuencia
         self._should_return_to_menu: bool = False  # Flag para volver al menú después de cinemática final
+        self._return_to_menu_after_queue: bool = False  # True si al vaciar _cinematics_queue se debe ir al menú
 
         # Banner de zona (estilo Binding of Isaac)
         self._zone_banner_text: str = ""
@@ -1808,15 +1809,15 @@ class Game:
             self.cinematics.tick(dt)
 
             # Procesar cola de cinematics si la actual terminó
-            if not self.cinematics.activo and self._cinematics_queue:
-                next_cinematic = self._cinematics_queue.pop(0)
-                def make_callback(remaining_cinematics):
-                    def callback():
-                        if remaining_cinematics:
-                            self._play_next_cinematic_from_queue()
-                    return callback
-                callback = make_callback(self._cinematics_queue)
-                self.cinematics.reproducir(next_cinematic, callback_fin=callback)
+            if not self.cinematics.activo:
+                if self._cinematics_queue:
+                    # Hay más cinematics en la cola → reproducir la siguiente
+                    next_cinematic = self._cinematics_queue.pop(0)
+                    self.cinematics.reproducir(next_cinematic)
+                elif self._return_to_menu_after_queue:
+                    # Cola vacía y era la secuencia del boss → volver al menú
+                    self._return_to_menu_after_queue = False
+                    self._should_return_to_menu = True
             return
 
         # --- Diálogos ---
@@ -3258,7 +3259,8 @@ class Game:
         3. regresando_al_mundo_verdad
         4. nigoria
 
-        Usa una cola que se procesa cada frame para evitar problemas de timing con callbacks.
+        Al terminar la última, el sistema en _update() detecta la cola vacía
+        y establece _should_return_to_menu = True.
         """
         cinematics_list = [
             "boss_defeat",
@@ -3267,42 +3269,19 @@ class Game:
             "nigoria"
         ]
 
-        # Limpiar cola anterior y agregar nuevas cinematics
-        self._cinematics_queue = cinematics_list[1:]  # Todas excepto la primera
+        # La cola contiene todo excepto la primera (que se inicia ya)
+        self._cinematics_queue = cinematics_list[1:]
+
+        # Al terminar la cola, volver al menú
+        self._return_to_menu_after_queue = True
 
         # --- Reproducir música de cinemática final ---
         music_manager.detener(fade_out_ms=500)
         music_manager.set_volumen(0.7)
         music_manager.reproducir("cinematica_intro", loop=True, fade_in_ms=800)
 
-        # Crear callback para procesar la cola
-        def process_queue_callback():
-            if self._cinematics_queue:
-                self._play_next_cinematic_from_queue()
-
-        # Iniciar con la primera cinematics
-        if cinematics_list:
-            self.cinematics.reproducir(cinematics_list[0], callback_fin=process_queue_callback)
-
-    def _play_next_cinematic_from_queue(self) -> None:
-        """Reproduce la siguiente cinematics de la cola."""
-        if not self._cinematics_queue:
-            return
-
-        next_cinematic = self._cinematics_queue.pop(0)
-        is_last = len(self._cinematics_queue) == 0  # Verificar si es la última
-
-        # Crear callback para procesar el resto de la cola o ir al menú
-        def process_queue_callback():
-            if is_last:
-                # --- Última cinemática: marcar para ir al menú principal ---
-                self._should_return_to_menu = True
-                return
-
-            if self._cinematics_queue:
-                self._play_next_cinematic_from_queue()
-
-        self.cinematics.reproducir(next_cinematic, callback_fin=process_queue_callback)
+        # Iniciar con la primera cinematica (sin callback — el sistema inline maneja el resto)
+        self.cinematics.reproducir(cinematics_list[0])
 
     def _show_zone_banner(self, title: str, subtitle: str = "") -> None:
         """Activa el banner de zona con el texto dado."""
