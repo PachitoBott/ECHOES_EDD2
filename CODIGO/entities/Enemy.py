@@ -932,6 +932,7 @@ class FakerEnemy(Enemy):
         self._attack_timer = 0.0
         self.attack_duration = 0.5
         self._attack_fired = False
+        self._damage_dealt = False  # Flag para asegurar que daño se aplica una sola vez por ataque
 
         # Ralentizar animación de ataque
         self.animator.fps_overrides["attack"] = 8.0
@@ -965,6 +966,7 @@ class FakerEnemy(Enemy):
         self._update_facing(dir_x)
         self.animator.trigger_attack()
         self.lock_movement(self.attack_duration)
+        self._damage_dealt = False  # Resetear flag para nuevo ataque
 
     def _update_animation(self, dt: float) -> None:
         if self._attack_timer > 0.0:

@@ -2772,6 +2772,9 @@ class Game:
         phase_through = phase_active() if callable(phase_active) else False
         for enemy in room.enemies:
             if not player_rect.colliderect(enemy.rect()):
+                # Resetear flag de daño si no hay colisión (enemigo se alejó)
+                if hasattr(enemy, "_damage_dealt"):
+                    enemy._damage_dealt = False
                 continue
             if phase_through:
                 continue
@@ -2783,12 +2786,21 @@ class Game:
             contact_damage = getattr(enemy, "contact_damage", 0)
             if contact_damage <= 0:
                 continue
+
+            # Aplicar daño solo si no ha sido aplicado ya en este ataque
+            damage_already_dealt = getattr(enemy, "_damage_dealt", False)
+            if damage_already_dealt:
+                continue
+
             if player_invulnerable:
                 continue
             took_hit = False
             if hasattr(self.player, "take_damage"):
                 took_hit = bool(self.player.take_damage(contact_damage))
             if took_hit:
+                # Marcar que daño fue aplicado en este ataque
+                if hasattr(enemy, "_damage_dealt"):
+                    enemy._damage_dealt = True
                 player_invulnerable = getattr(self.player, "is_invulnerable", lambda: False)()
         for projectile in self.enemy_projectiles:
             if not projectile.alive:
