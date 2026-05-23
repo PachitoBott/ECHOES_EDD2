@@ -271,9 +271,15 @@ class Boss:
             self.timer_frame -= self.intervalo_frame
             self.frame_actual = (self.frame_actual + 1) % len(self.frames)
 
-        # Movimiento lateral
+        # Movimiento lateral (reducido si hay un laser activo)
         x_anterior = self.x
-        self.x += self.velocidad_x * dt
+        velocidad_actual = self.velocidad_x
+
+        # Si hay un laser activo, reducir velocidad a la mitad
+        if self._hay_laser_activo():
+            velocidad_actual *= 0.5
+
+        self.x += velocidad_actual * dt
 
         # Límites laterales de la sala
         limite_izq = self.sala_rect.left + self.MARGIN
@@ -354,7 +360,7 @@ class Boss:
         self.COOLDOWN_DURACION = {
             "fanout": 2.0,   # reducido de 4.0
             "zigzag": 2.5,   # reducido de 5.0
-            "laser": 3.0,    # reducido de 6.0
+            "laser": 8.0,    # aumentado de 3.0 - laser es muy peligroso
             "emp": 4.0,      # reducido de 8.0
         }
 
@@ -559,6 +565,16 @@ class Boss:
         # Renderizar ataques
         for ataque in self.ataques_activos:
             ataque.render(surface, camera_offset)
+
+    def _hay_laser_activo(self) -> bool:
+        """
+        Verifica si hay un ataque de laser activo en este momento.
+        Se usa para reducir la velocidad del boss mientras dispara.
+        """
+        for ataque in self.ataques_activos:
+            if isinstance(ataque, AtaqueLaser):
+                return True
+        return False
 
     def _puede_usar_laser(self, jugadores: list) -> bool:
         """
@@ -1110,8 +1126,8 @@ class AtaqueLaser(AtaqueBoss):
     """
 
     ANCHO_LASER = 80  # píxeles de ancho
-    DURACION = 1.5  # segundos de activo
-    TELEGRAPH = 0.6  # segundos de aviso visual
+    DURACION = 0.6  # segundos de activo (reducido de 1.5 para ser mucho más corto)
+    TELEGRAPH = 0.4  # segundos de aviso visual (reducido de 0.6)
     DAÑO_POR_INTERVALO = 1  # daño por aplicación
     DAÑO_INTERVALO = 0.3  # cada cuántos segundos aplica daño
     LASER_HEIGHT = 640  # altura máxima (llega hasta el suelo)
