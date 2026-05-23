@@ -793,62 +793,49 @@ class Game:
     # ------------------------------------------------------------------ #
     def run(self) -> None:
         try:
-            # Outer loop para permitir volver al menú después de cinematics
-            while True:
+            menu_ok = False
+            try:
+                menu_ok = self._open_start_menu()
+            except SystemExit:
+                print("[GAME] sys.exit() interceptado en _open_start_menu")
                 menu_ok = False
+            except Exception as e:
+                print(f"[GAME ERROR] En _open_start_menu: {e}")
+                import traceback
+                traceback.print_exc()
+                menu_ok = False
+
+            if not menu_ok:
+                print("[GAME] Menú falló o usuario cerró, terminando...")
+                pygame.mouse.set_visible(True)
+                if self.net:
+                    self.net.detener()
+                pygame.quit()
+                sys.exit(0)
+
+            self._frame_counter = 0
+            while self.running:
                 try:
-                    menu_ok = self._open_start_menu()
+                    dt = self.clock.tick(self.cfg.FPS) / 1000.0
+                    self.door_cooldown = max(0.0, self.door_cooldown - dt)
+
+                    events = self._handle_events()
+                    if self._skip_frame:
+                        self._skip_frame = False
+                        continue
+                    self._update_fps_counter()
+                    self._update(dt, events)
+                    self._render()
+
                 except SystemExit:
-                    print("[GAME] sys.exit() interceptado en _open_start_menu")
-                    menu_ok = False
+                    print("[GAME] sys.exit() interceptado en game loop")
+                    continue
                 except Exception as e:
-                    print(f"[GAME ERROR] En _open_start_menu: {e}")
+                    print(f"[GAME ERROR] En game loop: {e}")
                     import traceback
                     traceback.print_exc()
-                    menu_ok = False
-
-                if not menu_ok:
-                    print("[GAME] Menú falló o usuario cerró, terminando...")
-                    pygame.mouse.set_visible(True)
-                    if self.net:
-                        self.net.detener()
-                    pygame.quit()
-                    sys.exit(0)
-
-                self._frame_counter = 0
-                while self.running:
-                    try:
-                        dt = self.clock.tick(self.cfg.FPS) / 1000.0
-                        self.door_cooldown = max(0.0, self.door_cooldown - dt)
-
-                        events = self._handle_events()
-                        if self._skip_frame:
-                            self._skip_frame = False
-                            continue
-                        self._update_fps_counter()
-                        self._update(dt, events)
-                        self._render()
-
-                    except SystemExit:
-                        print("[GAME] sys.exit() interceptado en game loop")
-                        continue
-                    except Exception as e:
-                        print(f"[GAME ERROR] En game loop: {e}")
-                        import traceback
-                        traceback.print_exc()
-                        print("[GAME] Continuando después del error...")
-                        continue
-
-                # Si se salió por cinemática final, volver al menú principal
-                if self._should_return_to_menu:
-                    print("[GAME] Cinemática final completada, volviendo al menú...")
-                    self._should_return_to_menu = False
-                    self.running = True  # Reiniciar para el siguiente ciclo
-                    pygame.mouse.set_visible(True)
-                    continue  # Vuelve al inicio del outer loop
-
-                # Si se salió por otra razón, terminar
-                break
+                    print("[GAME] Continuando después del error...")
+                    continue
 
         except Exception as e:
             print(f"[GAME ERROR] Fatal en run(): {e}")
@@ -1763,9 +1750,21 @@ class Game:
 
         # --- Chequear si debe volver al menú principal (después de cinemática final) ---
         if self._should_return_to_menu:
-            # No reseteamos aquí - la bandera se resetea en run() después de volver al menú
+            self._should_return_to_menu = False
+
+            # Detener música y estadísticas
             music_manager.detener(fade_out_ms=500)
-            self.running = False
+            self._stats_pending_reason = "cinematics_restart"
+
+            # Mostrar menú principal (misma lógica que en pause menu)
+            pygame.mouse.set_visible(True)
+            menu_ok = self._open_start_menu()
+
+            if not menu_ok:
+                # Usuario cerró el menú, terminar juego
+                self.running = False
+            # Si menu_ok es True, start_new_run() ya está ejecutado y self.running=True
+
             return
 
         # --- Networking: procesar eventos de red y enviar estado ---
