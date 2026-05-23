@@ -3131,7 +3131,7 @@ class Game:
             # Notificar al cliente que P2 murió
             if self.net and self.net.es_servidor:
                 from network.protocol import msg_evento
-                self.net.enviar(msg_evento("p2_game_over", {}))
+                self.net.enviar(msg_evento("p2_game_over"))
             return
 
         # Detectar si se perdió un CORAZÓN COMPLETO (impar → par)
@@ -3247,7 +3247,7 @@ class Game:
         # Notificar al otro jugador que P1 murió
         if self.net:
             from network.protocol import msg_evento
-            self.net.enviar(msg_evento("p1_game_over", {}))
+            self.net.enviar(msg_evento("p1_game_over"))
 
         summary = self._collect_run_summary()
         self._record_stats_death()
