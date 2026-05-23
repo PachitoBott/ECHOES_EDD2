@@ -341,6 +341,7 @@ class Game:
         # --- Menú de pausa ---
         self.pause_menu_buttons: list[PauseMenuButton] = [
             PauseMenuButton("Reanudar", "resume"),
+            PauseMenuButton("Ayuda", "help"),
             PauseMenuButton("Menú principal", "main_menu"),
             PauseMenuButton("Salir del juego", "quit"),
         ]
@@ -1795,6 +1796,9 @@ class Game:
         if getattr(room, "type", "") == "profesor_ibarra":
             prof = getattr(room, "profesor_ibarra", None)
             if prof is not None and prof.estado in (prof.PREGUNTA, prof.FEEDBACK, prof.TIENDA):
+                # Detener sonidos del jugador cuando entra al menú
+                if self.player:
+                    self.player.stop_all_sounds()
                 room.handle_events(
                     events, self.player, self.shop,
                     self.world, self.ui_font, self.cfg.SCREEN_SCALE,
@@ -1810,6 +1814,9 @@ class Game:
             self.minijuego_activo = True
             self.minijuego = MinijuegoPapers(self.cfg.SCREEN_W, self.cfg.SCREEN_H)
             self.ultima_sala_fue_boss = True
+            # Detener sonidos del jugador
+            if self.player:
+                self.player.stop_all_sounds()
             return
 
         # Si el minijuego está activo, procesarlo y no actualizar el resto del juego
