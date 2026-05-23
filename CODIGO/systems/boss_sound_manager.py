@@ -25,6 +25,7 @@ class BossSoundManager:
         "zigzag": "assets/audio/sonido_zigzag.mp3",
         "laser": "assets/audio/sonido_laser.mp3",
         "emp": "assets/audio/sonido_emp.mp3",
+        "proyectil": "assets/audio/boss_projectile_sfx.mp3",
     }
 
     def __init__(self, volumen_idle: float = 0.15):
@@ -64,6 +65,16 @@ class BossSoundManager:
 
     def _cargar_sonidos(self) -> None:
         """Carga todos los archivos de sonido del boss."""
+        # Volúmenes específicos para cada sonido
+        volumenes = {
+            "idle": 1.0,      # Volumen normal para idle (se ajusta con self.volumen_idle)
+            "fanout": 1.0,    # Volumen normal para Fanout
+            "zigzag": 1.0,    # Volumen normal para Zigzag
+            "laser": 0.5,     # Laser al 50% (bajado por ser muy fuerte)
+            "emp": 1.0,       # Volumen normal para EMP
+            "proyectil": 0.6, # Proyectil dividido al 60% (bajado para no ser tan fuerte)
+        }
+
         for nombre, ruta in self.SONIDOS.items():
             try:
                 path = Path(ruta)
@@ -73,6 +84,9 @@ class BossSoundManager:
 
                 if path.exists():
                     self.sonidos[nombre] = pygame.mixer.Sound(str(path))
+                    # Establecer volumen específico para este sonido
+                    if self.sonidos[nombre] and nombre in volumenes:
+                        self.sonidos[nombre].set_volume(volumenes[nombre])
                 else:
                     print(f"[BOSS SOUND] Advertencia: No se encontró {ruta}")
                     self.sonidos[nombre] = None
@@ -148,6 +162,20 @@ class BossSoundManager:
 
         try:
             # Buscar canal disponible (diferente al del idle)
+            canal = pygame.mixer.find_channel()
+            if canal:
+                canal.play(sonido)
+        except pygame.error:
+            pass
+
+    def reproducir_sonido_proyectil(self) -> None:
+        """Reproduce el sonido cuando los proyectiles del Fanout se dividen."""
+        sonido = self.sonidos.get("proyectil")
+        if not sonido:
+            return
+
+        try:
+            # Buscar canal disponible para el sonido de proyectil
             canal = pygame.mixer.find_channel()
             if canal:
                 canal.play(sonido)
