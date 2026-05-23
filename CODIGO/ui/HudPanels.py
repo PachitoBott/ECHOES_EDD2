@@ -527,10 +527,11 @@ class HUDPanel:
         else:
             # Cargar imagen Cyborg_Idle para P2
             try:
-                cyborg_path = "CODIGO/assets/sprites/player2/Cyborg_Idle.png"
+                cyborg_path = "assets/sprites/player2/Cyborg_Idle.png"
                 self._cyborg_idle = pygame.image.load(cyborg_path).convert_alpha()
+                print(f"[OK] Cyborg_Idle cargado desde: {cyborg_path}")
             except Exception as e:
-                print(f"[WARNING] HUDPanel: No se pudo cargar Cyborg_Idle: {e}")
+                print(f"[WARNING] HUDPanel: No se pudo cargar Cyborg_Idle desde {cyborg_path}: {e}")
                 self._cyborg_idle = None
 
     def _cargar_iconos_poderes(self) -> None:
