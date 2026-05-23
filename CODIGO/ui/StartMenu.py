@@ -132,6 +132,8 @@ class StartMenu:
         # --- Pantalla de Lobby (co-op) ---
         self.lobby: PantallaLobby | None = None
         self.net_manager = None  # Se asignará desde Game.py para detectar P2
+        self.servidor_menu = None  # Se asignará desde Main.py si modo=servidor
+        self.cliente_menu = None  # Se asignará desde Main.py si modo=cliente
         self.player_ref = None  # Se asignará desde Game.py para obtener animación idle
         self.modo_coop_solicitado = False  # Flag para indicar si inició en co-op
 
@@ -332,7 +334,44 @@ class StartMenu:
             dt = self.clock.tick(self.cfg.FPS) / 1000.0
             self.preview_anim_time = (self.preview_anim_time + dt) % 9999
 
-            # Actualizar lobby si está activo
+            # ================================================================
+            # SINCRONIZACIÓN CON RED DEL MENÚ (CLIENTE)
+            # ================================================================
+            if self.cliente_menu:
+                # Procesar mensajes del servidor
+                self.cliente_menu.procesar_mensajes_pendientes()
+
+                # Si el servidor ordenó iniciar el juego
+                if self.cliente_menu.iniciar_juego:
+                    self.cliente_menu.iniciar_juego = False
+                    self.modo_coop_solicitado = True
+                    self._start_requested = True
+                    running = False
+                    # Usar seed del servidor
+                    if self.cliente_menu.seed_juego is not None:
+                        self.seed_text = str(self.cliente_menu.seed_juego)
+                    break
+
+                # Sincronizar pantalla actual con servidor
+                pantalla_del_servidor = self.cliente_menu.pantalla_actual
+                if pantalla_del_servidor == "conectando":
+                    # Mostrar pantalla de conexión
+                    self._draw_menu()
+                    # Dibujar overlay "Conectando..."
+                    self._draw_connecting_overlay()
+                    pygame.display.flip()
+                    continue
+                elif pantalla_del_servidor == "sin_conexion":
+                    # Mostrar error de conexión
+                    self._draw_menu()
+                    self._draw_connection_error_overlay()
+                    pygame.display.flip()
+                    continue
+                # Si está "principal", "lobby", etc., continuar normalmente
+
+            # ================================================================
+            # ACTUALIZAR LOBBY
+            # ================================================================
             if self.lobby:
                 self.lobby.update(dt)
 
@@ -341,6 +380,9 @@ class StartMenu:
                     p2_conectado = "aliado" in self.net_manager.roles_conectados()
                     self.lobby.set_p2_conectado(p2_conectado)
 
+            # ================================================================
+            # MANEJO DE EVENTOS
+            # ================================================================
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self._start_requested = False
@@ -358,15 +400,26 @@ class StartMenu:
                         running = False
                         break
                 else:
-                    keep_running = self._handle_menu_event(event)
-                    if not keep_running:
-                        running = False
-                        break
+                    # Si es cliente, solo permitir ESC y bloquear navegación
+                    if self.cliente_menu and self.cliente_menu.conectado:
+                        if event.type == pygame.KEYDOWN:
+                            if event.key == pygame.K_ESCAPE:
+                                self._start_requested = False
+                                running = False
+                        # Ignorar cualquier otro input
+                    else:
+                        # Servidor o sin red: manejo normal
+                        keep_running = self._handle_menu_event(event)
+                        if not keep_running:
+                            running = False
+                            break
 
             if not running:
                 break
 
-            # Procesar resultado del lobby
+            # ================================================================
+            # PROCESAR RESULTADO DEL LOBBY
+            # ================================================================
             if self.lobby and self.lobby.terminado:
                 if self.lobby.resultado == "jugar":
                     # Iniciar juego con modo según conexión de P2
@@ -374,12 +427,27 @@ class StartMenu:
                     self._start_requested = True
                     running = False
                     self.overlay_key = None
+
+                    # Si es servidor, ordenar al cliente iniciar el juego
+                    if self.servidor_menu:
+                        seed = self.selected_seed()
+                        import random
+                        if seed is None:
+                            seed = random.randint(0, 999999)
+                        self.servidor_menu.enviar_inicio_juego(seed)
+                        self.seed_text = str(seed)
+
                 elif self.lobby.resultado == "volver":
                     # Volver al menú principal
                     self.lobby = None
                     self.overlay_key = None
+                    # Notificar al cliente (servidor)
+                    if self.servidor_menu:
+                        self.servidor_menu.enviar_estado_menu("principal")
 
-            # Renderizar
+            # ================================================================
+            # RENDERIZAR
+            # ================================================================
             if self.overlay_key == "lobby" and self.lobby:
                 self.lobby.render(self.screen)
             elif self.overlay_key:
@@ -445,9 +513,15 @@ class StartMenu:
             pygame.K_BACKSPACE,
         ):
             self.overlay_key = None
+            # Notificar al cliente que volvemos al menú principal (servidor)
+            if self.servidor_menu:
+                self.servidor_menu.enviar_estado_menu("principal")
             return True
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.overlay_key = None
+            # Notificar al cliente que volvemos al menú principal (servidor)
+            if self.servidor_menu:
+                self.servidor_menu.enviar_estado_menu("principal")
             return True
         if event.type == pygame.QUIT:
             self._start_requested = False
@@ -461,20 +535,29 @@ class StartMenu:
             pygame.K_BACKSPACE,
         ):
             self.overlay_key = None
+            # Notificar al cliente que volvemos al menú principal (servidor)
+            if self.servidor_menu:
+                self.servidor_menu.enviar_estado_menu("principal")
             return True
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if hasattr(self, 'confirm_button_rect') and self.confirm_button_rect.collidepoint(event.pos):
                 self._play_click()
                 self.overlay_key = None
+                # Notificar al cliente que volvemos al menú principal (servidor)
+                if self.servidor_menu:
+                    self.servidor_menu.enviar_estado_menu("principal")
                 return True
-            
+
             if (
                 self.skins_overlay_rect.width
                 and self.skins_overlay_rect.height
                 and not self.skins_overlay_rect.collidepoint(event.pos)
             ):
                 self.overlay_key = None
+                # Notificar al cliente que volvemos al menú principal (servidor)
+                if self.servidor_menu:
+                    self.servidor_menu.enviar_estado_menu("principal")
                 return True
             for body, rect in self.body_cards:
                 if rect.collidepoint(event.pos):
@@ -500,6 +583,9 @@ class StartMenu:
         if action == "skins":
             self.overlay_key = action
             self.overlay_lines = ()
+            # Notificar al cliente (servidor)
+            if self.servidor_menu:
+                self.servidor_menu.enviar_estado_menu("skins")
             return True
         if action == "credits" or action == "controls":
             if action in self.menu_cfg.sections:
@@ -509,14 +595,23 @@ class StartMenu:
                     self.overlay_lines = section_lines[1:] if section_lines else ()
                 else:
                     self.overlay_lines = section_lines
+                # Notificar al cliente (servidor)
+                if self.servidor_menu:
+                    self.servidor_menu.enviar_estado_menu(action)
                 return True
         if action == "statistics":
             self.overlay_key = action
             self.overlay_lines = self._statistics_lines()
+            # Notificar al cliente (servidor)
+            if self.servidor_menu:
+                self.servidor_menu.enviar_estado_menu("estadisticas")
             return True
         if action in self.menu_cfg.sections:
             self.overlay_key = action
             self.overlay_lines = self.menu_cfg.sections[action]
+            # Notificar al cliente (servidor)
+            if self.servidor_menu:
+                self.servidor_menu.enviar_estado_menu(action)
             return True
         if action == "quit":
             return False
@@ -536,6 +631,14 @@ class StartMenu:
     def set_net_manager(self, net_manager) -> None:
         """Establece el gestor de red para detectar clientes conectados."""
         self.net_manager = net_manager
+
+    def set_servidor_menu(self, servidor_menu) -> None:
+        """Establece el servidor del menú (modo SERVIDOR)."""
+        self.servidor_menu = servidor_menu
+
+    def set_cliente_menu(self, cliente_menu) -> None:
+        """Establece el cliente del menú (modo CLIENTE)."""
+        self.cliente_menu = cliente_menu
 
     def set_player_animation(self, player) -> None:
         """Almacena la referencia al jugador para obtener su animación idle."""
@@ -567,6 +670,10 @@ class StartMenu:
             p2_conectado = "aliado" in self.net_manager.roles_conectados()
             self.lobby.set_p2_conectado(p2_conectado)
 
+        # Notificar al cliente que entramos al lobby (servidor)
+        if self.servidor_menu:
+            self.servidor_menu.enviar_estado_menu("lobby")
+
         self.overlay_key = "lobby"
         return True
 
@@ -595,6 +702,78 @@ class StartMenu:
             pygame.draw.rect(vignette, (0, 0, 0, alpha),
                              pygame.Rect(margin, margin, width - margin * 2, height - margin * 2), 30)
         self.screen.blit(vignette, (0, 0))
+
+    def _draw_connecting_overlay(self) -> None:
+        """Renderiza overlay "Conectando al servidor..." para cliente."""
+        width, height = self.screen.get_size()
+        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        self.screen.blit(overlay, (0, 0))
+
+        try:
+            font = pygame.font.SysFont("monospace", 20)
+            txt = font.render(
+                "Conectando al servidor...",
+                False, (150, 100, 200)
+            )
+            self.screen.blit(txt, (
+                width // 2 - txt.get_width() // 2,
+                height // 2
+            ))
+
+            if self.cliente_menu:
+                font_small = pygame.font.SysFont("monospace", 14)
+                txt_ip = font_small.render(
+                    f"IP: {self.cliente_menu.ip_servidor}:{self.cliente_menu.PUERTO}",
+                    False, (80, 60, 100)
+                )
+                self.screen.blit(txt_ip, (
+                    width // 2 - txt_ip.get_width() // 2,
+                    height // 2 + 40
+                ))
+        except Exception:
+            pass
+
+    def _draw_connection_error_overlay(self) -> None:
+        """Renderiza overlay de error de conexión."""
+        width, height = self.screen.get_size()
+        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        self.screen.blit(overlay, (0, 0))
+
+        try:
+            font = pygame.font.SysFont("monospace", 20)
+            font_small = pygame.font.SysFont("monospace", 14)
+
+            txt = font.render(
+                "No se pudo conectar al servidor",
+                False, (200, 50, 50)
+            )
+            self.screen.blit(txt, (
+                width // 2 - txt.get_width() // 2,
+                height // 2 - 30
+            ))
+
+            txt2 = font_small.render(
+                "Verifica que el servidor esté activo",
+                False, (120, 80, 100)
+            )
+            self.screen.blit(txt2, (
+                width // 2 - txt2.get_width() // 2,
+                height // 2 + 20
+            ))
+
+            if self.cliente_menu:
+                txt3 = font_small.render(
+                    f"IP esperada: {self.cliente_menu.ip_servidor}",
+                    False, (80, 60, 80)
+                )
+                self.screen.blit(txt3, (
+                    width // 2 - txt3.get_width() // 2,
+                    height // 2 + 50
+                ))
+        except Exception:
+            pass
 
     def _draw_menu(self, *, dim_background: bool = False) -> None:
         width, height = self.screen.get_size()
@@ -747,6 +926,10 @@ class StartMenu:
         self.volume = max(0.0, min(1.0, relative))
         self._update_volume_handle_pos()
         self._apply_volume()
+        # Notificar al cliente sobre cambio de volumen (servidor)
+        if self.servidor_menu:
+            volumen_int = int(self.volume * 100)
+            self.servidor_menu.enviar_config(volumen_int)
 
     def _apply_volume(self) -> None:
         if not pygame.mixer.get_init():

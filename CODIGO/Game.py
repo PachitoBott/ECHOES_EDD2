@@ -819,6 +819,12 @@ class Game:
         if self.net:
             start_menu.set_net_manager(self.net)
 
+        # Pasar referencias del servidor/cliente del menú
+        if hasattr(self, '_servidor_menu') and self._servidor_menu:
+            start_menu.set_servidor_menu(self._servidor_menu)
+        if hasattr(self, '_cliente_menu') and self._cliente_menu:
+            start_menu.set_cliente_menu(self._cliente_menu)
+
         # Player (si ya existe de una sesión anterior)
         player_para_lobby = None
         if hasattr(self, '_last_player_for_lobby'):
