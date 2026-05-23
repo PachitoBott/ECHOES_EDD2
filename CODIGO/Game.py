@@ -11,6 +11,7 @@ import pygame
 
 from Config import Config
 from ui.StartMenu import StartMenu
+from ui.versus_screen import PantallaVersus
 from core.Tileset import Tileset
 from core.TilesetManager import TilesetManager
 from entities.Player import Player
@@ -51,6 +52,7 @@ from systems.death_effect import DeathEffectManager
 from systems.power_effects import power_effect_manager
 from systems.spawn_effect import SpawnEffectManager
 from systems.minigame_papers import MinijuegoPapers, posts_pool
+from systems.music_manager import music_manager
 
 
 class RemoteProjectile:
@@ -217,6 +219,7 @@ class Game:
         port: int = 5555,
         host: str = "127.0.0.1",
         role: str = "victim",
+        skip_intro: bool = False,
     ) -> None:
         pygame.init()
         self.cfg = cfg
@@ -225,6 +228,7 @@ class Game:
         self._net_port = port
         self._net_host = host
         self._net_role = role
+        self._skip_intro = skip_intro
 
         # ---------- Ventana ----------
         self.screen = pygame.display.set_mode(
@@ -338,6 +342,7 @@ class Game:
         # --- Menú de pausa ---
         self.pause_menu_buttons: list[PauseMenuButton] = [
             PauseMenuButton("Reanudar", "resume"),
+            PauseMenuButton("Ayuda", "help"),
             PauseMenuButton("Menú principal", "main_menu"),
             PauseMenuButton("Salir del juego", "quit"),
         ]
@@ -554,6 +559,22 @@ class Game:
         self._finalize_run_statistics(finalize_reason)
         self._stats_pending_reason = None
 
+        # ================================================================
+        # Cerrar conexiones del menú para liberar puerto 5555
+        # (NetworkManager del juego también usa 5555)
+        # ================================================================
+        if hasattr(self, '_servidor_menu') and self._servidor_menu:
+            self._servidor_menu.cerrar()
+            log_game.info("[OK] Servidor del menú cerrado")
+        if hasattr(self, '_cliente_menu') and self._cliente_menu:
+            self._cliente_menu.cerrar()
+            log_game.info("[OK] Cliente del menú cerrado")
+
+        # Esperar a que el puerto se libere completamente antes de
+        # que NetworkManager intente usarlo (evita timeout)
+        import time as time_module
+        time_module.sleep(0.5)
+
         # Resetear el pool de posts para el nuevo run
         posts_pool.reset_run()
 
@@ -595,7 +616,7 @@ class Game:
             self.player.x, self.player.y = spawn_x, spawn_y
         if hasattr(self.player, "reset_loadout"):
             self.player.reset_loadout()
-        setattr(self.player, "gold", 999)
+        setattr(self.player, "gold", 0)
 
         # Almacenar referencia de player en el menú para la próxima vez que se abra
         # (El menú será recreado la próxima vez que se abre _open_start_menu)
@@ -628,10 +649,18 @@ class Game:
         self.minijuego: MinijuegoPapers | None = None
         self.ultima_sala_fue_boss = False
 
+        # Pantalla de versus (después del minijuego, antes del boss)
+        self.pantalla_versus_activa = False
+        self.pantalla_versus: PantallaVersus | None = None
+
         self._run_start_time = perf_counter()
+
+        # --- Música: iniciar cinemática intro ---
+        music_manager.reproducir("cinematica_intro", loop=True, fade_in_ms=800)
 
         # Trigger narrativa: marcar para reproducir intro en el primer frame
         self._intro_played = False
+        self._intro_cinematica_activa = False  # Track when intro cinematic is playing
         self._current_zone = 1
         self._zones_cinematics_shown = set()
         self._zone_banner_text = ""
@@ -745,32 +774,65 @@ class Game:
     # Bucle principal
     # ------------------------------------------------------------------ #
     def run(self) -> None:
-        if not self._open_start_menu():
+        try:
+            menu_ok = False
+            try:
+                menu_ok = self._open_start_menu()
+            except SystemExit:
+                print("[GAME] sys.exit() interceptado en _open_start_menu")
+                menu_ok = False
+            except Exception as e:
+                print(f"[GAME ERROR] En _open_start_menu: {e}")
+                import traceback
+                traceback.print_exc()
+                menu_ok = False
+
+            if not menu_ok:
+                print("[GAME] Menú falló o usuario cerró, terminando...")
+                pygame.mouse.set_visible(True)
+                if self.net:
+                    self.net.detener()
+                pygame.quit()
+                sys.exit(0)
+
+            self._frame_counter = 0
+            while self.running:
+                try:
+                    dt = self.clock.tick(self.cfg.FPS) / 1000.0
+                    self.door_cooldown = max(0.0, self.door_cooldown - dt)
+
+                    events = self._handle_events()
+                    if self._skip_frame:
+                        self._skip_frame = False
+                        continue
+                    self._update_fps_counter()
+                    self._update(dt, events)
+                    self._render()
+
+                except SystemExit:
+                    print("[GAME] sys.exit() interceptado en game loop")
+                    continue
+                except Exception as e:
+                    print(f"[GAME ERROR] En game loop: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    print("[GAME] Continuando después del error...")
+                    continue
+
+        except Exception as e:
+            print(f"[GAME ERROR] Fatal en run(): {e}")
+            import traceback
+            traceback.print_exc()
+
+        finally:
+            print("[GAME] Limpiando recursos...")
             pygame.mouse.set_visible(True)
+            self._finalize_run_statistics("shutdown")
             if self.net:
                 self.net.detener()
             pygame.quit()
+            print("[GAME] Aplicación terminada correctamente")
             sys.exit(0)
-
-        self._frame_counter = 0
-        while self.running:
-            dt = self.clock.tick(self.cfg.FPS) / 1000.0
-            self.door_cooldown = max(0.0, self.door_cooldown - dt)
-
-            events = self._handle_events()
-            if self._skip_frame:
-                self._skip_frame = False
-                continue
-            self._update_fps_counter()
-            self._update(dt, events)
-            self._render()
-
-        pygame.mouse.set_visible(True)
-        self._finalize_run_statistics("shutdown")
-        if self.net:
-            self.net.detener()
-        pygame.quit()
-        sys.exit(0)
 
     def _handle_events(self) -> list:
         events = pygame.event.get()
@@ -834,6 +896,12 @@ class Game:
         if self.net:
             start_menu.set_net_manager(self.net)
 
+        # Pasar referencias del servidor/cliente del menú
+        if hasattr(self, '_servidor_menu') and self._servidor_menu:
+            start_menu.set_servidor_menu(self._servidor_menu)
+        if hasattr(self, '_cliente_menu') and self._cliente_menu:
+            start_menu.set_cliente_menu(self._cliente_menu)
+
         # Player (si ya existe de una sesión anterior)
         player_para_lobby = None
         if hasattr(self, '_last_player_for_lobby'):
@@ -844,7 +912,15 @@ class Game:
         if player_para_lobby:
             start_menu.set_player_animation(player_para_lobby)
 
-        menu_result = start_menu.run()
+        try:
+            menu_result = start_menu.run()
+        except Exception as e:
+            print(f"[GAME ERROR] Menu.run() falló: {e}")
+            import traceback
+            traceback.print_exc()
+            self.running = False
+            return False
+
         if not menu_result.start_game:
             if self._run_start_time is not None:
                 reason = self._stats_pending_reason or "menu_exit"
@@ -852,8 +928,22 @@ class Game:
                 self._stats_pending_reason = None
             self.running = False
             return False
+
         pygame.mouse.set_visible(False)
-        self.start_new_run(seed=menu_result.seed, modo_coop=menu_result.modo_coop)
+
+        try:
+            print(f"[GAME] Iniciando nueva partida, seed={menu_result.seed}, modo_coop={menu_result.modo_coop}")
+            self.start_new_run(seed=menu_result.seed, modo_coop=menu_result.modo_coop)
+            print("[GAME] Nueva partida cargada exitosamente")
+        except Exception as e:
+            print(f"[GAME ERROR] start_new_run() falló: {e}")
+            import traceback
+            traceback.print_exc()
+            self.running = False
+            return False
+
+        # CRÍTICO: Asegurar que self.running = True para entrar al game loop
+        self.running = True
         self._skip_frame = True
         return True
 
@@ -1717,8 +1807,16 @@ class Game:
         # --- Trigger intro cinemática en primer frame ---
         if not self._intro_played:
             self._intro_played = True
-            self.cinematics.reproducir("intro")
+            # [FEATURE] Skip intro si se especificó --skip-intro
+            if not self._skip_intro:
+                self.cinematics.reproducir("intro")
+                self._intro_cinematica_activa = True
             return
+
+        # --- Detectar cuando la cinemática intro termina ---
+        if self._intro_cinematica_activa and not self.cinematics.activo:
+            self._intro_cinematica_activa = False
+            music_manager.detener(fade_out_ms=1000)
 
         room = self.dungeon.current_room
 
@@ -1726,6 +1824,9 @@ class Game:
         if getattr(room, "type", "") == "profesor_ibarra":
             prof = getattr(room, "profesor_ibarra", None)
             if prof is not None and prof.estado in (prof.PREGUNTA, prof.FEEDBACK, prof.TIENDA):
+                # Detener sonidos del jugador cuando entra al menú
+                if self.player:
+                    self.player.stop_all_sounds()
                 room.handle_events(
                     events, self.player, self.shop,
                     self.world, self.ui_font, self.cfg.SCREEN_SCALE,
@@ -1741,6 +1842,13 @@ class Game:
             self.minijuego_activo = True
             self.minijuego = MinijuegoPapers(self.cfg.SCREEN_W, self.cfg.SCREEN_H)
             self.ultima_sala_fue_boss = True
+            # --- Música: reproducir minijuego ---
+            music_manager.reproducir("minigame", loop=False, fade_in_ms=500)
+            # Bajar volumen del minijuego
+            music_manager.set_volumen(0.2)
+            # Detener sonidos del jugador
+            if self.player:
+                self.player.stop_all_sounds()
             return
 
         # Si el minijuego está activo, procesarlo y no actualizar el resto del juego
@@ -1759,14 +1867,44 @@ class Game:
             if self.minijuego.terminado:
                 if not self.minijuego.aprobado:
                     # No aprobó - reiniciar la partida
+                    # (La música se reiniciará con start_new_run)
+                    music_manager.detener(fade_out_ms=800)
                     self._stats_pending_reason = "minigame_failed"
                     self.start_new_run(seed=self.current_seed)
                 else:
-                    # Aprobó - desactivar minijuego y continuar en la sala del boss
+                    # Aprobó - mostrar pantalla de versus antes del boss
+                    # Detener música del minijuego
+                    music_manager.detener(fade_out_ms=200)
+                    # Reproducir música del boss para el versus screen
+                    music_manager.set_volumen(0.7)
+                    music_manager.reproducir("boss_fight", loop=True, fade_in_ms=500)
+                    self._activar_pantalla_versus()
                     self.minijuego_activo = False
                     self.minijuego = None
             else:
                 # El minijuego sigue activo
+                return
+
+        # Procesar pantalla de versus si está activa
+        if self.pantalla_versus_activa and self.pantalla_versus:
+            for event in events:
+                # Convertir coordenadas de mouse a coordenadas lógicas (sin escala)
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    event.pos = (
+                        event.pos[0] // self.cfg.SCREEN_SCALE,
+                        event.pos[1] // self.cfg.SCREEN_SCALE,
+                    )
+                self.pantalla_versus.handle_event(event)
+            self.pantalla_versus.update(dt)
+
+            # Si la pantalla terminó, desactivarla y continuar
+            if self.pantalla_versus.terminado:
+                self.pantalla_versus_activa = False
+                self.pantalla_versus = None
+                # --- Música: detener para boss fight (silencio) ---
+                music_manager.detener(fade_out_ms=500)
+            else:
+                # La pantalla sigue activa, no actualizar el resto del juego
                 return
 
         self._update_player(dt, room)
@@ -1777,7 +1915,21 @@ class Game:
         self._update_enemies(dt, room)
         # Actualizar boss si existe en la sala
         if hasattr(room, "boss") and room.boss is not None:
-            room.boss.update(dt)
+            # Preparar lista de jugadores activos (local + remotos)
+            jugadores_activos = [self.player]
+
+            # Agregar jugadores remotos si existen
+            for remote_player in self.remote_players.values():
+                if hasattr(remote_player, 'x') and hasattr(remote_player, 'y'):
+                    jugadores_activos.append(remote_player)
+
+            # Actualizar boss con lista de jugadores
+            room.boss.update(dt, jugadores_activos)
+
+            # Verificar colisiones de ataques del boss con cada jugador
+            for jugador in jugadores_activos:
+                room.boss.verificar_colisiones_jugador(jugador)
+
             # Detectar muerte del boss y queue cinematicas post-boss
             if not room.boss.vivo and not self._boss_defeat_cinematics_queued:
                 self._boss_defeat_cinematics_queued = True
@@ -1844,7 +1996,11 @@ class Game:
             if hasattr(self.dungeon, "main_path"):
                 on_main_path = 1 if pos in self.dungeon.main_path else 0
             difficulty = 1 + depth + branch_factor + (depth // 3) + on_main_path
-            room.ensure_spawn(difficulty=difficulty)
+
+            # Obtener zona de la sala (nuevo sistema de spawn por probabilidades)
+            zona = self.dungeon.room_zone(pos)
+
+            room.ensure_spawn(difficulty=difficulty, zone=zona, dungeon=self.dungeon)
 
     def _get_closest_player_for_enemy(self, enemy, room_pos=None) -> object:
         """
@@ -2314,10 +2470,28 @@ class Game:
                         self._apply_projectile_effects(projectile, room.boss)
                         projectile.alive = False
 
-        # Remote projectiles from other players also hit enemies
+        # [CRITICAL FIX] Remote projectiles from other players also hit enemies
+        # BUT: Only player projectiles, not enemy projectiles
+        #
+        # BUG FIXED: Previously, client was processing ENEMY projectiles here,
+        # which caused enemies to take damage from their own projectiles when they fired,
+        # resulting in them dying immediately after shooting.
+        #
+        # SOLUTION: Check if projectile is a RemoteProjectile (from _handle_enemy_projectiles_state)
+        # If it is, skip it - the server handles all enemy projectile collision detection.
+        # Only player projectiles should hit enemies on the client side.
         for projectile in self.remote_projectiles[:]:
             if not projectile.alive:
                 continue
+
+            # [FIX] Skip enemy projectiles - they shouldn't hit enemies on client
+            # Enemy projectiles are handled server-side only
+            if hasattr(projectile, "_remote_id"):
+                # This is an enemy projectile from _handle_enemy_projectiles_state
+                # Skip it - server handles collision detection
+                log_game.debug(f"[COLLISION_FIX] Saltando proyectil de enemigo ({projectile.x:.0f},{projectile.y:.0f}) - manejado server-side")
+                continue
+
             r_proj = projectile.rect()
             for enemy in room.enemies:
                 if r_proj.colliderect(enemy.rect()):
@@ -2436,6 +2610,9 @@ class Game:
                     room_id=(self.dungeon.i, self.dungeon.j)
                 )
                 self.net.enviar(evento)
+            # --- Música: detener al completar boss room ---
+            if not was_cleared_before and room.cleared and getattr(room, "type", "") == "boss":
+                music_manager.detener(fade_out_ms=1500)
         self._update_room_lock(room)
         if getattr(self.player, "hp", 1) <= 0:
             self._handle_player_death(room)
@@ -2655,6 +2832,9 @@ class Game:
         summary = self._collect_run_summary()
         self._record_stats_death()
         self._finalize_run_statistics("player_death")
+
+        # --- Música: detener música al morir ---
+        music_manager.detener(fade_out_ms=1500)
 
         action = self._show_game_over_screen(summary)
 
@@ -2974,6 +3154,46 @@ class Game:
             name, sub = _ZONE_NAMES.get(new_zone, (f"ZONA {new_zone}", ""))
             self._show_zone_banner(name, sub)
 
+    def _activar_pantalla_versus(self) -> None:
+        """
+        Crea y activa la pantalla de versus.
+        Se llama cuando el jugador aprueba el minijuego Papers Please.
+        """
+        # Obtener animaciones idle
+        anim_p1 = None
+        if hasattr(self.player, "_animations") and "idle" in self.player._animations:
+            anim_p1 = self.player._animations["idle"]
+
+        # Detectar si hay P2 conectado
+        hay_p2 = False
+        if self.net:
+            hay_p2 = "aliado" in self.net.roles_conectados()
+
+        # Cargar animación de P2 (Cyborg) desde assets
+        anim_p2 = None
+        if hay_p2:
+            try:
+                from systems.animation import AnimationManager
+                json_path = "assets/sprites/player2/animations.json"
+                sprite_dir = "assets/sprites/player2"
+                animations = AnimationManager.load_from_json(json_path, sprite_dir)
+                anim_p2 = animations.get("idle")
+            except Exception as e:
+                log_game.warning(f"No se pudo cargar animación P2: {e}")
+                anim_p2 = None
+
+        # Crear pantalla de versus
+        self.pantalla_versus = PantallaVersus(
+            logical_w=self.cfg.SCREEN_W,
+            logical_h=self.cfg.SCREEN_H,
+            hay_p2=hay_p2,
+            anim_p1=anim_p1,
+            anim_p2=anim_p2,
+        )
+        self.pantalla_versus_activa = True
+        # Nota: música del boss se reproducirá en el primer frame del versus screen
+        # para asegurar transición suave sin gaps de silencio
+
     def _check_boss_room_entry(self, room) -> None:
         """Muestra un banner temporal al entrar a la sala del boss (solo una vez por run)."""
         if self._boss_banner_shown:
@@ -3092,6 +3312,20 @@ class Game:
 
 
     def _render(self) -> None:
+        # Si la pantalla de versus está activa, renderizar solo esa
+        if self.pantalla_versus_activa and self.pantalla_versus:
+            self.world.fill((4, 2, 8))  # Fondo negro por si acaso
+            self.pantalla_versus.render(self.world)
+            # Escalar y mostrar la pantalla
+            scaled = pygame.transform.scale(
+                self.world,
+                (self.cfg.SCREEN_W * self.cfg.SCREEN_SCALE,
+                 self.cfg.SCREEN_H * self.cfg.SCREEN_SCALE)
+            )
+            self.screen.blit(scaled, (0, 0))
+            pygame.display.flip()
+            return
+
         # Si el minijuego está activo, renderizar solo el minijuego
         if self.minijuego_activo and self.minijuego:
             self.minijuego.render(self.world)
