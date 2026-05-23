@@ -570,9 +570,30 @@ class Game:
         import time as time_module
         time_module.sleep(0.5)
 
+        # Resetear el pool de posts para el nuevo run
+        posts_pool.reset_run()
+
+        # Crear dungeon PRIMERO para obtener la seed
+        params = self.cfg.dungeon_params()
+        if dungeon_params:
+            params = {**params, **dungeon_params}
+
+        self.dungeon = Dungeon(**params, seed=seed)
+        self.current_seed = self.dungeon.seed
+        pygame.display.set_caption(f"Echoes — Seed {self.current_seed}")
+        log_game.info(f"Nueva partida — seed={self.current_seed}  salas={len(self.dungeon.rooms)}")
+
+        # ================================================================
+        # Actualizar seed en NetworkManager ANTES de iniciar
+        # (crucial: el servidor rechaza clientes sin seed)
+        # ================================================================
+        if self.net and self.net.es_servidor and hasattr(self.net, '_servidor'):
+            self.net._servidor.seed = self.current_seed
+            log_game.info(f"[NET] Seed actualizada en servidor: {self.current_seed}")
+
         # ================================================================
         # INICIAR NetworkManager AHORA que puerto 5555 está libre
-        # (antes estaba siendo usado por ServidorMenu/ClienteMenu)
+        # Y el servidor ya tiene su seed
         # ================================================================
         if self.net and not self.net._iniciado:
             log_game.info("[NET] Iniciando NetworkManager después de cerrar menú...")
@@ -583,26 +604,9 @@ class Game:
             else:
                 log_game.info("[OK] NetworkManager del juego iniciado correctamente")
                 if self.net.es_servidor:
-                    log_game.info(f"[OK] Servidor escuchando en puerto {self._net_port}")
+                    log_game.info(f"[OK] Servidor escuchando en puerto {self._net_port} con seed {self.current_seed}")
                 else:
                     log_game.info(f"[OK] Cliente conectado como {self._net_role}")
-
-        # Resetear el pool de posts para el nuevo run
-        posts_pool.reset_run()
-
-        params = self.cfg.dungeon_params()
-        if dungeon_params:
-            params = {**params, **dungeon_params}
-
-        self.dungeon = Dungeon(**params, seed=seed)
-        self.current_seed = self.dungeon.seed
-        pygame.display.set_caption(f"Echoes — Seed {self.current_seed}")
-        log_game.info(f"Nueva partida — seed={self.current_seed}  salas={len(self.dungeon.rooms)}")
-
-        # Actualizar seed del servidor (para que la comunique a los clientes)
-        if self.net and self.net.es_servidor and hasattr(self.net, '_servidor'):
-            self.net._servidor.seed = self.current_seed
-            log_game.info(f"[OK] Seed compartida con clientes: {self.current_seed}")
 
         # preparar inventario de la tienda para esta seed
         if hasattr(self, "shop"):
