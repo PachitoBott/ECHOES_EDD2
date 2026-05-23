@@ -11,6 +11,7 @@ import pygame
 
 from Config import Config
 from ui.StartMenu import StartMenu
+from ui.versus_screen import PantallaVersus
 from core.Tileset import Tileset
 from core.TilesetManager import TilesetManager
 from entities.Player import Player
@@ -614,6 +615,10 @@ class Game:
         self.minijuego_activo = False
         self.minijuego: MinijuegoPapers | None = None
         self.ultima_sala_fue_boss = False
+
+        # Pantalla de versus (después del minijuego, antes del boss)
+        self.pantalla_versus_activa = False
+        self.pantalla_versus: PantallaVersus | None = None
 
         self._run_start_time = perf_counter()
 
@@ -1734,11 +1739,32 @@ class Game:
                     self._stats_pending_reason = "minigame_failed"
                     self.start_new_run(seed=self.current_seed)
                 else:
-                    # Aprobó - desactivar minijuego y continuar en la sala del boss
+                    # Aprobó - mostrar pantalla de versus antes del boss
+                    self._activar_pantalla_versus()
                     self.minijuego_activo = False
                     self.minijuego = None
             else:
                 # El minijuego sigue activo
+                return
+
+        # Procesar pantalla de versus si está activa
+        if self.pantalla_versus_activa and self.pantalla_versus:
+            for event in events:
+                # Convertir coordenadas de mouse a coordenadas lógicas (sin escala)
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    event.pos = (
+                        event.pos[0] // self.cfg.SCREEN_SCALE,
+                        event.pos[1] // self.cfg.SCREEN_SCALE,
+                    )
+                self.pantalla_versus.handle_event(event)
+            self.pantalla_versus.update(dt)
+
+            # Si la pantalla terminó, desactivarla y continuar
+            if self.pantalla_versus.terminado:
+                self.pantalla_versus_activa = False
+                self.pantalla_versus = None
+            else:
+                # La pantalla sigue activa, no actualizar el resto del juego
                 return
 
         self._update_player(dt, room)
@@ -2973,6 +2999,34 @@ class Game:
             name, sub = _ZONE_NAMES.get(new_zone, (f"ZONA {new_zone}", ""))
             self._show_zone_banner(name, sub)
 
+    def _activar_pantalla_versus(self) -> None:
+        """
+        Crea y activa la pantalla de versus.
+        Se llama cuando el jugador aprueba el minijuego Papers Please.
+        """
+        # Obtener animaciones idle
+        anim_p1 = None
+        if hasattr(self.player, "_animations") and "idle" in self.player._animations:
+            anim_p1 = self.player._animations["idle"]
+
+        # Detectar si hay P2 conectado
+        hay_p2 = False
+        if self.net:
+            hay_p2 = "aliado" in self.net.roles_conectados()
+
+        # P2 no tiene animación idle aún, será None (mostrará placeholder)
+        anim_p2 = None
+
+        # Crear pantalla de versus
+        self.pantalla_versus = PantallaVersus(
+            logical_w=self.cfg.SCREEN_W,
+            logical_h=self.cfg.SCREEN_H,
+            hay_p2=hay_p2,
+            anim_p1=anim_p1,
+            anim_p2=anim_p2,
+        )
+        self.pantalla_versus_activa = True
+
     def _check_boss_room_entry(self, room) -> None:
         """Muestra un banner temporal al entrar a la sala del boss (solo una vez por run)."""
         if self._boss_banner_shown:
@@ -3048,6 +3102,20 @@ class Game:
 
 
     def _render(self) -> None:
+        # Si la pantalla de versus está activa, renderizar solo esa
+        if self.pantalla_versus_activa and self.pantalla_versus:
+            self.world.fill((4, 2, 8))  # Fondo negro por si acaso
+            self.pantalla_versus.render(self.world)
+            # Escalar y mostrar la pantalla
+            scaled = pygame.transform.scale(
+                self.world,
+                (self.cfg.SCREEN_W * self.cfg.SCREEN_SCALE,
+                 self.cfg.SCREEN_H * self.cfg.SCREEN_SCALE)
+            )
+            self.screen.blit(scaled, (0, 0))
+            pygame.display.flip()
+            return
+
         # Si el minijuego está activo, renderizar solo el minijuego
         if self.minijuego_activo and self.minijuego:
             self.minijuego.render(self.world)
