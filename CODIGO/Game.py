@@ -1679,6 +1679,17 @@ class Game:
                         # Espacio: avanza panel / completa texto
                         self.cinematics.siguiente_panel()
             self.cinematics.tick(dt)
+
+            # Procesar cola de cinematics si la actual terminó
+            if not self.cinematics.activo and self._cinematics_queue:
+                next_cinematic = self._cinematics_queue.pop(0)
+                def make_callback(remaining_cinematics):
+                    def callback():
+                        if remaining_cinematics:
+                            self._play_next_cinematic_from_queue()
+                    return callback
+                callback = make_callback(self._cinematics_queue)
+                self.cinematics.reproducir(next_cinematic, callback_fin=callback)
             return
 
         # --- Diálogos ---
@@ -2980,7 +2991,7 @@ class Game:
         3. regresando_al_mundo_verdad
         4. nigoria
 
-        Se usan callbacks para avanzar a la siguiente cinematics cuando termina la actual.
+        Usa una cola que se procesa cada frame para evitar problemas de timing con callbacks.
         """
         cinematics_list = [
             "boss_defeat",
@@ -2989,22 +3000,31 @@ class Game:
             "nigoria"
         ]
 
-        # Limpiar cola anterior (por si acaso)
-        self._cinematics_queue = []
+        # Limpiar cola anterior y agregar nuevas cinematics
+        self._cinematics_queue = cinematics_list[1:]  # Todas excepto la primera
 
-        # Crear callback que avance a la siguiente cinematics
-        def make_callback(index):
-            def callback():
-                if index + 1 < len(cinematics_list):
-                    next_cinematic = cinematics_list[index + 1]
-                    next_callback = make_callback(index + 1)
-                    self.cinematics.reproducir(next_cinematic, callback_fin=next_callback)
-            return callback
+        # Crear callback para procesar la cola
+        def process_queue_callback():
+            if self._cinematics_queue:
+                self._play_next_cinematic_from_queue()
 
         # Iniciar con la primera cinematics
         if cinematics_list:
-            first_callback = make_callback(0)
-            self.cinematics.reproducir(cinematics_list[0], callback_fin=first_callback)
+            self.cinematics.reproducir(cinematics_list[0], callback_fin=process_queue_callback)
+
+    def _play_next_cinematic_from_queue(self) -> None:
+        """Reproduce la siguiente cinematics de la cola."""
+        if not self._cinematics_queue:
+            return
+
+        next_cinematic = self._cinematics_queue.pop(0)
+
+        # Crear callback para procesar el resto de la cola
+        def process_queue_callback():
+            if self._cinematics_queue:
+                self._play_next_cinematic_from_queue()
+
+        self.cinematics.reproducir(next_cinematic, callback_fin=process_queue_callback)
 
     def _show_zone_banner(self, title: str, subtitle: str = "") -> None:
         """Activa el banner de zona con el texto dado."""
