@@ -2759,6 +2759,8 @@ class Game:
             for projectile in self.enemy_projectiles:
                 if not projectile.alive:
                     continue
+                if projectile.ignore_player_timer > 0.0:
+                    continue
                 if not p2_rect.colliderect(projectile.rect()):
                     continue
                 if p2_invulnerable:
