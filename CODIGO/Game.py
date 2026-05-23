@@ -1721,10 +1721,15 @@ class Game:
                 hp_despues = getattr(enemy, "hp", -1)
                 log_game.debug(f"[DISPARO_CLIENTE] Daño aplicado: HP {hp_antes} -> {hp_despues}")
 
-                # Si el enemigo muere, enviar evento
+                # Si el enemigo muere, soltar monedas y enviar evento
                 if enemy.hp <= 0:
                     enemy_id = getattr(enemy, 'enemy_id', '?')
                     log_game.warning(f"[DISPARO_CLIENTE] [DEATH] Enemigo {enemy_id} muere. Reportando muerte en ({enemy.x:.1f},{enemy.y:.1f})")
+
+                    # NUEVO: Soltar monedas cuando P2 mata enemigo
+                    self._drop_enemy_coins(enemy, room)
+                    log_game.warning(f"[DISPARO_CLIENTE] [COINS] Monedas soltadas para P2")
+
                     from network.protocol import msg_enemigo_muerto
                     evento_muerte = msg_enemigo_muerto(
                         enemy.x, enemy.y,
