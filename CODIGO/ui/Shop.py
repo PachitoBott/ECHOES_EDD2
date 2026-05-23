@@ -79,6 +79,14 @@ class Shop:
         self.rect = pygame.Rect(0, 0, self.WIDTH, self.HEIGHT)
         self._item_hitboxes: list[pygame.Rect] = []
 
+        # Sonido de compra
+        self._buy_sound = None
+        try:
+            self._buy_sound = pygame.mixer.Sound("assets/audio/buy_sfx.mp3")
+            self._buy_sound.set_volume(0.6)
+        except (pygame.error, FileNotFoundError):
+            pass  # Sin sonido si no se encuentra
+
     # ------------------------------------------------------------------ #
     # Gestión del inventario
     # ------------------------------------------------------------------ #
@@ -222,6 +230,14 @@ class Shop:
         else:
             self.selected    = 0
             self.hover_index = None
+
+        # Reproducir sonido de compra
+        if self._buy_sound:
+            try:
+                self._buy_sound.play()
+            except pygame.error:
+                pass
+
         return True, f"Adquiriste: {name}"
 
     # ------------------------------------------------------------------ #
