@@ -335,63 +335,25 @@ class StartMenu:
             self.preview_anim_time = (self.preview_anim_time + dt) % 9999
 
             # ================================================================
-            # SINCRONIZACIÓN CON RED DEL MENÚ (CLIENTE)
-            # ================================================================
-            if self.cliente_menu:
-                # Procesar mensajes del servidor
-                self.cliente_menu.procesar_mensajes_pendientes()
-
-                # Si el servidor ordenó iniciar el juego (thread-safe con lock)
-                debe_iniciar = False
-                seed_servidor = None
-                with self.cliente_menu.lock:
-                    debe_iniciar = self.cliente_menu.iniciar_juego
-                    seed_servidor = self.cliente_menu.seed_juego
-                    if debe_iniciar:
-                        self.cliente_menu.iniciar_juego = False
-
-                if debe_iniciar:
-                    self.modo_coop_solicitado = True
-                    self._start_requested = True
-                    running = False
-                    # Usar seed del servidor
-                    if seed_servidor is not None:
-                        self.seed_text = str(seed_servidor)
-                    break
-
-                # Sincronizar pantalla actual con servidor
-                pantalla_del_servidor = self.cliente_menu.pantalla_actual
-                if pantalla_del_servidor == "conectando":
-                    # Mostrar pantalla de conexión
-                    self._draw_menu()
-                    # Dibujar overlay "Conectando..."
-                    self._draw_connecting_overlay()
-                    pygame.display.flip()
-                    continue
-                elif pantalla_del_servidor == "sin_conexion":
-                    # Mostrar error de conexión
-                    self._draw_menu()
-                    self._draw_connection_error_overlay()
-                    pygame.display.flip()
-                    continue
-                # Si está "principal", "lobby", etc., continuar normalmente
-
-            # ================================================================
-            # PROCESAR MENSAJES DE RED DEL CLIENTE
+            # PROCESAR MENSAJES DE RED (CLIENTE)
             # ================================================================
             if self.cliente_menu:
                 try:
+                    # Procesar mensajes del servidor (thread-safe)
                     self.cliente_menu.procesar_mensajes_pendientes()
 
-                    # Si el cliente recibió START_GAME del servidor, transicionar al juego
-                    if self.cliente_menu.iniciar_juego:
-                        print(f"[MENU CLIENT] Detectado START_GAME, iniciando juego...")
-                        self.seed_text = str(self.cliente_menu.seed_juego)
-                        self.modo_coop_solicitado = True
-                        self._start_requested = True
-                        running = False
+                    # Chequear si servidor ordenó iniciar (con lock para thread-safety)
+                    with self.cliente_menu.lock:
+                        if self.cliente_menu.iniciar_juego:
+                            print(f"[MENU CLIENT] ✓ Recibido START_GAME del servidor")
+                            self.seed_text = str(self.cliente_menu.seed_juego)
+                            self.modo_coop_solicitado = True
+                            self._start_requested = True
+                            running = False
+                            break
+
                 except Exception as e:
-                    print(f"[MENU] Error procesando mensajes cliente: {e}")
+                    print(f"[MENU] Error procesando RED: {e}")
                     import traceback
                     traceback.print_exc()
 
@@ -466,6 +428,7 @@ class StartMenu:
                     # Solo el servidor puede terminar el lobby (cliente tiene eventos bloqueados)
                     if self.lobby.resultado == "jugar":
                         # SERVIDOR: Iniciar juego
+                        print("[SERVIDOR] ¡INICIAR PARTIDA presionado!")
                         self.modo_coop_solicitado = self.lobby.p2_conectado
                         self.overlay_key = None
 
@@ -475,21 +438,17 @@ class StartMenu:
                             seed = random.randint(0, 999999)
                         self.seed_text = str(seed)
 
-                        # Enviar START_GAME y esperar ACK del cliente (si hay cliente conectado)
+                        # Enviar START_GAME al cliente (si existe)
                         if self.servidor_menu and self.servidor_menu.cliente_conectado:
-                            print(f"[SERVIDOR] Enviando START_GAME con seed {seed}...")
-                            cliente_listo = self.servidor_menu.enviar_inicio_juego(seed, timeout=5.0)
-
-                            if cliente_listo:
-                                print("[SERVIDOR] ✓ Cliente confirmó, iniciando juego...")
-                            else:
-                                print("[SERVIDOR] ⚠ Timeout esperando confirmación del cliente, iniciando igualmente...")
-                                # Esperar un poco de todas formas
+                            print(f"[SERVIDOR] → Enviando START_GAME con seed {seed}")
+                            try:
+                                self.servidor_menu.enviar({"type": "START_GAME", "seed": seed})
                                 import time
-                                time.sleep(1.0)
-                        else:
-                            print("[SERVIDOR] Iniciando juego (sin cliente conectado)")
+                                time.sleep(0.2)  # Tiempo para que se transmita
+                            except Exception as e:
+                                print(f"[SERVIDOR] Error enviando: {e}")
 
+                        print("[SERVIDOR] ✓ Iniciando juego...")
                         self._start_requested = True
                         running = False
 
