@@ -396,8 +396,16 @@ class StartMenu:
                     running = False
                     break
                 if self.overlay_key == "lobby" and self.lobby:
-                    # Manejar eventos del lobby
-                    self.lobby.handle_event(event)
+                    # Manejar eventos del lobby (SOLO si es servidor)
+                    if self.cliente_menu and self.cliente_menu.conectado:
+                        # Cliente: no puede presionar botones del lobby, solo ESC
+                        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                            self._start_requested = False
+                            running = False
+                        # Ignorar otros eventos en el cliente
+                    else:
+                        # Servidor: puede interactuar normalmente
+                        self.lobby.handle_event(event)
                 elif self.overlay_key:
                     if self.overlay_key == "skins":
                         keep_running = self._handle_skins_event(event)
@@ -428,21 +436,35 @@ class StartMenu:
             # PROCESAR RESULTADO DEL LOBBY
             # ================================================================
             if self.lobby and self.lobby.terminado:
+                # Solo el servidor puede terminar el lobby (cliente tiene eventos bloqueados)
                 if self.lobby.resultado == "jugar":
-                    # Iniciar juego con modo según conexión de P2
+                    # SERVIDOR: Iniciar juego
                     self.modo_coop_solicitado = self.lobby.p2_conectado
-                    self._start_requested = True
-                    running = False
                     self.overlay_key = None
 
-                    # Si es servidor, ordenar al cliente iniciar el juego
-                    if self.servidor_menu:
-                        seed = self.selected_seed()
-                        import random
-                        if seed is None:
-                            seed = random.randint(0, 999999)
-                        self.servidor_menu.enviar_inicio_juego(seed)
-                        self.seed_text = str(seed)
+                    seed = self.selected_seed()
+                    import random
+                    if seed is None:
+                        seed = random.randint(0, 999999)
+                    self.seed_text = str(seed)
+
+                    # Enviar START_GAME y esperar ACK del cliente (si hay cliente conectado)
+                    if self.servidor_menu and self.servidor_menu.cliente_conectado:
+                        print(f"[SERVIDOR] Enviando START_GAME con seed {seed}...")
+                        cliente_listo = self.servidor_menu.enviar_inicio_juego(seed, timeout=5.0)
+
+                        if cliente_listo:
+                            print("[SERVIDOR] ✓ Cliente confirmó, iniciando juego...")
+                        else:
+                            print("[SERVIDOR] ⚠ Timeout esperando confirmación del cliente, iniciando igualmente...")
+                            # Esperar un poco de todas formas
+                            import time
+                            time.sleep(1.0)
+                    else:
+                        print("[SERVIDOR] Iniciando juego (sin cliente conectado)")
+
+                    self._start_requested = True
+                    running = False
 
                 elif self.lobby.resultado == "volver":
                     # Volver al menú principal

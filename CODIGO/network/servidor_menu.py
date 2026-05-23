@@ -51,6 +51,10 @@ class ServidorMenu:
         self._hilo_espera: Optional[threading.Thread] = None
         self._lock = threading.Lock()
 
+        # Estado de sincronización para inicio del juego
+        self.cliente_confirmó_inicio = False
+        self.seed_juego_pendiente: Optional[int] = None
+
         self._iniciar_escucha()
 
     def _iniciar_escucha(self) -> None:
@@ -118,10 +122,17 @@ class ServidorMenu:
     def _procesar_mensaje_cliente(self, msg: dict) -> None:
         """Procesa mensajes recibidos del cliente."""
         tipo = msg.get("type")
+
         if tipo == "CLIENT_READY":
             log_net.info("[SERVIDOR MENU] Cliente listo")
             # Enviar estado actual del menú al cliente
             self.enviar_estado_menu("principal")
+
+        elif tipo == "ACK_START_GAME":
+            # Cliente confirmó que recibió START_GAME y está listo para iniciar
+            with self._lock:
+                self.cliente_confirmó_inicio = True
+            log_net.info("[SERVIDOR MENU] Cliente confirmó inicio del juego")
 
     def enviar(self, msg: dict) -> bool:
         """
@@ -173,12 +184,46 @@ class ServidorMenu:
             **kwargs
         })
 
-    def enviar_inicio_juego(self, seed: int) -> bool:
-        """Ordena al cliente iniciar el juego."""
-        return self.enviar({
+    def enviar_inicio_juego(self, seed: int, timeout: float = 5.0) -> bool:
+        """
+        Ordena al cliente iniciar el juego y espera confirmación.
+
+        Retorna True si el cliente confirmó, False si timeout.
+        """
+        with self._lock:
+            self.cliente_confirmó_inicio = False
+            self.seed_juego_pendiente = seed
+
+        # Enviar START_GAME
+        ok = self.enviar({
             "type": "START_GAME",
             "seed": seed
         })
+
+        if not ok:
+            log_net.error("[SERVIDOR MENU] No se pudo enviar START_GAME")
+            return False
+
+        log_net.info(f"[SERVIDOR MENU] START_GAME enviado, esperando ACK (timeout={timeout}s)...")
+
+        # Esperar confirmación del cliente
+        import time
+        start = time.time()
+        while (time.time() - start) < timeout:
+            with self._lock:
+                if self.cliente_confirmó_inicio:
+                    log_net.info("[SERVIDOR MENU] Cliente confirmó el inicio ✓")
+                    return True
+            time.sleep(0.1)
+
+        log_net.warning(f"[SERVIDOR MENU] Timeout esperando ACK del cliente ({timeout}s)")
+        return False
+
+    def resetear_estado_inicio(self) -> None:
+        """Resetea el estado de sincronización de inicio."""
+        with self._lock:
+            self.cliente_confirmó_inicio = False
+            self.seed_juego_pendiente = None
 
     def cerrar(self) -> None:
         """Cierra el servidor y la conexión del cliente."""

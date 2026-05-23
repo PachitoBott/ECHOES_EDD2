@@ -157,11 +157,25 @@ class ClienteMenu:
 
         elif tipo == "START_GAME":
             try:
-                print(f"[CLIENTE] Recibido START_GAME: {msg}")
-                self.iniciar_juego = True
-                self.seed_juego = msg.get("seed", 0)
+                seed = msg.get("seed", 0)
+                print(f"[CLIENTE] Recibido START_GAME: seed={seed}")
+
+                with self.lock:
+                    self.iniciar_juego = True
+                    self.seed_juego = seed
+
                 print(f"[CLIENTE] Flags seteados, seed={self.seed_juego}")
                 log_net.info(f"[CLIENTE MENU] Iniciando juego con seed {self.seed_juego}")
+
+                # Enviar ACK inmediatamente al servidor
+                ack = {"type": "ACK_START_GAME", "seed": seed}
+                if self.enviar(ack):
+                    print(f"[CLIENTE] ACK_START_GAME enviado al servidor")
+                    log_net.info("[CLIENTE MENU] ACK_START_GAME enviado")
+                else:
+                    print(f"[CLIENTE] Error al enviar ACK_START_GAME")
+                    log_net.warning("[CLIENTE MENU] Error al enviar ACK_START_GAME")
+
             except Exception as e:
                 print(f"[CLIENTE ERROR] Al procesar START_GAME: {e}")
                 import traceback
