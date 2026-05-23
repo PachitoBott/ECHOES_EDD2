@@ -99,7 +99,7 @@
     "paneles": [
       {
         "image": "boss_defeat_01.png",
-        "texto": "Lo hiciste. El jefe cae.",
+        "texto": "Lo hiciste. Echo cae.",
         "duracion": 3.0,
         "fade_in": 1.0,
         "fade_out": 0.8
