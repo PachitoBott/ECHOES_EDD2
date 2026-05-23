@@ -4063,15 +4063,37 @@ class Game:
         self.screen.blit(seed_text, seed_position)
 
         # Dibujar los nuevos paneles de jugadores (con placeholders de color)
-        player_data_p1 = {
-            "health": getattr(self.player, "lives", 0),
-            "max_health": getattr(self.player, "max_lives", 0),
-            "coins": getattr(self.player, "gold", 0),
-            "red_apoyo": getattr(self.player, "_ibarra_red_apoyo", 0),  # Contador de curaciones acumuladas
-            "modo_privado": getattr(self.player, "_ibarra_modo_privado", False),
-            "emp": getattr(self.player, "_ibarra_emp", False),
-            "eco_señal": getattr(self.player, "_ibarra_double_shot", False)
-        }
+        # En servidor: mostrar datos de P1 local
+        # En cliente: mostrar datos de P1 remoto (desde remote_players)
+        if self.net and not self.net.es_servidor and self.remote_players:
+            # Cliente: obtener datos de P1 remoto
+            remote_player = next(iter(self.remote_players.values()), None)
+            if remote_player:
+                player_data_p1 = {
+                    "health": remote_player.get("vidas", 0),
+                    "max_health": 10,
+                    "coins": remote_player.get("apoyo", 0),
+                    "red_apoyo": 0,
+                    "modo_privado": False,
+                    "emp": False,
+                    "eco_señal": False
+                }
+            else:
+                player_data_p1 = {
+                    "health": 0, "max_health": 10, "coins": 0,
+                    "red_apoyo": 0, "modo_privado": False, "emp": False, "eco_señal": False
+                }
+        else:
+            # Servidor: mostrar datos de P1 local
+            player_data_p1 = {
+                "health": getattr(self.player, "lives", 0),
+                "max_health": getattr(self.player, "max_lives", 0),
+                "coins": getattr(self.player, "gold", 0),
+                "red_apoyo": getattr(self.player, "_ibarra_red_apoyo", 0),  # Contador de curaciones acumuladas
+                "modo_privado": getattr(self.player, "_ibarra_modo_privado", False),
+                "emp": getattr(self.player, "_ibarra_emp", False),
+                "eco_señal": getattr(self.player, "_ibarra_double_shot", False)
+            }
         self.hud_panel_p1.render(self.screen, player_data_p1, es_p2=False)
 
         # Panel del Jugador 2 (Paso 7: usar _get_player_data_p2())
