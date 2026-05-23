@@ -493,7 +493,8 @@ class Boss:
         elif nombre == "zigzag":
             ataque = AtaqueZigzag(
                 boca_x, boca_y,
-                self.proyectiles
+                self.proyectiles,
+                boss=self
             )
         elif nombre == "laser":
             # Verificar si el láser puede usarse (jugador debe estar debajo)
@@ -504,7 +505,8 @@ class Boss:
             ataque = AtaqueLaser(
                 boca_x, boca_y,
                 self.render_w,
-                self.x
+                self.x,
+                boss=self
             )
         elif nombre == "emp":
             # Centro del boss como punto de origen de las ondas
@@ -513,7 +515,8 @@ class Boss:
 
             ataque = AtaqueEMP(
                 centro_boss_x, centro_boss_y,
-                self.proyectiles
+                self.proyectiles,
+                boss=self
             )
         else:
             print(f"[BOSS] Ataque '{nombre}' aún no implementado")
@@ -1002,15 +1005,17 @@ class AtaqueZigzag(AtaqueBoss):
     TELEGRAPH = 0.3  # segundos de aviso visual
 
     def __init__(self, boca_x: float, boca_y: float,
-                 lista_proyectiles: list):
+                 lista_proyectiles: list, boss=None):
         """
         Args:
-            boca_x, boca_y: Posición donde se generan los proyectiles
+            boca_x, boca_y: Posición inicial donde se generan los proyectiles
             lista_proyectiles: Lista donde se añaden los proyectiles generados
+            boss: Referencia al boss para seguir su posición
         """
         super().__init__()
-        self.boca_x = boca_x
-        self.boca_y = boca_y
+        self.boca_x_inicial = boca_x
+        self.boca_y_inicial = boca_y
+        self.boss = boss  # referencia para seguir al boss
         self.lista_proyectiles = lista_proyectiles
 
         # Control del disparo
@@ -1022,7 +1027,21 @@ class AtaqueZigzag(AtaqueBoss):
         self.fase = "telegraph"  # telegraph → activo → terminado
         self.timer_fase = 0.0
 
-        print(f"[ATAQUE] AtaqueZigzag: {self.N_BALAS} proyectiles en zigzag")
+        print(f"[ATAQUE] AtaqueZigzag: {self.N_BALAS} proyectiles en zigzag (sigue al boss)")
+
+    @property
+    def boca_x(self) -> float:
+        """Posición X actual (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.x + self.boss.render_w // 2
+        return self.boca_x_inicial
+
+    @property
+    def boca_y(self) -> float:
+        """Posición Y actual (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.y + self.boss.render_h
+        return self.boca_y_inicial
 
     def update(self, dt: float, jugadores: list) -> None:
         """
@@ -1098,19 +1117,21 @@ class AtaqueLaser(AtaqueBoss):
     LASER_HEIGHT = 640  # altura máxima (llega hasta el suelo)
 
     def __init__(self, boca_x: float, boca_y: float,
-                 boss_render_w: int, boss_x: float):
+                 boss_render_w: int, boss_x: float, boss=None):
         """
         Args:
-            boca_x: Centro X donde sale el láser
-            boca_y: Y donde sale el láser (boca del boss)
+            boca_x: Centro X inicial donde sale el láser
+            boca_y: Y inicial donde sale el láser (boca del boss)
             boss_render_w: Ancho del sprite del boss (para referencias)
-            boss_x: X del boss (para referencias)
+            boss_x: X inicial del boss (para referencias)
+            boss: Referencia al boss para seguir su posición
         """
         super().__init__()
-        self.boca_x = boca_x
-        self.boca_y = boca_y
+        self.boca_x_inicial = boca_x
+        self.boca_y_inicial = boca_y
         self.boss_render_w = boss_render_w
-        self.boss_x = boss_x
+        self.boss_x_inicial = boss_x
+        self.boss = boss  # referencia para seguir al boss
 
         # Control de fases
         self.fase_laser = "telegraph"  # telegraph → activo → terminado
@@ -1121,7 +1142,21 @@ class AtaqueLaser(AtaqueBoss):
         self.laser_alto = self.LASER_HEIGHT
 
         print(f"[ATAQUE] AtaqueLaser: telegraph ({self.TELEGRAPH}s) "
-              f"→ activo ({self.DURACION}s)")
+              f"→ activo ({self.DURACION}s) (sigue al boss)")
+
+    @property
+    def boca_x(self) -> float:
+        """Posición X actual (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.x + self.boss.render_w // 2
+        return self.boca_x_inicial
+
+    @property
+    def boss_x(self) -> float:
+        """Posición X del boss (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.x
+        return self.boss_x_inicial
 
     def update(self, dt: float, jugadores: list) -> None:
         """
@@ -1366,43 +1401,61 @@ class ProyectilEMP:
 
 class AtaqueEMP(AtaqueBoss):
     """
-    Emite 3 pulsos/balas de choque que se expanden lentamente desde el boss.
-    Los pulsos dañan al jugador cuando los cruza.
+    Emite 3 ráfagas de balas en patrón circular desde el boss.
+    Cada ráfaga dispara múltiples proyectiles en todas direcciones (360°).
     Incluye telegraph visual con pulso azul de aviso.
     """
 
-    N_ONDAS = 3
-    INTERVALO_ONDAS = 0.5  # segundos entre pulsos (más espaciado)
+    N_RAFAGAS = 3  # número de ráfagas
+    N_BALAS_POR_RAFAGA = 12  # balas en cada ráfaga circular
+    INTERVALO_RAFAGAS = 0.5  # segundos entre ráfagas
+    VELOCIDAD_BALA = 200  # px/segundo
+    RADIO_BALA = 6
     DAÑO = 1
     TELEGRAPH = 0.6  # segundos de aviso visual
 
     def __init__(self, boca_x: float, boca_y: float,
-                 lista_proyectiles: list):
+                 lista_proyectiles: list, boss=None):
         """
         Args:
-            boca_x: Centro X de expansión (generalmente centro del boss)
-            boca_y: Centro Y de expansión (generalmente centro del boss)
-            lista_proyectiles: Lista de proyectiles (no se usa, pero por consistencia)
+            boca_x: Centro X de disparo (generalmente centro del boss)
+            boca_y: Centro Y de disparo (generalmente centro del boss)
+            lista_proyectiles: Lista donde añadir proyectiles
+            boss: Referencia al boss para seguir su posición
         """
         super().__init__()
-        self.cx = boca_x
-        self.cy = boca_y
+        self.cx_inicial = boca_x
+        self.cy_inicial = boca_y
+        self.boss = boss  # referencia para seguir al boss
         self.lista_proyectiles = lista_proyectiles
 
-        # Control de pulsos
-        self.pulsos_creados = 0
-        self.timer_pulso = 0.0
-        self.pulsos_activos = []  # lista de ProyectilEMP
+        # Control de ráfagas
+        self.rafagas_creadas = 0
+        self.timer_rafaga = 0.0
 
         # Fase de telegraph
         self.fase = "telegraph"  # telegraph → activo → terminado
         self.timer_fase = 0.0
 
-        print(f"[ATAQUE] AtaqueEMP: {self.N_ONDAS} pulsos expansivos (con telegraph)")
+        print(f"[ATAQUE] AtaqueEMP: {self.N_RAFAGAS} ráfagas circulares de balas (con telegraph)")
+
+    @property
+    def cx(self) -> float:
+        """Posición X actual (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.x + self.boss.render_w // 2
+        return self.cx_inicial
+
+    @property
+    def cy(self) -> float:
+        """Posición Y actual (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.y + self.boss.render_h // 2
+        return self.cy_inicial
 
     def update(self, dt: float, jugadores: list) -> None:
         """
-        Actualiza el ataque EMP: telegraph → pulsos expansivos → terminado.
+        Actualiza el ataque EMP: telegraph → ráfagas de balas → terminado.
         """
         self.timer_fase += dt
 
@@ -1413,35 +1466,49 @@ class AtaqueEMP(AtaqueBoss):
                 self.timer_fase = 0.0
             return
 
-        # Fase activa: crear y expandir pulsos
+        # Fase activa: crear ráfagas de balas
         if self.fase == "activo":
-            # Crear nuevos pulsos en intervalos
-            if self.pulsos_creados < self.N_ONDAS:
-                self.timer_pulso += dt
-                if self.timer_pulso >= self.INTERVALO_ONDAS:
-                    self.timer_pulso -= self.INTERVALO_ONDAS
-                    pulso = ProyectilEMP(self.cx, self.cy)
-                    self.pulsos_activos.append(pulso)
-                    self.lista_proyectiles.append(pulso)
-                    self.pulsos_creados += 1
+            # Crear nuevas ráfagas en intervalos
+            if self.rafagas_creadas < self.N_RAFAGAS:
+                self.timer_rafaga += dt
+                if self.timer_rafaga >= self.INTERVALO_RAFAGAS:
+                    self.timer_rafaga -= self.INTERVALO_RAFAGAS
+                    self._crear_rafaga_circular()
+                    self.rafagas_creadas += 1
 
-        # Actualizar pulsos existentes
-        for pulso in self.pulsos_activos:
-            pulso.update(dt)
-
-            # Verificar colisión con jugadores
-            for jugador in jugadores:
-                if pulso.verificar_colision(jugador):
-                    jugador.take_damage(self.DAÑO)
-
-        # Limpiar pulsos inactivos (no modificar self.lista_proyectiles,
-        # ya que el boss es responsable de limpiarla)
-        self.pulsos_activos = [p for p in self.pulsos_activos if p.activo]
-
-        # Terminar cuando todos los pulsos se disiparon
-        if (self.pulsos_creados >= self.N_ONDAS and
-                not self.pulsos_activos):
+        # Terminar cuando se crearon todas las ráfagas
+        if self.rafagas_creadas >= self.N_RAFAGAS:
             self.terminado = True
+
+    def _crear_rafaga_circular(self) -> None:
+        """
+        Crea una ráfaga de balas disparadas en patrón circular (360°).
+        """
+        # Calcular ángulo entre cada bala
+        angulo_paso = 360 / self.N_BALAS_POR_RAFAGA
+
+        for i in range(self.N_BALAS_POR_RAFAGA):
+            # Ángulo en radianes
+            angulo = math.radians(i * angulo_paso)
+
+            # Dirección normalizada
+            dx = math.cos(angulo)
+            dy = math.sin(angulo)
+
+            # Crear proyectil bala
+            bala = ProyectilBoss(
+                x=self.cx,
+                y=self.cy,
+                dx=dx,
+                dy=dy,
+                daño=self.DAÑO,
+                radio=self.RADIO_BALA,
+                color=(100, 200, 255),  # cian
+                color_borde=(180, 240, 255),
+                puede_explotar=False,
+                velocidad=self.VELOCIDAD_BALA
+            )
+            self.lista_proyectiles.append(bala)
 
     def render(self, surface: pygame.Surface,
                camera_offset=(0, 0)) -> None:
