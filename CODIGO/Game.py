@@ -2812,27 +2812,6 @@ class Game:
             else:
                 projectile.alive = False
 
-        # --- Daño a P2 por proyectiles remotos (cliente) ---
-        # En cliente: detectar colisiones contra proyectiles remotos sincronizados del servidor
-        if self.net and not self.net.es_servidor and self.remote_projectiles:
-            for remote_proj in self.remote_projectiles[:]:
-                if not remote_proj.alive:
-                    continue
-                if not remote_proj.rect().colliderect(player_rect):
-                    continue
-                if player_invulnerable:
-                    # Ignorar proyectil si estamos invulnerable
-                    continue
-                took_hit = False
-                if hasattr(self.player, "take_damage"):
-                    took_hit = bool(self.player.take_damage(1))
-                if took_hit:
-                    remote_proj.alive = False
-                    player_invulnerable = getattr(self.player, "is_invulnerable", lambda: False)()
-                    log_game.warning(f"[P2_DAMAGE] Proyectil remoto causó daño, vidas={self.player.lives}")
-                else:
-                    remote_proj.alive = False
-
         # --- Manejo de daño para P2 (solo en servidor) ---
         if self.estado_p2 and self.net and self.net.es_servidor:
             p2_invulnerable = self.estado_p2.timer_invulnerable > 0.0
