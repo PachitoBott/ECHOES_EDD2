@@ -366,9 +366,10 @@ class StartMenu:
                     self.lobby.update(dt)
 
                     # Actualizar estado de conexión P2 en tiempo real
-                    if self.net_manager:
+                    # Usar servidor_menu.cliente_conectado (el NetworkManager aún no está iniciado)
+                    if self.servidor_menu:
                         try:
-                            p2_conectado = "aliado" in self.net_manager.roles_conectados()
+                            p2_conectado = self.servidor_menu.cliente_conectado
                             self.lobby.set_p2_conectado(p2_conectado)
                         except Exception as e:
                             print(f"[MENU] Error actualizando estado P2: {e}")
@@ -495,9 +496,9 @@ class StartMenu:
                                 btn_asset=self.btn_normal,
                                 anim_p1=None,
                             )
-                            if self.net_manager:
+                            if self.servidor_menu:
                                 try:
-                                    p2_conectado = "aliado" in self.net_manager.roles_conectados()
+                                    p2_conectado = self.servidor_menu.cliente_conectado
                                     self.lobby.set_p2_conectado(p2_conectado)
                                 except Exception as e:
                                     print(f"[MENU] Error detectando P2 en lobby: {e}")
@@ -762,8 +763,8 @@ class StartMenu:
         )
 
         # Establecer estado inicial: verificar si hay cliente conectado
-        if self.net_manager:
-            p2_conectado = "aliado" in self.net_manager.roles_conectados()
+        if self.servidor_menu:
+            p2_conectado = self.servidor_menu.cliente_conectado
             self.lobby.set_p2_conectado(p2_conectado)
 
         # Notificar al cliente que entramos al lobby (servidor)
