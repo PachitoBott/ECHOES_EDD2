@@ -212,10 +212,14 @@ class EstadoJugador2:
     Vive en el servidor — es la fuente de verdad para vida y monedas de P2.
     """
     def __init__(self):
-        # Vida
-        self.lives = 6          # Vida actual (6 = 3 corazones)
-        self.max_lives = 6      # Vida máxima
+        # Vida (5 vidas = 2.5 corazones)
+        self.lives = 5          # Vida actual
+        self.max_lives = 5      # Vida máxima
+        self._previous_lives = 5  # Para detectar respawn de corazón completo
         self.vivo = True
+        self.reviviendo = False  # Animación de respawn
+        self.hp = 1  # HP actual (se resetea con respawn)
+        self.max_hp = 1  # HP máximo
 
         # Monedas
         self.gold = 0           # Monedas actuales
@@ -228,6 +232,7 @@ class EstadoJugador2:
         self.invulnerable = False
         self.timer_invulnerable = 0.0
         self.TIEMPO_INVULNERABLE = 1.2  # segundos
+        self.respawn_invulnerability = 2.0  # Invulnerabilidad después de respawn
 
 
 class Game:
@@ -3019,11 +3024,51 @@ class Game:
             return False
         if amount <= 0 or self.estado_p2.timer_invulnerable > 0.0:
             return False
-        self.estado_p2.lives = max(0, self.estado_p2.lives - 1)
+        # Reducir HP actual
+        self.estado_p2.hp = max(0, self.estado_p2.hp - amount)
         self.estado_p2.timer_invulnerable = self.estado_p2.TIEMPO_INVULNERABLE
+        # Si HP llega a 0, perder una vida
+        if self.estado_p2.hp <= 0:
+            self._handle_p2_death()
+        return True
+
+    def _handle_p2_death(self) -> None:
+        """Maneja la muerte de P2 (pérdida de HP) y el respawn de corazones completos."""
+        if not self.estado_p2:
+            return
+
+        # Registrar vidas previas para detectar corazón completo
+        prev_lives = self.estado_p2._previous_lives
+
+        # Perder una vida
+        self.estado_p2.lives = max(0, self.estado_p2.lives - 1)
+        self.estado_p2._previous_lives = prev_lives
+
         if self.estado_p2.lives <= 0:
             self.estado_p2.vivo = False
-        return True
+            return
+
+        # Detectar si se perdió un CORAZÓN COMPLETO (impar → par)
+        # Ej: 5→4, 3→2, 1→0
+        should_respawn = (prev_lives % 2 == 1) and (self.estado_p2.lives % 2 == 0)
+
+        if should_respawn:
+            # Restaurar HP y dar invulnerabilidad
+            self.estado_p2.hp = self.estado_p2.max_hp
+            self.estado_p2.timer_invulnerable = self.estado_p2.respawn_invulnerability
+            # Reaparición en el centro de la sala
+            if hasattr(self.dungeon, 'current_room'):
+                room = self.dungeon.current_room
+                if hasattr(room, 'center_px'):
+                    px, py = room.center_px()
+                    self.estado_p2.x = px - 9  # Centrado (PLAYER_HITBOX_SIZE[0] / 2)
+                    self.estado_p2.y = py - 12  # Centrado (PLAYER_HITBOX_SIZE[1] / 2)
+        else:
+            # No es corazón completo, solo restaurar HP para siguiente daño
+            self.estado_p2.hp = self.estado_p2.max_hp
+
+        # Actualizar previous_lives para el siguiente ciclo
+        self.estado_p2._previous_lives = self.estado_p2.lives
 
     def _handle_player_death(self, room) -> None:
         log_player.warning("Jugador murió — lives=%s", getattr(self.player, "lives", "?"))
