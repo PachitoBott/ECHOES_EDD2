@@ -469,6 +469,7 @@ class HUDPanel:
         # --- Sistema de animación del personaje ---
         self._animaciones: dict = {}
         self._personaje_sprites: dict = {}  # Almacena sprites P2 cuando estén disponibles
+        self._animaciones_cyborg: dict = {}  # Animaciones de Cyborg para P2
         self._cargar_animaciones_personaje()
 
         # --- Sistema de iconos de poderes ---
@@ -511,17 +512,27 @@ class HUDPanel:
             self.rect.y = self.MARGIN
 
     def _cargar_animaciones_personaje(self) -> None:
-        """Carga las animaciones del personaje (idle para P1, placeholder para P2)."""
+        """Carga las animaciones del personaje (Daniel para P1, Cyborg para P2)."""
         try:
             from systems.animation import AnimationManager
-            # Cargar animaciones de Daniel
-            self._animaciones = AnimationManager.load_from_json(
-                "assets/sprites/player/animations.json",
-                "assets/sprites/player"
-            )
+
+            if self.player_id == 1:
+                # Cargar animaciones de Daniel para P1
+                self._animaciones = AnimationManager.load_from_json(
+                    "assets/sprites/player/animations.json",
+                    "assets/sprites/player"
+                )
+            else:
+                # Cargar animaciones de Cyborg para P2
+                self._animaciones_cyborg = AnimationManager.load_from_json(
+                    "assets/sprites/player2/animations.json",
+                    "assets/sprites/player2"
+                )
+                print(f"[OK] Animaciones de Cyborg cargadas")
         except Exception as e:
             print(f"[WARNING] HUDPanel: No se pudieron cargar animaciones: {e}")
             self._animaciones = {}
+            self._animaciones_cyborg = {}
 
     def _cargar_iconos_poderes(self) -> None:
         """Carga los iconos de poderes del spritesheet."""
@@ -533,8 +544,12 @@ class HUDPanel:
 
     def update(self, dt: float) -> None:
         """Actualiza las animaciones del panel (llamar cada frame del juego)."""
-        if "idle" in self._animaciones:
-            self._animaciones["idle"].update(dt)
+        if self.player_id == 1:
+            if "idle" in self._animaciones:
+                self._animaciones["idle"].update(dt)
+        else:
+            if "idle" in self._animaciones_cyborg:
+                self._animaciones_cyborg["idle"].update(dt)
 
     def set_personaje_p2_sprites(self, sprite_dict: dict) -> None:
         """
@@ -664,19 +679,26 @@ class HUDPanel:
         y = int(panel_center_y - SPRITE_SIZE_SCALED // 2 - 30)  # -30px hacia arriba
 
         if es_p2:
-            # Panel P2: mostrar placeholder hasta que lleguen sprites
-            placeholder = pygame.Surface((SPRITE_SIZE_SCALED, SPRITE_SIZE_SCALED))
-            placeholder.fill((100, 100, 100))  # Gris oscuro
-            pygame.draw.rect(placeholder, (150, 150, 150), placeholder.get_rect(), 2)
-            # Texto "P2"
-            try:
-                font = pygame.font.SysFont(None, 48)
-                text = font.render("P2", True, (200, 200, 200))
-                text_rect = text.get_rect(center=(SPRITE_SIZE_SCALED // 2, SPRITE_SIZE_SCALED // 2))
-                placeholder.blit(text, text_rect)
-            except:
-                pass
-            surface.blit(placeholder, (x, y))
+            # Panel P2: mostrar animación idle de Cyborg escalada a 128x128
+            if "idle" in self._animaciones_cyborg:
+                frame = self._animaciones_cyborg["idle"].current_frame()
+                # Escalar el frame a 128x128 para coincidir con el jugador
+                scaled_frame = pygame.transform.scale(frame, (SPRITE_SIZE_SCALED, SPRITE_SIZE_SCALED))
+                surface.blit(scaled_frame, (x, y))
+            else:
+                # Placeholder si no hay animaciones cargadas
+                placeholder = pygame.Surface((SPRITE_SIZE_SCALED, SPRITE_SIZE_SCALED))
+                placeholder.fill((100, 100, 100))  # Gris oscuro
+                pygame.draw.rect(placeholder, (150, 150, 150), placeholder.get_rect(), 2)
+                # Texto "P2"
+                try:
+                    font = pygame.font.SysFont(None, 48)
+                    text = font.render("P2", True, (200, 200, 200))
+                    text_rect = text.get_rect(center=(SPRITE_SIZE_SCALED // 2, SPRITE_SIZE_SCALED // 2))
+                    placeholder.blit(text, text_rect)
+                except:
+                    pass
+                surface.blit(placeholder, (x, y))
         else:
             # Panel P1: mostrar animación de Daniel (idle) escalada a 128x128
             if "idle" in self._animaciones:
