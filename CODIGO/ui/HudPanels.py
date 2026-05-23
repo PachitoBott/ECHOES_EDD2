@@ -525,11 +525,19 @@ class HUDPanel:
                 print(f"[WARNING] HUDPanel: No se pudieron cargar animaciones: {e}")
                 self._animaciones = {}
         else:
-            # Cargar imagen Cyborg_Idle para P2
+            # Cargar animación Cyborg_Idle para P2 (primer frame)
             try:
                 cyborg_path = "assets/sprites/player2/Cyborg_Idle.png"
-                self._cyborg_idle = pygame.image.load(cyborg_path).convert_alpha()
-                print(f"[OK] Cyborg_Idle cargado desde: {cyborg_path}")
+                spritesheet = pygame.image.load(cyborg_path).convert_alpha()
+
+                # Extraer el primer frame del spritesheet (asumiendo 64x64 por frame)
+                frame_width = 64
+                frame_height = 64
+                first_frame = pygame.Surface((frame_width, frame_height), pygame.SRCALPHA)
+                first_frame.blit(spritesheet, (0, 0), pygame.Rect(0, 0, frame_width, frame_height))
+
+                self._cyborg_idle = first_frame
+                print(f"[OK] Cyborg_Idle primer frame cargado desde: {cyborg_path}")
             except Exception as e:
                 print(f"[WARNING] HUDPanel: No se pudo cargar Cyborg_Idle desde {cyborg_path}: {e}")
                 self._cyborg_idle = None
