@@ -3117,8 +3117,18 @@ class Game:
         if self.net:
             hay_p2 = "aliado" in self.net.roles_conectados()
 
-        # P2 no tiene animación idle aún, será None (mostrará placeholder)
+        # Cargar animación de P2 (Cyborg) desde assets
         anim_p2 = None
+        if hay_p2:
+            try:
+                from systems.animation import AnimationManager
+                json_path = "assets/sprites/player2/animations.json"
+                sprite_dir = "assets/sprites/player2"
+                animations = AnimationManager.load_from_json(json_path, sprite_dir)
+                anim_p2 = animations.get("idle")
+            except Exception as e:
+                log_game.warning(f"No se pudo cargar animación P2: {e}")
+                anim_p2 = None
 
         # Crear pantalla de versus
         self.pantalla_versus = PantallaVersus(

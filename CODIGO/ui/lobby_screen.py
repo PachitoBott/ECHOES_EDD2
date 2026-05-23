@@ -67,6 +67,12 @@ class PantallaLobby:
 
         # Estado
         self.p2_conectado = False
+        # Cargar animación de P2 (Aliado/Cyborg) automáticamente
+        self.anim_p2 = self._cargar_animacion_p2()
+        if self.anim_p2:
+            print(f"[LOBBY_SCREEN] Animación P2: {self.anim_p2}")
+        else:
+            print(f"[LOBBY_SCREEN] No se pudo obtener animación P2")
         self.resultado = None  # "jugar", "volver", None
         self.terminado = False
 
@@ -95,7 +101,20 @@ class PantallaLobby:
             animations = AnimationManager.load_from_json(json_path, sprite_dir)
             return animations.get("idle")
         except Exception as e:
-            print(f"[LOBBY_SCREEN] Error cargando animación: {e}")
+            print(f"[LOBBY_SCREEN] Error cargando animación P1: {e}")
+            return None
+
+    def _cargar_animacion_p2(self) -> object | None:
+        """Intenta cargar la animación idle de P2 desde los assets."""
+        try:
+            from systems.animation import AnimationManager
+
+            json_path = "assets/sprites/player2/animations.json"
+            sprite_dir = "assets/sprites/player2"
+            animations = AnimationManager.load_from_json(json_path, sprite_dir)
+            return animations.get("idle")
+        except Exception as e:
+            print(f"[LOBBY_SCREEN] Error cargando animación P2: {e}")
             return None
 
     def _cargar_fuentes(self) -> None:
@@ -147,11 +166,19 @@ class PantallaLobby:
         """Llamar cuando el cliente se conecta o desconecta."""
         self.p2_conectado = conectado
 
+    def set_p2_animacion(self, animacion) -> None:
+        """Establece la animación idle de P2 para renderizar."""
+        self.anim_p2 = animacion
+
     def update(self, dt: float) -> None:
         """Actualiza estado, animaciones y efectos parpadeantes."""
         # Actualizar animación P1
         if self.anim_p1:
             self.anim_p1.update(dt)
+
+        # Actualizar animación P2
+        if self.anim_p2:
+            self.anim_p2.update(dt)
 
         # Efecto parpadeante "Esperando..."
         self.parpadeo_timer += dt
@@ -351,17 +378,24 @@ class PantallaLobby:
         sprite_y = y + HEADER_H + 20
 
         if self.p2_conectado:
-            # Mostrar cubo negro como P2 (placeholder)
-            pygame.draw.rect(surface, (15, 15, 20), (sprite_x, sprite_y, SPRITE_SIZE, SPRITE_SIZE))
-            pygame.draw.rect(surface, (40, 60, 80), (sprite_x, sprite_y, SPRITE_SIZE, SPRITE_SIZE), 2)
-            txt = self.font_estado.render("P2", True, (80, 120, 160))
-            surface.blit(
-                txt,
-                (
-                    sprite_x + SPRITE_SIZE // 2 - txt.get_width() // 2,
-                    sprite_y + SPRITE_SIZE // 2 - txt.get_height() // 2,
-                ),
-            )
+            # Renderizar animación de P2 si existe, sino placeholder
+            if self.anim_p2:
+                try:
+                    frame = self.anim_p2.current_frame()
+                    if frame and frame.get_size() != (1, 1):  # No es fallback vacío
+                        frame_scaled = pygame.transform.scale(
+                            frame, (SPRITE_SIZE, SPRITE_SIZE)
+                        )
+                        surface.blit(frame_scaled, (sprite_x, sprite_y))
+                    else:
+                        self._render_sprite_placeholder(surface, sprite_x, sprite_y, SPRITE_SIZE, "P2")
+                except Exception as e:
+                    # Si hay error renderizando, mostrar placeholder
+                    print(f"[LOBBY] Error renderizando P2: {e}")
+                    self._render_sprite_placeholder(surface, sprite_x, sprite_y, SPRITE_SIZE, "P2")
+            else:
+                # No hay animación, mostrar placeholder
+                self._render_sprite_placeholder(surface, sprite_x, sprite_y, SPRITE_SIZE, "P2")
 
             # Indicador LISTO
             estado_y = sprite_y + SPRITE_SIZE + 15
