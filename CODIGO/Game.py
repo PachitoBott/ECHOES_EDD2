@@ -1326,6 +1326,10 @@ class Game:
                 except Exception as e:
                     log_game.debug(f"[MUERTE_REMOTA] Error al disparar efecto: {e}")
 
+                # NUEVO: Soltar monedas para el cliente (en cliente, P2 puede recogerlas)
+                log_game.debug(f"[MUERTE_REMOTA] [COINS] Soltando monedas en cliente para enemigo muerto")
+                self._drop_enemy_coins(enemy_encontrado, room)
+
                 # [DIAG] ELIMINAR del dict
                 log_game.debug(f"[MUERTE_REMOTA] [DELETE] Eliminando índice {indice_encontrado}...")
                 room.enemies.pop(indice_encontrado)
