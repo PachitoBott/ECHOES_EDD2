@@ -11,6 +11,8 @@ import random
 import pygame
 from typing import Optional
 
+from systems.boss_sound_manager import BossSoundManager
+
 
 def cargar_boss_idle(ruta: str) -> list[pygame.Surface]:
     """
@@ -182,6 +184,9 @@ class Boss:
 
         # Inicializar sistema de ataques
         self._init_sistema_ataques()
+
+        # Inicializar sistema de sonidos del boss
+        self.sound_manager = BossSoundManager(volumen_idle=0.15)
 
     def _cargar_sprites(self) -> None:
         """Carga todas las animaciones del boss (idle + 3 ataques)."""
@@ -404,6 +409,8 @@ class Boss:
     def activar(self) -> None:
         """Llamar cuando el jugador entra a la sala."""
         self.activo = True
+        # Iniciar sonido idle del boss
+        self.sound_manager.iniciar_idle()
         limite_izq = self.sala_rect.left + self.MARGIN
         limite_der = self.sala_rect.right - self.render_w - self.MARGIN
         rango_movimiento = limite_der - limite_izq
@@ -428,6 +435,8 @@ class Boss:
 
         if self.hp <= 0:
             self.vivo = False
+            # Detener todos los sonidos del boss
+            self.sound_manager.detener_todo()
             print(f"[BOSS] BOSS DERROTADO")
         else:
             print(f"[BOSS] Daño recibido: {amount} | HP: {self.hp}/{self.max_hp}")
@@ -452,6 +461,9 @@ class Boss:
             if self._debug_frame_counter % 60 == 0 and self._debug_frame_counter < 120:
                 print(f"[BOSS] UPDATE BLOQUEADO: activo={self.activo}, vivo={self.vivo}")
             return
+
+        # Actualizar sonidos del boss
+        self.sound_manager.update(dt)
 
         # Debug: mostrar estado cada 30 frames
         if self._debug_frame_counter % 30 == 0:
@@ -587,10 +599,15 @@ class Boss:
             ataque.update(dt, jugadores)
 
         # Limpiar ataques terminados
+        ataques_vivos_antes = len(self.ataques_activos)
         self.ataques_activos = [
             a for a in self.ataques_activos
             if not a.terminado
         ]
+
+        # Si acababan de terminar ataques, reanudar idle
+        if ataques_vivos_antes > 0 and len(self.ataques_activos) == 0:
+            self.sound_manager.reanudar_idle(delay_ms=400)
 
         # Actualizar proyectiles activos
         for proj in self.proyectiles[:]:  # Copiar para iteración segura
@@ -690,7 +707,8 @@ class Boss:
             ataque = AtaqueFanout(
                 boca_x, boca_y,
                 jugador_objetivo,
-                self.proyectiles
+                self.proyectiles,
+                sound_manager=self.sound_manager
             )
             # Paso 6: Cambiar a animación de fanout
             self._set_animacion("fanout")
@@ -735,6 +753,8 @@ class Boss:
         if ataque:
             self.ataques_activos.append(ataque)
             print(f"[BOSS] Ejecutando ataque: {nombre} (fase {self.fase}) - Animación: {self.animacion_actual}")
+            # Reproducir sonido del ataque
+            self.sound_manager.reproducir_ataque(nombre)
 
         # Establecer cooldown
         self.cooldowns[nombre] = self.COOLDOWN_DURACION[nombre]
@@ -1038,18 +1058,20 @@ class AtaqueFanout(AtaqueBoss):
     TELEGRAPH = 0.3  # segundos de aviso visual ANTES de disparar (Paso 7)
 
     def __init__(self, boca_x: float, boca_y: float,
-                 jugador, lista_proyectiles: list):
+                 jugador, lista_proyectiles: list, sound_manager=None):
         """
         Args:
             boca_x, boca_y: Posición donde se generan los proyectiles
             jugador: Jugador objetivo (para calcular ángulo base)
             lista_proyectiles: Lista donde se añaden los proyectiles generados
+            sound_manager: Gestor de sonidos del boss (opcional)
         """
         super().__init__()
         self.boca_x = boca_x
         self.boca_y = boca_y
         self.jugador = jugador
         self.lista_proyectiles = lista_proyectiles
+        self.sound_manager = sound_manager
         self.padres_activos = []
 
         # Fase de telegraph (Paso 7)
@@ -1093,7 +1115,12 @@ class AtaqueFanout(AtaqueBoss):
         """
         Crea 4 proyectiles hijo en forma de cruz (cardinal).
         Se disparan desde la posición del padre en el momento de explosión.
+        Reproduce sonido de proyectil al dividirse.
         """
+        # Reproducir sonido de proyectil dividiéndose
+        if self.sound_manager:
+            self.sound_manager.reproducir_sonido_proyectil()
+
         # Direcciones cardinales: arriba, abajo, izquierda, derecha
         direcciones = [
             (0, -1),  # arriba

@@ -342,6 +342,7 @@ class Game:
         # --- Menú de pausa ---
         self.pause_menu_buttons: list[PauseMenuButton] = [
             PauseMenuButton("Reanudar", "resume"),
+            PauseMenuButton("Ayuda", "help"),
             PauseMenuButton("Menú principal", "main_menu"),
             PauseMenuButton("Salir del juego", "quit"),
         ]
@@ -769,32 +770,65 @@ class Game:
     # Bucle principal
     # ------------------------------------------------------------------ #
     def run(self) -> None:
-        if not self._open_start_menu():
+        try:
+            menu_ok = False
+            try:
+                menu_ok = self._open_start_menu()
+            except SystemExit:
+                print("[GAME] sys.exit() interceptado en _open_start_menu")
+                menu_ok = False
+            except Exception as e:
+                print(f"[GAME ERROR] En _open_start_menu: {e}")
+                import traceback
+                traceback.print_exc()
+                menu_ok = False
+
+            if not menu_ok:
+                print("[GAME] Menú falló o usuario cerró, terminando...")
+                pygame.mouse.set_visible(True)
+                if self.net:
+                    self.net.detener()
+                pygame.quit()
+                sys.exit(0)
+
+            self._frame_counter = 0
+            while self.running:
+                try:
+                    dt = self.clock.tick(self.cfg.FPS) / 1000.0
+                    self.door_cooldown = max(0.0, self.door_cooldown - dt)
+
+                    events = self._handle_events()
+                    if self._skip_frame:
+                        self._skip_frame = False
+                        continue
+                    self._update_fps_counter()
+                    self._update(dt, events)
+                    self._render()
+
+                except SystemExit:
+                    print("[GAME] sys.exit() interceptado en game loop")
+                    continue
+                except Exception as e:
+                    print(f"[GAME ERROR] En game loop: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    print("[GAME] Continuando después del error...")
+                    continue
+
+        except Exception as e:
+            print(f"[GAME ERROR] Fatal en run(): {e}")
+            import traceback
+            traceback.print_exc()
+
+        finally:
+            print("[GAME] Limpiando recursos...")
             pygame.mouse.set_visible(True)
+            self._finalize_run_statistics("shutdown")
             if self.net:
                 self.net.detener()
             pygame.quit()
+            print("[GAME] Aplicación terminada correctamente")
             sys.exit(0)
-
-        self._frame_counter = 0
-        while self.running:
-            dt = self.clock.tick(self.cfg.FPS) / 1000.0
-            self.door_cooldown = max(0.0, self.door_cooldown - dt)
-
-            events = self._handle_events()
-            if self._skip_frame:
-                self._skip_frame = False
-                continue
-            self._update_fps_counter()
-            self._update(dt, events)
-            self._render()
-
-        pygame.mouse.set_visible(True)
-        self._finalize_run_statistics("shutdown")
-        if self.net:
-            self.net.detener()
-        pygame.quit()
-        sys.exit(0)
 
     def _handle_events(self) -> list:
         events = pygame.event.get()
@@ -874,7 +908,15 @@ class Game:
         if player_para_lobby:
             start_menu.set_player_animation(player_para_lobby)
 
-        menu_result = start_menu.run()
+        try:
+            menu_result = start_menu.run()
+        except Exception as e:
+            print(f"[GAME ERROR] Menu.run() falló: {e}")
+            import traceback
+            traceback.print_exc()
+            self.running = False
+            return False
+
         if not menu_result.start_game:
             if self._run_start_time is not None:
                 reason = self._stats_pending_reason or "menu_exit"
@@ -882,8 +924,20 @@ class Game:
                 self._stats_pending_reason = None
             self.running = False
             return False
+
         pygame.mouse.set_visible(False)
-        self.start_new_run(seed=menu_result.seed, modo_coop=menu_result.modo_coop)
+
+        try:
+            print(f"[GAME] Iniciando nueva partida, seed={menu_result.seed}, modo_coop={menu_result.modo_coop}")
+            self.start_new_run(seed=menu_result.seed, modo_coop=menu_result.modo_coop)
+            print("[GAME] Nueva partida cargada exitosamente")
+        except Exception as e:
+            print(f"[GAME ERROR] start_new_run() falló: {e}")
+            import traceback
+            traceback.print_exc()
+            self.running = False
+            return False
+
         self._skip_frame = True
         return True
 
@@ -1753,6 +1807,9 @@ class Game:
         if getattr(room, "type", "") == "profesor_ibarra":
             prof = getattr(room, "profesor_ibarra", None)
             if prof is not None and prof.estado in (prof.PREGUNTA, prof.FEEDBACK, prof.TIENDA):
+                # Detener sonidos del jugador cuando entra al menú
+                if self.player:
+                    self.player.stop_all_sounds()
                 room.handle_events(
                     events, self.player, self.shop,
                     self.world, self.ui_font, self.cfg.SCREEN_SCALE,
@@ -1772,6 +1829,9 @@ class Game:
             music_manager.reproducir("minigame", loop=False, fade_in_ms=500)
             # Bajar volumen del minijuego
             music_manager.set_volumen(0.2)
+            # Detener sonidos del jugador
+            if self.player:
+                self.player.stop_all_sounds()
             return
 
         # Si el minijuego está activo, procesarlo y no actualizar el resto del juego
@@ -3087,8 +3147,18 @@ class Game:
         if self.net:
             hay_p2 = "aliado" in self.net.roles_conectados()
 
-        # P2 no tiene animación idle aún, será None (mostrará placeholder)
+        # Cargar animación de P2 (Cyborg) desde assets
         anim_p2 = None
+        if hay_p2:
+            try:
+                from systems.animation import AnimationManager
+                json_path = "assets/sprites/player2/animations.json"
+                sprite_dir = "assets/sprites/player2"
+                animations = AnimationManager.load_from_json(json_path, sprite_dir)
+                anim_p2 = animations.get("idle")
+            except Exception as e:
+                log_game.warning(f"No se pudo cargar animación P2: {e}")
+                anim_p2 = None
 
         # Crear pantalla de versus
         self.pantalla_versus = PantallaVersus(

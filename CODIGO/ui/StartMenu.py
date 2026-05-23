@@ -335,59 +335,70 @@ class StartMenu:
             self.preview_anim_time = (self.preview_anim_time + dt) % 9999
 
             # ================================================================
-            # SINCRONIZACIÓN CON RED DEL MENÚ (CLIENTE)
+            # PROCESAR MENSAJES DE RED (CLIENTE)
             # ================================================================
             if self.cliente_menu:
-                # Procesar mensajes del servidor
-                self.cliente_menu.procesar_mensajes_pendientes()
+                try:
+                    # Procesar mensajes del servidor (thread-safe)
+                    self.cliente_menu.procesar_mensajes_pendientes()
 
-                # Si el servidor ordenó iniciar el juego
-                if self.cliente_menu.iniciar_juego:
-                    self.cliente_menu.iniciar_juego = False
-                    self.modo_coop_solicitado = True
-                    self._start_requested = True
-                    running = False
-                    # Usar seed del servidor
-                    if self.cliente_menu.seed_juego is not None:
-                        self.seed_text = str(self.cliente_menu.seed_juego)
-                    break
+                    # Chequear si servidor ordenó iniciar (con lock para thread-safety)
+                    with self.cliente_menu.lock:
+                        if self.cliente_menu.iniciar_juego:
+                            print(f"[MENU CLIENT] ✓ Recibido START_GAME del servidor")
+                            self.seed_text = str(self.cliente_menu.seed_juego)
+                            self.modo_coop_solicitado = True
+                            self._start_requested = True
+                            running = False
+                            break
 
-                # Sincronizar pantalla actual con servidor
-                pantalla_del_servidor = self.cliente_menu.pantalla_actual
-                if pantalla_del_servidor == "conectando":
-                    # Mostrar pantalla de conexión
-                    self._draw_menu()
-                    # Dibujar overlay "Conectando..."
-                    self._draw_connecting_overlay()
-                    pygame.display.flip()
-                    continue
-                elif pantalla_del_servidor == "sin_conexion":
-                    # Mostrar error de conexión
-                    self._draw_menu()
-                    self._draw_connection_error_overlay()
-                    pygame.display.flip()
-                    continue
-                # Si está "principal", "lobby", etc., continuar normalmente
+                except Exception as e:
+                    print(f"[MENU] Error procesando RED: {e}")
+                    import traceback
+                    traceback.print_exc()
 
             # ================================================================
             # ACTUALIZAR LOBBY
             # ================================================================
             if self.lobby:
-                self.lobby.update(dt)
+                try:
+                    self.lobby.update(dt)
 
-                # Actualizar estado de conexión P2 en tiempo real
-                if self.net_manager:
-                    p2_conectado = "aliado" in self.net_manager.roles_conectados()
-                    self.lobby.set_p2_conectado(p2_conectado)
+                    # Actualizar estado de conexión P2 en tiempo real
+                    if self.net_manager:
+                        try:
+                            p2_conectado = "aliado" in self.net_manager.roles_conectados()
+                            self.lobby.set_p2_conectado(p2_conectado)
+                        except Exception as e:
+                            print(f"[MENU] Error actualizando estado P2: {e}")
+                except Exception as e:
+                    print(f"[MENU] Error actualizando lobby: {e}")
+                    import traceback
+                    traceback.print_exc()
 
             # ================================================================
             # MANEJO DE EVENTOS
             # ================================================================
+            es_cliente = self._es_cliente()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self._start_requested = False
                     running = False
                     break
+
+                # SIEMPRE permitir ESC para salir
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self._start_requested = False
+                    running = False
+                    break
+
+                # Si es cliente conectado, bloquear TODOS los otros eventos
+                if es_cliente:
+                    # Cliente solo puede presionar ESC (ya manejado arriba)
+                    # Ignorar absolutamente todos los otros eventos
+                    continue
+
+                # Si no es cliente, procesar eventos normalmente
                 if self.overlay_key == "lobby" and self.lobby:
                     # Manejar eventos del lobby
                     self.lobby.handle_event(event)
@@ -400,19 +411,11 @@ class StartMenu:
                         running = False
                         break
                 else:
-                    # Si es cliente, solo permitir ESC y bloquear navegación
-                    if self.cliente_menu and self.cliente_menu.conectado:
-                        if event.type == pygame.KEYDOWN:
-                            if event.key == pygame.K_ESCAPE:
-                                self._start_requested = False
-                                running = False
-                        # Ignorar cualquier otro input
-                    else:
-                        # Servidor o sin red: manejo normal
-                        keep_running = self._handle_menu_event(event)
-                        if not keep_running:
-                            running = False
-                            break
+                    # Servidor o sin red: manejo normal
+                    keep_running = self._handle_menu_event(event)
+                    if not keep_running:
+                        running = False
+                        break
 
             if not running:
                 break
@@ -420,30 +423,49 @@ class StartMenu:
             # ================================================================
             # PROCESAR RESULTADO DEL LOBBY
             # ================================================================
-            if self.lobby and self.lobby.terminado:
-                if self.lobby.resultado == "jugar":
-                    # Iniciar juego con modo según conexión de P2
-                    self.modo_coop_solicitado = self.lobby.p2_conectado
-                    self._start_requested = True
-                    running = False
-                    self.overlay_key = None
+            try:
+                if self.lobby and self.lobby.terminado:
+                    # Solo el servidor puede terminar el lobby (cliente tiene eventos bloqueados)
+                    if self.lobby.resultado == "jugar":
+                        # SERVIDOR: Iniciar juego
+                        print("[SERVIDOR] ¡INICIAR PARTIDA presionado!")
+                        self.modo_coop_solicitado = self.lobby.p2_conectado
+                        self.overlay_key = None
 
-                    # Si es servidor, ordenar al cliente iniciar el juego
-                    if self.servidor_menu:
                         seed = self.selected_seed()
                         import random
                         if seed is None:
                             seed = random.randint(0, 999999)
-                        self.servidor_menu.enviar_inicio_juego(seed)
                         self.seed_text = str(seed)
 
-                elif self.lobby.resultado == "volver":
-                    # Volver al menú principal
-                    self.lobby = None
-                    self.overlay_key = None
-                    # Notificar al cliente (servidor)
-                    if self.servidor_menu:
-                        self.servidor_menu.enviar_estado_menu("principal")
+                        # Enviar START_GAME al cliente (si existe)
+                        if self.servidor_menu and self.servidor_menu.cliente_conectado:
+                            print(f"[SERVIDOR] → Enviando START_GAME con seed {seed}")
+                            try:
+                                self.servidor_menu.enviar({"type": "START_GAME", "seed": seed})
+                                import time
+                                time.sleep(0.2)  # Tiempo para que se transmita
+                            except Exception as e:
+                                print(f"[SERVIDOR] Error enviando: {e}")
+
+                        print("[SERVIDOR] ✓ Iniciando juego...")
+                        self._start_requested = True
+                        running = False
+
+                    elif self.lobby.resultado == "volver":
+                        # Volver al menú principal
+                        self.lobby = None
+                        self.overlay_key = None
+                        # Notificar al cliente (servidor)
+                        if self.servidor_menu:
+                            try:
+                                self.servidor_menu.enviar_estado_menu("principal")
+                            except Exception as e:
+                                print(f"[MENU] Error notificando estado: {e}")
+            except Exception as e:
+                print(f"[MENU] Error procesando lobby: {e}")
+                import traceback
+                traceback.print_exc()
 
             # ================================================================
             # RENDERIZAR
@@ -463,18 +485,33 @@ class StartMenu:
                     # Renderizar lobby
                     if not self.lobby:
                         # Crear lobby si no existe
-                        width, height = self.screen.get_size()
-                        self.lobby = PantallaLobby(
-                            logical_w=width,
-                            logical_h=height,
-                            fondo_menu=self.background,
-                            btn_asset=self.btn_normal,
-                            anim_p1=None,
-                        )
-                        if self.net_manager:
-                            p2_conectado = "aliado" in self.net_manager.roles_conectados()
-                            self.lobby.set_p2_conectado(p2_conectado)
-                    self.lobby.render(self.screen)
+                        try:
+                            width, height = self.screen.get_size()
+                            self.lobby = PantallaLobby(
+                                logical_w=width,
+                                logical_h=height,
+                                fondo_menu=self.background,
+                                btn_asset=self.btn_normal,
+                                anim_p1=None,
+                            )
+                            if self.net_manager:
+                                try:
+                                    p2_conectado = "aliado" in self.net_manager.roles_conectados()
+                                    self.lobby.set_p2_conectado(p2_conectado)
+                                except Exception as e:
+                                    print(f"[MENU] Error detectando P2 en lobby: {e}")
+                        except Exception as e:
+                            print(f"[MENU] Error creando lobby: {e}")
+                            import traceback
+                            traceback.print_exc()
+
+                    if self.lobby:
+                        try:
+                            self.lobby.render(self.screen)
+                        except Exception as e:
+                            print(f"[MENU] Error renderizando lobby: {e}")
+                            import traceback
+                            traceback.print_exc()
 
                 elif pantalla_mapeada in ["creditos", "controls", "estadisticas", "skins"]:
                     # Renderizar overlay
@@ -690,6 +727,17 @@ class StartMenu:
     def set_player_animation(self, player) -> None:
         """Almacena la referencia al jugador para obtener su animación idle."""
         self.player_ref = player
+
+    def _es_cliente(self) -> bool:
+        """Determina si este proceso es un cliente (no puede controlar el menú)."""
+        # Verificar si hay cliente_menu conectado
+        if self.cliente_menu and self.cliente_menu.conectado:
+            return True
+        # Verificar si hay net_manager en modo cliente
+        if self.net_manager and hasattr(self.net_manager, '_modo'):
+            if self.net_manager._modo == "cliente":
+                return True
+        return False
 
     def _mostrar_lobby(self) -> bool:
         """Crea y muestra la pantalla de lobby."""

@@ -736,6 +736,12 @@ class Player(Entity):
         except (pygame.error, FileNotFoundError):
             self.damage_sound = None
 
+    def stop_all_sounds(self) -> None:
+        """Detiene todos los sonidos del jugador (correr, dash, etc)."""
+        if self.run_sound and self._is_run_sound_playing:
+            self.run_sound.stop()
+            self._is_run_sound_playing = False
+
     def set_skin(self, sprite_dir: str | Path | None) -> None:
         """Actualiza los sprites y recarga las animaciones (actualmente solo Daniel)."""
         # Nota: Actualmente el sistema no soporta múltiples skins
