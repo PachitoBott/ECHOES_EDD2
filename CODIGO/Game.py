@@ -295,6 +295,19 @@ class Game:
             custom_y=895   # Same height as P1
         )
 
+        # --- Cargar animaciones de Cyborg para jugador remoto ---
+        self._cyborg_animations: dict = {}
+        try:
+            from systems.animation import AnimationManager
+            self._cyborg_animations = AnimationManager.load_from_json(
+                "assets/sprites/player2/animations.json",
+                "assets/sprites/player2"
+            )
+            log_game.info("[OK] Animaciones de Cyborg cargadas para jugador remoto")
+        except Exception as e:
+            log_game.warning(f"[WARNING] No se pudieron cargar animaciones de Cyborg: {e}")
+            self._cyborg_animations = {}
+
         # ---------- Recursos ----------
         self.tileset_manager = TilesetManager()
         self.tileset_manager.set_zone(1)  # Inicializar con Zona 1
@@ -1678,6 +1691,10 @@ class Game:
         # --- Actualizar animaciones de paneles HUD ---
         self.hud_panel_p1.update(dt)
         self.hud_panel_p2.update(dt)
+
+        # --- Actualizar animaciones de Cyborg para jugador remoto ---
+        if "idle" in self._cyborg_animations:
+            self._cyborg_animations["idle"].update(dt)
 
         # --- Actualizar fondo matrix ---
         self.matrix_bg.update(dt)
@@ -3145,8 +3162,15 @@ class Game:
 
             sala_actual = (self.dungeon.i, self.dungeon.j)
             if sala_remota == sala_actual:
-                # Cubo negro 32x32 (tamaño del sprite)
-                pygame.draw.rect(self.world, (0, 0, 0), (int(x), int(y), 32, 32), 2)
+                # Renderizar sprite de Cyborg con animación idle
+                if "idle" in self._cyborg_animations:
+                    frame = self._cyborg_animations["idle"].current_frame()
+                    # Escalar el frame a 32x32 para coincidir con el tamaño esperado
+                    scaled_frame = pygame.transform.scale(frame, (32, 32))
+                    self.world.blit(scaled_frame, (int(x), int(y)))
+                else:
+                    # Fallback: cubo negro si no hay animaciones
+                    pygame.draw.rect(self.world, (0, 0, 0), (int(x), int(y), 32, 32), 2)
 
         self.projectiles.draw(self.world)
         self.enemy_projectiles.draw(self.world)
