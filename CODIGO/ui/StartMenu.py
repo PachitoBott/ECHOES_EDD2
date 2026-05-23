@@ -448,16 +448,56 @@ class StartMenu:
             # ================================================================
             # RENDERIZAR
             # ================================================================
-            if self.overlay_key == "lobby" and self.lobby:
-                self.lobby.render(self.screen)
-            elif self.overlay_key:
-                self._draw_menu(dim_background=True)
-                if self.overlay_key == "skins":
-                    self._draw_skins_overlay()
-                else:
+            # Si es cliente conectado, renderizar según lo que dice el servidor
+            if self.cliente_menu and self.cliente_menu.conectado:
+                pantalla_actual = self.cliente_menu.pantalla_actual
+
+                if pantalla_actual == "lobby":
+                    # Renderizar lobby
+                    if not self.lobby:
+                        # Crear lobby si no existe
+                        width, height = self.screen.get_size()
+                        self.lobby = PantallaLobby(
+                            logical_w=width,
+                            logical_h=height,
+                            fondo_menu=self.background,
+                            btn_asset=self.btn_normal,
+                            anim_p1=None,
+                        )
+                        if self.net_manager:
+                            p2_conectado = "aliado" in self.net_manager.roles_conectados()
+                            self.lobby.set_p2_conectado(p2_conectado)
+                    self.lobby.render(self.screen)
+
+                elif pantalla_actual in ["creditos", "controls", "estadisticas", "skins"]:
+                    # Renderizar overlay
+                    self._draw_menu(dim_background=True)
+                    # Mapear nombre del overlay para _draw_overlay
+                    self.overlay_key = pantalla_actual
+                    self.overlay_lines = ()
+                    if pantalla_actual == "creditos" and hasattr(self, 'menu_cfg') and hasattr(self.menu_cfg, 'sections'):
+                        self.overlay_lines = self.menu_cfg.sections.get("creditos", [])[1:] if self.menu_cfg.sections.get("creditos") else ()
+                    elif pantalla_actual == "controls" and hasattr(self, 'menu_cfg') and hasattr(self.menu_cfg, 'sections'):
+                        self.overlay_lines = self.menu_cfg.sections.get("controls", ())
+                    elif pantalla_actual == "estadisticas":
+                        self.overlay_lines = self._statistics_lines()
                     self._draw_overlay()
+
+                else:  # "principal" o cualquier otra
+                    # Renderizar menú principal
+                    self._draw_menu()
             else:
-                self._draw_menu()
+                # Servidor o sin red: renderizar según overlay_key local
+                if self.overlay_key == "lobby" and self.lobby:
+                    self.lobby.render(self.screen)
+                elif self.overlay_key:
+                    self._draw_menu(dim_background=True)
+                    if self.overlay_key == "skins":
+                        self._draw_skins_overlay()
+                    else:
+                        self._draw_overlay()
+                else:
+                    self._draw_menu()
 
             pygame.display.flip()
 
