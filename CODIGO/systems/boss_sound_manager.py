@@ -70,7 +70,7 @@ class BossSoundManager:
             "idle": 1.0,      # Volumen normal para idle (se ajusta con self.volumen_idle)
             "fanout": 1.0,    # Volumen normal para Fanout
             "zigzag": 1.0,    # Volumen normal para Zigzag
-            "laser": 0.4,     # Laser al 40% (80% del 50% anterior)
+            "laser": 0.2,     # Laser al 20%
             "emp": 1.0,       # Volumen normal para EMP
             "proyectil": 0.03, # Proyectil dividido al 3% (muy muy bajo)
         }
