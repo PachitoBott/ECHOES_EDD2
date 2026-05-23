@@ -3073,6 +3073,26 @@ class Game:
                     self.estado_p2.x = px - 9  # Centrado (PLAYER_HITBOX_SIZE[0] / 2)
                     self.estado_p2.y = py - 12  # Centrado (PLAYER_HITBOX_SIZE[1] / 2)
                     log_game.warning(f"[P2] RESPAWN en ({self.estado_p2.x:.0f}, {self.estado_p2.y:.0f})")
+
+                    # Efecto visual de spawn (como en P1)
+                    try:
+                        # Usar sprite de P2 (Cyborg) si está disponible
+                        if hasattr(self, '_client_ally_animations') and "idle" in self._client_ally_animations:
+                            idle_sprite = self._client_ally_animations["idle"].current_frame()
+                            self.spawn_effect_manager.spawn(
+                                self.estado_p2.x,
+                                self.estado_p2.y,
+                                idle_sprite,
+                                lifetime=0.5,
+                                num_particles=25
+                            )
+                    except Exception as e:
+                        log_game.warning(f"Error al iniciar spawn effect para P2: {e}")
+
+                    # Limpiar proyectiles (como en P1)
+                    self.projectiles.clear()
+                    self.enemy_projectiles.clear()
+                    self.door_cooldown = 0.25
         else:
             # No es corazón completo, solo restaurar HP para siguiente daño
             self.estado_p2.hp = self.estado_p2.max_hp
