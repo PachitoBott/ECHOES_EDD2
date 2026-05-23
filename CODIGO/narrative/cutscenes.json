@@ -138,7 +138,7 @@
     "paneles": [
       {
         "image": "nigoria_01.png",
-        "texto": "Te pido disculpas sinceras. Nunca debería haberte hecho esto. Espero que algún día puedas perdonarme.",
+        "texto": "Te pido disculpas, nunca debi hacerte esto, espero puedas perdonarme.",
         "duracion": 5.0,
         "fade_in": 1.0,
         "fade_out": 1.0
