@@ -1152,6 +1152,13 @@ class AtaqueLaser(AtaqueBoss):
         return self.boca_x_inicial
 
     @property
+    def boca_y(self) -> float:
+        """Posición Y actual (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.y + self.boss.render_h
+        return self.boca_y_inicial
+
+    @property
     def boss_x(self) -> float:
         """Posición X del boss (sigue al boss si existe referencia)"""
         if self.boss:
