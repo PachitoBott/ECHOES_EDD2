@@ -452,7 +452,14 @@ class StartMenu:
             if self.cliente_menu and self.cliente_menu.conectado:
                 pantalla_actual = self.cliente_menu.pantalla_actual
 
-                if pantalla_actual == "lobby":
+                # Mapear nombres en inglés (del servidor) a español
+                pantalla_mapeada = {
+                    "credits": "creditos",
+                    "statistics": "estadisticas",
+                    "controls": "controls",  # ya en inglés pero consistente
+                }.get(pantalla_actual, pantalla_actual)
+
+                if pantalla_mapeada == "lobby":
                     # Renderizar lobby
                     if not self.lobby:
                         # Crear lobby si no existe
@@ -469,17 +476,17 @@ class StartMenu:
                             self.lobby.set_p2_conectado(p2_conectado)
                     self.lobby.render(self.screen)
 
-                elif pantalla_actual in ["creditos", "controls", "estadisticas", "skins"]:
+                elif pantalla_mapeada in ["creditos", "controls", "estadisticas", "skins"]:
                     # Renderizar overlay
                     self._draw_menu(dim_background=True)
                     # Mapear nombre del overlay para _draw_overlay
-                    self.overlay_key = pantalla_actual
+                    self.overlay_key = pantalla_mapeada
                     self.overlay_lines = ()
-                    if pantalla_actual == "creditos" and hasattr(self, 'menu_cfg') and hasattr(self.menu_cfg, 'sections'):
+                    if pantalla_mapeada == "creditos" and hasattr(self, 'menu_cfg') and hasattr(self.menu_cfg, 'sections'):
                         self.overlay_lines = self.menu_cfg.sections.get("creditos", [])[1:] if self.menu_cfg.sections.get("creditos") else ()
-                    elif pantalla_actual == "controls" and hasattr(self, 'menu_cfg') and hasattr(self.menu_cfg, 'sections'):
+                    elif pantalla_mapeada == "controls" and hasattr(self, 'menu_cfg') and hasattr(self.menu_cfg, 'sections'):
                         self.overlay_lines = self.menu_cfg.sections.get("controls", ())
-                    elif pantalla_actual == "estadisticas":
+                    elif pantalla_mapeada == "estadisticas":
                         self.overlay_lines = self._statistics_lines()
                     self._draw_overlay()
 
