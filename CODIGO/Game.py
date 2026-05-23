@@ -614,7 +614,7 @@ class Game:
             self.player.x, self.player.y = spawn_x, spawn_y
         if hasattr(self.player, "reset_loadout"):
             self.player.reset_loadout()
-        setattr(self.player, "gold", 999)
+        setattr(self.player, "gold", 0)
 
         # Almacenar referencia de player en el menú para la próxima vez que se abra
         # (El menú será recreado la próxima vez que se abre _open_start_menu)
