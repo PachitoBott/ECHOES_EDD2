@@ -58,21 +58,10 @@ class PantallaLobby:
         if not self.anim_p1:
             self.anim_p1 = self._cargar_animacion_p1()
 
-        # Debug
-        if self.anim_p1:
-            print(f"[LOBBY_SCREEN] Animación P1: {self.anim_p1}")
-            print(f"[LOBBY_SCREEN] Animación P1 tiene current_frame: {hasattr(self.anim_p1, 'current_frame')}")
-        else:
-            print(f"[LOBBY_SCREEN] No se pudo obtener animación P1")
-
         # Estado
         self.p2_conectado = False
         # Cargar animación de P2 (Aliado/Cyborg) automáticamente
         self.anim_p2 = self._cargar_animacion_p2()
-        if self.anim_p2:
-            print(f"[LOBBY_SCREEN] Animación P2: {self.anim_p2}")
-        else:
-            print(f"[LOBBY_SCREEN] No se pudo obtener animación P2")
         self.resultado = None  # "jugar", "volver", None
         self.terminado = False
 
