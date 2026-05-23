@@ -370,6 +370,7 @@ class Game:
         self._current_zone: int = 1
         self._intro_played: bool = False
         self._zones_cinematics_shown: set = set()  # zonas cuya cinemática ya se mostró esta run
+        self._boss_defeat_cinematics_queued: bool = False  # flag para cinematicas post-boss
 
         # Banner de zona (estilo Binding of Isaac)
         self._zone_banner_text: str = ""
@@ -636,6 +637,7 @@ class Game:
         self._zone_banner_sub = ""
         self._zone_banner_timer = 0.0
         self._boss_banner_shown = False
+        self._boss_defeat_cinematics_queued = False
 
     def _reset_runtime_state(self) -> None:
         self.projectiles.clear()
@@ -1763,6 +1765,10 @@ class Game:
         # Actualizar boss si existe en la sala
         if hasattr(room, "boss") and room.boss is not None:
             room.boss.update(dt)
+            # Detectar muerte del boss y queue cinematicas post-boss
+            if not room.boss.vivo and not self._boss_defeat_cinematics_queued:
+                self._boss_defeat_cinematics_queued = True
+                self._queue_boss_defeat_cinematics()
 
         # En modo servidor: actualizar también enemigos en salas con jugadores remotos
         if self.net and self.net.es_servidor:
@@ -2963,6 +2969,26 @@ class Game:
             return
         self._boss_banner_shown = True
         self._show_zone_banner("SALA DEL BOSS", "¿Estás listo?")
+
+    def _queue_boss_defeat_cinematics(self) -> None:
+        """
+        Encadena las 4 cinematicas post-boss en orden:
+        1. boss_defeat → callback para siguiente
+        2. boss_defeat_unmasked_pixel → callback para siguiente
+        3. regresando_al_mundo_verdad → callback para siguiente
+        4. nigoria → callback final
+        """
+        def play_unmasked():
+            self.cinematics.reproducir("boss_defeat_unmasked_pixel", callback_fin=play_returning)
+
+        def play_returning():
+            self.cinematics.reproducir("regresando_al_mundo_verdad", callback_fin=play_nigoria)
+
+        def play_nigoria():
+            self.cinematics.reproducir("nigoria", callback_fin=None)
+
+        # Iniciar la cadena con la primera cinemática
+        self.cinematics.reproducir("boss_defeat", callback_fin=play_unmasked)
 
     def _show_zone_banner(self, title: str, subtitle: str = "") -> None:
         """Activa el banner de zona con el texto dado."""
