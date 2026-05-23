@@ -42,7 +42,8 @@
       "PowerShell(Get-Job -Name \"GameServer\")",
       "PowerShell(Stop-Job -Force)",
       "Bash(Get-ChildItem -Recurse -Include \"*.py\")",
-      "Bash(Select-Object -ExpandProperty FullName)"
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "PowerShell(python -m py_compile \"F:\\\\martin\\\\Universidad\\\\ECHOES_EDD2\\\\CODIGO\\\\Game.py\" 2>&1)"
     ]
   }
 }

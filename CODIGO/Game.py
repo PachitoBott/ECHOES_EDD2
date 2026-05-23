@@ -206,6 +206,30 @@ class RemoteEnemy:
         return (self.x + self.w / 2, self.y + self.h / 2)
 
 
+class EstadoJugador2:
+    """
+    Estado autoritativo del jugador 2 (cliente/aliado).
+    Vive en el servidor — es la fuente de verdad para vida y monedas de P2.
+    """
+    def __init__(self):
+        # Vida
+        self.lives = 6          # Vida actual (6 = 3 corazones)
+        self.max_lives = 6      # Vida máxima
+        self.vivo = True
+
+        # Monedas
+        self.gold = 0           # Monedas actuales
+
+        # Posición (ya sincronizada)
+        self.x = 0.0
+        self.y = 0.0
+
+        # Invulnerabilidad temporal al recibir daño
+        self.invulnerable = False
+        self.timer_invulnerable = 0.0
+        self.TIEMPO_INVULNERABLE = 1.2  # segundos
+
+
 class Game:
     COIN_SPRITE_NAME = "moneda.png"
     COIN_ICON_DEFAULT_SCALE = 1.5
@@ -404,6 +428,10 @@ class Game:
         # ---------- Networking (Fase 3) ----------
         self.net: NetworkManager | None = None
         self.remote_players: dict = {}  # Almacena estado de jugadores remotos
+
+        # --- Estado de Jugador 2 (solo servidor en modo multijugador) ---
+        self.estado_p2: EstadoJugador2 | None = None
+        self._timer_sync_p2 = 0.0  # Timer para sincronización periódica de P2
         self.remote_enemies: dict = {}  # Almacena enemigos remotos sincronizados del servidor
         self._send_state_interval = 0.1  # Enviar estado cada 100ms (~10 Hz)
         self._last_state_send = 0.0
@@ -1043,6 +1071,10 @@ class Game:
                 ev.datos["posicion_valida"] = True
                 self.remote_players[origen] = ev.datos
                 log_game.debug(f"[ESTADO_REMOTO] {origen} está en sala {sala_remota}")
+
+                # Paso 5: Procesar estado de P2 si está incluido en el mensaje
+                if "p2_vidas" in ev.datos or "p2_oro" in ev.datos:
+                    self._recibir_estado_p2(ev.datos)
 
         elif ev.tipo == "enemigo_muerto":
             # Enemigo fue eliminado por otro jugador
@@ -1795,6 +1827,13 @@ class Game:
                     "vidas": int(getattr(self.player, "lives", 0)),
                     "apoyo": int(getattr(self.player, "gold", 0)),
                 }
+                # Incluir estado de P2 si existe (solo servidor)
+                if self.estado_p2:
+                    estado_local["p2_vidas"] = int(self.estado_p2.lives)
+                    estado_local["p2_oro"] = int(self.estado_p2.gold)
+                    estado_local["p2_invulnerable"] = self.estado_p2.timer_invulnerable > 0.0
+                    estado_local["p2_x"] = float(self.estado_p2.x)
+                    estado_local["p2_y"] = float(self.estado_p2.y)
                 self._last_state_send = ahora
 
             # Procesar red y enviar estado
@@ -1965,6 +2004,7 @@ class Game:
                 return
 
         self._update_player(dt, room)
+        self._update_estado_p2(dt)
         # [FIX SYNC] Cliente NO crea enemigos — los recibe del servidor
         # Solo el servidor debe llamar a _spawn_room_enemies
         if self.net is None or self.net.es_servidor:
@@ -2030,6 +2070,72 @@ class Game:
             self.player.invulnerable_timer = 9999.0
 
         self.player.update(dt, room, self.projectiles)
+
+    def _update_estado_p2(self, dt: float) -> None:
+        """Actualiza el estado de P2 (solo servidor en multijugador)."""
+        if not self.estado_p2:
+            return
+        self.estado_p2.timer_invulnerable = max(0.0, self.estado_p2.timer_invulnerable - dt)
+
+    def _recibir_estado_p2(self, estado_datos: dict) -> None:
+        """
+        Paso 5: Recibe y procesa el estado de P2 desde el servidor (cliente).
+        Almacena el estado en remote_players para sincronización.
+        """
+        if not self.remote_players:
+            return
+        # Buscar al servidor (P1) en remote_players
+        for rol, player_data in self.remote_players.items():
+            # Actualizar los datos de P2 en el estado del jugador remoto (servidor)
+            if "p2_vidas" in estado_datos:
+                player_data["p2_vidas"] = estado_datos["p2_vidas"]
+            if "p2_oro" in estado_datos:
+                player_data["p2_oro"] = estado_datos["p2_oro"]
+            if "p2_invulnerable" in estado_datos:
+                player_data["p2_invulnerable"] = estado_datos["p2_invulnerable"]
+            if "p2_pos" in estado_datos:
+                player_data["p2_pos"] = estado_datos["p2_pos"]
+
+    def _get_player_data_p2(self) -> dict:
+        """
+        Paso 6: Obtiene datos de P2 formateados para el HUD.
+        En servidor: extrae de self.estado_p2
+        En cliente: extrae del dict en remote_players
+        """
+        # En servidor: obtener de estado_p2
+        if self.estado_p2:
+            return {
+                "health": self.estado_p2.lives,
+                "max_health": self.estado_p2.max_lives,
+                "coins": self.estado_p2.gold,
+                "red_apoyo": 0,  # P2 no tiene estos powerups aún
+                "modo_privado": False,
+                "emp": False,
+                "eco_señal": False
+            }
+        # En cliente: obtener de remote_players (estado del servidor/P1)
+        if self.remote_players:
+            remote_player = next(iter(self.remote_players.values()), None)
+            if remote_player:
+                return {
+                    "health": remote_player.get("p2_vidas", 0),
+                    "max_health": 6,  # P2 siempre tiene 6 vidas máximo
+                    "coins": remote_player.get("p2_oro", 0),
+                    "red_apoyo": 0,
+                    "modo_privado": False,
+                    "emp": False,
+                    "eco_señal": False
+                }
+        # Sin datos disponibles
+        return {
+            "health": 0,
+            "max_health": 0,
+            "coins": 0,
+            "red_apoyo": 0,
+            "modo_privado": False,
+            "emp": False,
+            "eco_señal": False
+        }
 
     def _spawn_room_enemies(self, room) -> None:
         if getattr(room, "no_spawn", False):
@@ -2614,6 +2720,44 @@ class Game:
             else:
                 projectile.alive = False
 
+        # --- Manejo de daño para P2 (solo en servidor) ---
+        if self.estado_p2 and self.net and self.net.es_servidor:
+            p2_invulnerable = self.estado_p2.invulnerable and self.estado_p2.timer_invulnerable > 0.0
+            p2_rect = self._get_p2_rect()
+
+            # Daño por contacto con enemigos
+            for enemy in room.enemies:
+                if not p2_rect.colliderect(enemy.rect()):
+                    continue
+                if p2_invulnerable:
+                    continue
+                contact_damage = getattr(enemy, "contact_damage", 0)
+                if contact_damage <= 0:
+                    continue
+                took_hit = self._aplicar_daño_p2(contact_damage)
+                if took_hit:
+                    p2_invulnerable = self.estado_p2.timer_invulnerable > 0.0
+
+            # Daño por proyectiles enemigos
+            for projectile in self.enemy_projectiles:
+                if not projectile.alive:
+                    continue
+                if not p2_rect.colliderect(projectile.rect()):
+                    continue
+                if p2_invulnerable:
+                    remaining_iframes = self.estado_p2.timer_invulnerable
+                    projectile.ignore_player_timer = max(
+                        projectile.ignore_player_timer,
+                        remaining_iframes + 0.05,
+                    )
+                    continue
+                took_hit = self._aplicar_daño_p2(1)
+                if took_hit:
+                    projectile.alive = False
+                    p2_invulnerable = self.estado_p2.timer_invulnerable > 0.0
+                else:
+                    projectile.alive = False
+
         survivors = []
         for enemy in room.enemies:
             ready_fn = getattr(enemy, "is_ready_to_remove", None)
@@ -2730,20 +2874,32 @@ class Game:
             return
 
         player_rect = self.player.rect()
-        collected_total = 0
+        p2_rect = self._get_p2_rect() if self.estado_p2 else None
+        collected_p1 = 0
+        collected_p2 = 0
         survivors: list[Pickup] = []
         for pickup in pickups:
             pickup.update(dt, room)
             if pickup.collected:
                 continue
+            collected = False
+            # P1 recolecta
             if player_rect.colliderect(pickup.rect()):
                 pickup.collect()
-                collected_total += pickup.value
-            else:
+                collected_p1 += pickup.value
+                collected = True
+            # P2 recolecta (solo servidor, independiente de P1)
+            elif p2_rect and p2_rect.colliderect(pickup.rect()):
+                pickup.collect()
+                collected_p2 += pickup.value
+                collected = True
+            if not collected:
                 survivors.append(pickup)
         room.pickups = survivors
-        if collected_total:
-            self._add_player_gold(collected_total)
+        if collected_p1:
+            self._add_player_gold(collected_p1)
+        if collected_p2:
+            self._add_player_gold_p2(collected_p2)
 
     def _add_player_gold(self, amount: int) -> None:
         amount = int(amount)
@@ -2751,6 +2907,15 @@ class Game:
             return
         current_gold = getattr(self.player, "gold", 0)
         setattr(self.player, "gold", current_gold + amount)
+
+    def _add_player_gold_p2(self, amount: int) -> None:
+        """Agrega monedas al jugador remoto (P2)."""
+        if not self.estado_p2:
+            return
+        amount = int(amount)
+        if amount <= 0:
+            return
+        self.estado_p2.gold += amount
 
     def _apply_projectile_effects(self, projectile, enemy) -> None:
         effects = getattr(projectile, "effects", ())
@@ -2822,6 +2987,31 @@ class Game:
                 enemy.y = player_rect.bottom
             else:
                 enemy.y = player_rect.top - enemy.h
+
+    def _get_p2_rect(self) -> pygame.Rect:
+        """Crea un rect para P2 usando su posición en estado_p2 y el hitbox de Player."""
+        if not self.estado_p2:
+            return pygame.Rect(0, 0, 0, 0)
+        from entities.Player import PLAYER_HITBOX_SIZE, PLAYER_HITBOX_OFFSET
+        rect = pygame.Rect(
+            self.estado_p2.x + PLAYER_HITBOX_OFFSET[0],
+            self.estado_p2.y + PLAYER_HITBOX_OFFSET[1],
+            PLAYER_HITBOX_SIZE[0],
+            PLAYER_HITBOX_SIZE[1],
+        )
+        return rect
+
+    def _aplicar_daño_p2(self, amount: int) -> bool:
+        """Aplica daño a P2 si no está en iframes. Devuelve True si impactó."""
+        if not self.estado_p2:
+            return False
+        if amount <= 0 or self.estado_p2.timer_invulnerable > 0.0:
+            return False
+        self.estado_p2.lives = max(0, self.estado_p2.lives - 1)
+        self.estado_p2.timer_invulnerable = self.estado_p2.TIEMPO_INVULNERABLE
+        if self.estado_p2.lives <= 0:
+            self.estado_p2.vivo = False
+        return True
 
     def _handle_player_death(self, room) -> None:
         log_player.warning("Jugador murió — lives=%s", getattr(self.player, "lives", "?"))
@@ -3634,31 +3824,8 @@ class Game:
         }
         self.hud_panel_p1.render(self.screen, player_data_p1, es_p2=False)
 
-        # Panel del Jugador 2 (si hay jugador remoto)
-        if self.remote_players:
-            # Obtener datos del primer jugador remoto
-            remote_player = next(iter(self.remote_players.values()), None)
-            if remote_player:
-                player_data_p2 = {
-                    "health": getattr(remote_player, "lives", 0),
-                    "max_health": getattr(remote_player, "max_lives", 0),
-                    "coins": getattr(remote_player, "gold", 0),
-                    "red_apoyo": getattr(remote_player, "_ibarra_red_apoyo", 0),  # Contador de curaciones acumuladas
-                    "modo_privado": getattr(remote_player, "_ibarra_modo_privado", False),
-                    "emp": getattr(remote_player, "_ibarra_emp", False),
-                    "eco_señal": getattr(remote_player, "_ibarra_double_shot", False)
-                }
-            else:
-                player_data_p2 = {
-                    "health": 0, "max_health": 0, "coins": 0,
-                    "red_apoyo": 0, "modo_privado": False, "emp": False, "eco_señal": False
-                }
-        else:
-            player_data_p2 = {
-                "health": 0, "max_health": 0, "coins": 0,
-                "red_apoyo": 0, "modo_privado": False, "emp": False, "eco_señal": False
-            }
-
+        # Panel del Jugador 2 (Paso 7: usar _get_player_data_p2())
+        player_data_p2 = self._get_player_data_p2()
         self.hud_panel_p2.render(self.screen, player_data_p2, es_p2=True)
 
         minimap_surface = self.minimap.render(self.dungeon)

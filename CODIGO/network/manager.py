@@ -251,6 +251,11 @@ class NetworkManager:
                     enemigos_vivos=int(estado_local.get("enemigos_vivos", 0)),
                     sala_tipo=str(estado_local.get("sala_tipo", "normal")),
                     origen=self._rol,  # Enviar con el rol del cliente
+                    p2_vidas=int(estado_local.get("p2_vidas", 0)) if "p2_vidas" in estado_local else None,
+                    p2_oro=int(estado_local.get("p2_oro", 0)) if "p2_oro" in estado_local else None,
+                    p2_invulnerable=bool(estado_local.get("p2_invulnerable", False)) if "p2_invulnerable" in estado_local else None,
+                    p2_x=float(estado_local.get("p2_x", 0)) if "p2_x" in estado_local else None,
+                    p2_y=float(estado_local.get("p2_y", 0)) if "p2_y" in estado_local else None,
                 )
                 self._cliente.enviar(msg_st)
                 self._ultimo_estado = ahora
@@ -275,6 +280,11 @@ class NetworkManager:
                     enemigos_vivos=int(estado_local.get("enemigos_vivos", 0)),
                     sala_tipo=str(estado_local.get("sala_tipo", "normal")),
                     origen=Rol.VICTIMA,  # Servidor envía como VICTIMA
+                    p2_vidas=int(estado_local.get("p2_vidas", 0)) if "p2_vidas" in estado_local else None,
+                    p2_oro=int(estado_local.get("p2_oro", 0)) if "p2_oro" in estado_local else None,
+                    p2_invulnerable=bool(estado_local.get("p2_invulnerable", False)) if "p2_invulnerable" in estado_local else None,
+                    p2_x=float(estado_local.get("p2_x", 0)) if "p2_x" in estado_local else None,
+                    p2_y=float(estado_local.get("p2_y", 0)) if "p2_y" in estado_local else None,
                 )
                 self._servidor.broadcast(msg_estado_servidor)
                 self._ultimo_estado = ahora
