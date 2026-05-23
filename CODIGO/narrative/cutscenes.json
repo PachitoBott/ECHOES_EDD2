@@ -92,5 +92,57 @@
         "fade_out": 0.8
       }
     ]
+  },
+  "boss_defeat": {
+    "id": "boss_defeat",
+    "etapa": 3,
+    "paneles": [
+      {
+        "image": "boss_defeat_01.png",
+        "texto": "Lo hiciste. Echo cae.",
+        "duracion": 3.0,
+        "fade_in": 1.0,
+        "fade_out": 0.8
+      }
+    ]
+  },
+  "boss_defeat_unmasked_pixel": {
+    "id": "boss_defeat_unmasked_pixel",
+    "etapa": 3,
+    "paneles": [
+      {
+        "image": "boss_defeat_unmasked_01.png",
+        "texto": "Su verdadera forma se revela.",
+        "duracion": 3.0,
+        "fade_in": 1.0,
+        "fade_out": 0.8
+      }
+    ]
+  },
+  "regresando_al_mundo_verdad": {
+    "id": "regresando_al_mundo_verdad",
+    "etapa": 3,
+    "paneles": [
+      {
+        "image": "regresando_mundo_verdad_01.png",
+        "texto": "Empiezas a regresar. La Red se disuelve.",
+        "duracion": 3.0,
+        "fade_in": 1.0,
+        "fade_out": 0.8
+      }
+    ]
+  },
+  "nigoria": {
+    "id": "nigoria",
+    "etapa": 3,
+    "paneles": [
+      {
+        "image": "nigoria_01.png",
+        "texto": "Te pido disculpas, nunca debi hacerte esto, espero puedas perdonarme.",
+        "duracion": 5.0,
+        "fade_in": 1.0,
+        "fade_out": 1.0
+      }
+    ]
   }
 }
