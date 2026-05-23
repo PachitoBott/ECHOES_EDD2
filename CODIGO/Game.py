@@ -212,10 +212,10 @@ class EstadoJugador2:
     Vive en el servidor — es la fuente de verdad para vida y monedas de P2.
     """
     def __init__(self):
-        # Vida (5 vidas = 2.5 corazones)
-        self.lives = 5          # Vida actual
-        self.max_lives = 5      # Vida máxima
-        self._previous_lives = 5  # Para detectar respawn de corazón completo
+        # Vida (10 vidas = 5 corazones)
+        self.lives = 10         # Vida actual
+        self.max_lives = 10     # Vida máxima
+        self._previous_lives = 10  # Para detectar respawn de corazón completo
         self.vivo = True
         self.reviviendo = False  # Animación de respawn
         self.hp = 1  # HP actual (se resetea con respawn)
@@ -2136,7 +2136,7 @@ class Game:
             if remote_player:
                 return {
                     "health": remote_player.get("p2_vidas", 0),
-                    "max_health": 6,  # P2 siempre tiene 6 vidas máximo
+                    "max_health": 10,  # P2 tiene 10 vidas máximo (5 corazones)
                     "coins": remote_player.get("p2_oro", 0),
                     "red_apoyo": 0,
                     "modo_privado": False,
