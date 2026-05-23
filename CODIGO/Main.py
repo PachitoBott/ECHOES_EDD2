@@ -143,6 +143,11 @@ def _parse_room(room_str: str | None) -> tuple[int, int] | None:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    import pygame
+    from ui.selector_modo import SelectorModo
+    from network.servidor_menu import ServidorMenu
+    from network.cliente_menu import ClienteMenu
+
     args       = _build_parser().parse_args()
     start_room = _parse_room(args.room)
 
@@ -150,20 +155,79 @@ if __name__ == "__main__":
     role_map = {"victim": "victima", "ally": "aliado"}
     role_normalizado = role_map.get(args.role, args.role)
 
-    # Determinar modo de red
+    # ========================================================================
+    # PASO 1: Determinar modo (servidor/cliente) desde CLI o SelectorModo
+    # ========================================================================
+    modo_red = None
+    ip_servidor = None
+
+    if args.server:
+        modo_red = "servidor"
+        log_game.info(f"Modo servidor: puerto {args.port}")
+    elif args.client:
+        modo_red = "cliente"
+        ip_servidor = args.host
+        log_game.info(f"Modo cliente: {role_normalizado} @ {args.host}:{args.port}")
+    else:
+        # Sin argumentos: mostrar selector de modo ANTES de inicializar pygame
+        # Esto solo ocurre si NO se pasaron --server/--client
+        pygame.init()
+        screen = pygame.display.set_mode((1280, 720))
+        pygame.display.set_caption("ECHOES — Seleccionar modo")
+
+        selector = SelectorModo(1280, 720)
+        clock = pygame.time.Clock()
+
+        while not selector.terminado:
+            events = pygame.event.get()
+            for e in events:
+                if e.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit(0)
+                selector.handle_event(e)
+            selector.render(screen)
+            pygame.display.flip()
+            clock.tick(60)
+
+        # Procesar resultado del selector
+        if selector.resultado == "servidor":
+            modo_red = "servidor"
+        elif isinstance(selector.resultado, tuple):
+            modo_red = "cliente"
+            ip_servidor = selector.resultado[1]
+
+        pygame.quit()
+
+    # ========================================================================
+    # PASO 2: Inicializar servidor/cliente del menú ANTES del juego
+    # ========================================================================
+    servidor_menu = None
+    cliente_menu = None
+
+    if modo_red == "servidor":
+        servidor_menu = ServidorMenu(puerto=args.port)
+        log_game.info(f"[MENU] Servidor de menú iniciado en puerto {args.port}")
+    elif modo_red == "cliente":
+        cliente_menu = ClienteMenu(ip_servidor=ip_servidor)
+        log_game.info(f"[MENU] Cliente de menú conectando a {ip_servidor}:{ClienteMenu.PUERTO}")
+
+    # ========================================================================
+    # PASO 3: Crear instancia del juego con el modo de red original
+    # ========================================================================
     net_mode = "offline"
     net_params = {}
     if args.server:
         net_mode = "server"
         net_params = {"port": args.port}
-        log_game.info(f"Modo servidor: puerto {args.port}")
     elif args.client:
         net_mode = "client"
         net_params = {"host": args.host, "port": args.port, "role": role_normalizado}
-        log_game.info(f"Modo cliente: {role_normalizado} @ {args.host}:{args.port}")
 
-    # Crear instancia del juego con el modo de red
     game = Game(CFG, debug_mode=args.debug, mode=net_mode, skip_intro=args.skip_intro, **net_params)
+
+    # Pasar referencias de red del menú al juego
+    game._servidor_menu = servidor_menu
+    game._cliente_menu = cliente_menu
 
     # Decidir si saltar el menú
     # CAMBIO: Permitir menú incluso con --server/--client (útil para presentaciones)
@@ -193,3 +257,11 @@ if __name__ == "__main__":
         game.quick_start(seed=seed_a_usar, start_room=start_room)
     else:
         game.run()
+
+    # ========================================================================
+    # PASO 4: Limpiar servidores/clientes al cerrar
+    # ========================================================================
+    if servidor_menu:
+        servidor_menu.cerrar()
+    if cliente_menu:
+        cliente_menu.cerrar()

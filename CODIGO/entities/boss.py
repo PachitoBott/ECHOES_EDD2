@@ -56,6 +56,62 @@ def cargar_boss_idle(ruta: str) -> list[pygame.Surface]:
     return frames
 
 
+def cargar_spritesheet_boss(ruta: str,
+                            frame_w: int = 736,
+                            frame_h: int = 400,
+                            cols: int = 5,
+                            n_usar: int = 22) -> list[pygame.Surface]:
+    """
+    Carga un spritesheet del boss de forma genérica.
+    Funciona con cualquier cuadrícula (cols x filas) y cualquier número de frames.
+
+    Args:
+        ruta: Ruta al archivo PNG
+        frame_w: Ancho de cada frame en píxeles (default: 736)
+        frame_h: Alto de cada frame en píxeles (default: 400)
+        cols: Número de columnas en la cuadrícula (default: 5)
+        n_usar: Número de frames a extraer (default: 22)
+
+    Returns:
+        Lista de superficies pygame con los frames cargados
+    """
+    try:
+        img = pygame.image.load(ruta).convert_alpha()
+    except pygame.error as e:
+        print(f"[BOSS ANIM] Error cargando {ruta}: {e}")
+        return []
+
+    ancho_total, alto_total = img.get_size()
+    frames = []
+
+    # Calcular número de filas basado en el número de frames y columnas
+    filas = (n_usar + cols - 1) // cols
+
+    # Extraer frames de la cuadrícula
+    for i in range(n_usar):
+        col = i % cols
+        fila = i // cols
+
+        x = col * frame_w
+        y = fila * frame_h
+
+        # Validar que el frame está dentro del spritesheet
+        if x + frame_w > ancho_total or y + frame_h > alto_total:
+            print(f"[BOSS ANIM] Frame {i} fuera de rango en {ruta}")
+            break
+
+        try:
+            # Crear superficie con el frame
+            frame = img.subsurface(pygame.Rect(x, y, frame_w, frame_h))
+            frames.append(frame.copy())
+        except Exception as e:
+            print(f"[BOSS ANIM] Error extrayendo frame {i}: {e}")
+            break
+
+    print(f"[BOSS ANIM] Cargados {len(frames)} frames de {ruta}")
+    return frames
+
+
 class Boss:
     """
     Wall boss anclado en la pared superior de la sala.
@@ -63,7 +119,8 @@ class Boss:
     """
 
     # Configuración de animación
-    FPS_IDLE = 8  # frames por segundo
+    FPS_IDLE = 8  # frames por segundo (animación idle, loop)
+    FPS_ATAQUE = 30  # frames por segundo (animaciones de ataque, no-loop)
 
     # Configuración de movimiento
     SPEED = 200  # px/segundo lateral (aumentado de 60)
@@ -97,11 +154,16 @@ class Boss:
         self.max_hp = self.MAX_HP
         self.hit_flash_timer = 0.0  # Timer para titilar blanco
 
-        # Cargar sprites
-        self.frames: list[pygame.Surface] = []
-        self.frame_actual = 0
-        self.timer_frame = 0.0
-        self.intervalo_frame = 1.0 / self.FPS_IDLE
+        # Sistema de animación mejorado
+        self.frames_idle: list[pygame.Surface] = []  # Animación idle (11 frames, loop)
+        self.frames_ataques: dict[str, list[pygame.Surface]] = {}  # Ataques (22 frames cada uno)
+
+        # Control de animación actual
+        self.animacion_actual = "idle"  # Animación en reproducción
+        self.frame_actual = 0  # Índice del frame actual
+        self.timer_frame = 0.0  # Acumulador de tiempo
+        self.intervalo_frame = 1.0 / self.FPS_IDLE  # Intervalo entre frames
+        self.animacion_terminada = False  # Flag si la animación no-loop terminó
 
         # Tamaño de render
         self.render_w = 0
@@ -122,44 +184,68 @@ class Boss:
         self._init_sistema_ataques()
 
     def _cargar_sprites(self) -> None:
-        """Carga boss_idle.png desde assets."""
-        # Buscar en ubicaciones comunes
-        rutas_candidatas = [
-            "assets/boss_idle.png",
-            "assets/sprites/boss_idle.png",
-            "assets/enemies/boss_idle.png",
-            "assets/sprites/enemies/boss_idle.png",
-        ]
-
-        ruta_encontrada: Optional[str] = None
-        for ruta in rutas_candidatas:
-            if os.path.exists(ruta):
-                ruta_encontrada = ruta
-                break
-
-        if not ruta_encontrada:
-            print("[BOSS] boss_idle.png no encontrado.")
-            print("       Ubicaciones intentadas:")
+        """Carga todas las animaciones del boss (idle + 3 ataques)."""
+        # Función helper para buscar archivo
+        def buscar_archivo(nombre: str) -> Optional[str]:
+            rutas_candidatas = [
+                f"assets/{nombre}",
+                f"assets/sprites/{nombre}",
+                f"assets/enemies/{nombre}",
+                f"assets/sprites/enemies/{nombre}",
+            ]
             for ruta in rutas_candidatas:
-                print(f"         - {ruta}")
+                if os.path.exists(ruta):
+                    return ruta
+            return None
+
+        # Parámetros de spritesheet
+        FRAME_W = 736
+        FRAME_H = 400
+        self.render_w = int(FRAME_W * self.RENDER_SCALE)
+        self.render_h = int(FRAME_H * self.RENDER_SCALE)
+
+        # --- CARGAR IDLE (4 columnas x 3 filas, 11 frames) ---
+        ruta_idle = buscar_archivo("boss_idle.png")
+        if ruta_idle:
+            frames_raw = cargar_boss_idle(ruta_idle)
+            self.frames_idle = [
+                pygame.transform.scale(f, (self.render_w, self.render_h))
+                for f in frames_raw
+            ]
+            print(f"[BOSS] Idle cargado: {len(self.frames_idle)} frames")
+        else:
+            print("[BOSS] boss_idle.png no encontrado, usando placeholder")
             self._usar_placeholder()
             return
 
-        frames_raw = cargar_boss_idle(ruta_encontrada)
-        if not frames_raw:
-            self._usar_placeholder()
-            return
+        # --- CARGAR ANIMACIONES DE ATAQUE (5x5, 22 frames cada una) ---
+        animaciones_ataque = {
+            "laser": "AtaqueLaser.png",
+            "zigzag": "AtaqueZigzag.png",
+            "fanout": "AtaqueFanout.png",
+        }
 
-        # Escalar frames al tamaño de render
-        FRAME_W_RAW = 736
-        FRAME_H_RAW = 400
-        self.render_w = int(FRAME_W_RAW * self.RENDER_SCALE)
-        self.render_h = int(FRAME_H_RAW * self.RENDER_SCALE)
+        for nombre_ataque, archivo in animaciones_ataque.items():
+            ruta = buscar_archivo(archivo)
+            if ruta:
+                frames_raw = cargar_spritesheet_boss(
+                    ruta,
+                    frame_w=FRAME_W,
+                    frame_h=FRAME_H,
+                    cols=5,
+                    n_usar=22
+                )
+                self.frames_ataques[nombre_ataque] = [
+                    pygame.transform.scale(f, (self.render_w, self.render_h))
+                    for f in frames_raw
+                ]
+                print(f"[BOSS] Animación '{nombre_ataque}' cargada: "
+                      f"{len(self.frames_ataques[nombre_ataque])} frames")
+            else:
+                # Fallback: usar idle si no existe el archivo de ataque
+                print(f"[BOSS] {archivo} no encontrado, usando idle para '{nombre_ataque}'")
+                self.frames_ataques[nombre_ataque] = self.frames_idle
 
-        self.frames = [
-            pygame.transform.scale(f, (self.render_w, self.render_h))
-            for f in frames_raw
-        ]
         print(f"[BOSS] Tamaño de render: {self.render_w}x{self.render_h}px "
               f"(escala {self.RENDER_SCALE*100:.0f}%)")
 
@@ -207,6 +293,113 @@ class Boss:
         self.y = float(self.pared_y - 64)
 
         print(f"[BOSS] Posición inicial: ({self.x:.0f}, {self.y:.0f})")
+
+    # ============================================================================
+    # MÉTODOS DE CONTROL DE ANIMACIÓN (Paso 4)
+    # ============================================================================
+
+    def _set_animacion(self, nombre: str) -> None:
+        """
+        Cambia la animación actual y reinicia el contador de frames.
+
+        Args:
+            nombre: 'idle', 'laser', 'zigzag', o 'fanout'
+        """
+        if nombre == self.animacion_actual:
+            return  # Ya está reproduciendo esta animación
+
+        # Validar que la animación existe
+        if nombre != "idle" and nombre not in self.frames_ataques:
+            print(f"[BOSS] Advertencia: animación '{nombre}' no existe, usando idle")
+            nombre = "idle"
+
+        self.animacion_actual = nombre
+        self.frame_actual = 0
+        self.timer_frame = 0.0
+        self.animacion_terminada = False
+
+        print(f"[BOSS ANIM] Cambio a animación: '{nombre}'")
+
+    def _update_animacion(self, dt: float) -> None:
+        """
+        Avanza el contador de frames basado en el tiempo transcurrido.
+        Maneja diferente velocidad para idle vs ataques:
+        - Idle: FPS_IDLE (20 fps)
+        - Ataques: FPS_ATAQUE (30 fps)
+
+        Animaciones no-loop terminan cuando alcanzan el último frame.
+
+        Args:
+            dt: Delta time en segundos
+        """
+        # Determinar FPS según tipo de animación
+        if self.animacion_actual == "idle":
+            fps = self.FPS_IDLE
+        else:
+            fps = self.FPS_ATAQUE
+
+        intervalo = 1.0 / fps
+        self.timer_frame += dt
+
+        # Obtener lista de frames actual
+        frames = self._get_frames_actual()
+        if not frames:
+            return
+
+        # Avanzar frame si acumulamos suficiente tiempo
+        while self.timer_frame >= intervalo:
+            self.timer_frame -= intervalo
+            self.frame_actual += 1
+
+            # Manejo de end-of-animation
+            if self.frame_actual >= len(frames):
+                if self.animacion_actual == "idle":
+                    # Idle es loop: reiniciar al principio
+                    self.frame_actual = 0
+                else:
+                    # Ataques son no-loop: marcar terminada y volver a idle
+                    self.frame_actual = len(frames) - 1  # Quedar en último frame
+                    self.animacion_terminada = True
+                    print(f"[BOSS ANIM] Animación '{self.animacion_actual}' terminada, "
+                          f"volviendo a idle")
+                    self._set_animacion("idle")
+                    return
+
+    def _get_frame_actual(self) -> pygame.Surface:
+        """
+        Retorna el frame actual de la animación en reproducción.
+
+        Returns:
+            pygame.Surface del frame actual, o placeholder si no disponible
+        """
+        frames = self._get_frames_actual()
+        if not frames:
+            # Fallback a idle si algo falla
+            frames = self.frames_idle if self.frames_idle else []
+
+        if not frames:
+            # Último recurso: crear placeholder
+            placeholder = pygame.Surface((self.render_w, self.render_h), pygame.SRCALPHA)
+            placeholder.fill((100, 100, 100, 200))
+            return placeholder
+
+        # Clampear índice por si acaso
+        idx = max(0, min(self.frame_actual, len(frames) - 1))
+        return frames[idx]
+
+    def _get_frames_actual(self) -> list[pygame.Surface]:
+        """
+        Helper interno: retorna lista de frames para la animación actual.
+
+        Returns:
+            Lista de pygame.Surface para la animación activa
+        """
+        if self.animacion_actual == "idle":
+            return self.frames_idle
+        elif self.animacion_actual in self.frames_ataques:
+            return self.frames_ataques[self.animacion_actual]
+        else:
+            return self.frames_idle  # Fallback
 
     def activar(self) -> None:
         """Llamar cuando el jugador entra a la sala."""
@@ -263,17 +456,20 @@ class Boss:
         # Debug: mostrar estado cada 30 frames
         if self._debug_frame_counter % 30 == 0:
             print(f"[BOSS] UPDATE ACTIVO: x={self.x:.1f}, vel={self.velocidad_x}, dt={dt:.4f}, "
-                  f"frame={self.frame_actual}/{len(self.frames)}, sala_rect=({self.sala_rect.left}, {self.sala_rect.right})")
+                  f"frame={self.frame_actual}/?, sala_rect=({self.sala_rect.left}, {self.sala_rect.right})")
 
-        # Actualizar animación idle
-        self.timer_frame += dt
-        if self.timer_frame >= self.intervalo_frame:
-            self.timer_frame -= self.intervalo_frame
-            self.frame_actual = (self.frame_actual + 1) % len(self.frames)
+        # Actualizar animación (Paso 5: usar nuevo sistema)
+        self._update_animacion(dt)
 
-        # Movimiento lateral
+        # Movimiento lateral (reducido si hay un laser activo)
         x_anterior = self.x
-        self.x += self.velocidad_x * dt
+        velocidad_actual = self.velocidad_x
+
+        # Si hay un laser activo, reducir velocidad a la mitad
+        if self._hay_laser_activo():
+            velocidad_actual *= 0.5
+
+        self.x += velocidad_actual * dt
 
         # Límites laterales de la sala
         limite_izq = self.sala_rect.left + self.MARGIN
@@ -302,10 +498,8 @@ class Boss:
         # Renderizar ataques ANTES del sprite para que queden debajo
         self._render_ataques(surface, camera_offset=(0, 0))
 
-        if not self.frames:
-            return
-
-        frame = self.frames[self.frame_actual]
+        # Obtener frame actual usando nuevo sistema de animación (Paso 5)
+        frame = self._get_frame_actual()
         pos_x = int(self.x)
         pos_y = int(self.y)
 
@@ -319,6 +513,14 @@ class Boss:
             surface.blit(frame_white, (pos_x, pos_y))
         else:
             surface.blit(frame, (pos_x, pos_y))
+
+    @property
+    def frames(self) -> list[pygame.Surface]:
+        """Retorna los frames de la animación actual (compatibilidad)."""
+        if self.animacion_actual == "idle":
+            return self.frames_idle
+        else:
+            return self.frames_ataques.get(self.animacion_actual, self.frames_idle)
 
     @property
     def rect(self) -> pygame.Rect:
@@ -354,7 +556,7 @@ class Boss:
         self.COOLDOWN_DURACION = {
             "fanout": 2.0,   # reducido de 4.0
             "zigzag": 2.5,   # reducido de 5.0
-            "laser": 3.0,    # reducido de 6.0
+            "laser": 8.0,    # aumentado de 3.0 - laser es muy peligroso
             "emp": 4.0,      # reducido de 8.0
         }
 
@@ -391,14 +593,12 @@ class Boss:
         ]
 
         # Actualizar proyectiles activos
-        for proj in self.proyectiles:
+        for proj in self.proyectiles[:]:  # Copiar para iteración segura
             proj.update(dt)
 
-        # Eliminar proyectiles inactivos
-        self.proyectiles = [
-            p for p in self.proyectiles
-            if p.activo
-        ]
+        # Eliminar proyectiles inactivos (limpiar in-place, no reasignar)
+        # para mantener la referencia que los ataques tienen
+        self.proyectiles[:] = [p for p in self.proyectiles if p.activo]
 
         # Decidir próximo ataque
         self.timer_decision -= dt
@@ -492,11 +692,16 @@ class Boss:
                 jugador_objetivo,
                 self.proyectiles
             )
+            # Paso 6: Cambiar a animación de fanout
+            self._set_animacion("fanout")
         elif nombre == "zigzag":
             ataque = AtaqueZigzag(
                 boca_x, boca_y,
-                self.proyectiles
+                self.proyectiles,
+                boss=self
             )
+            # Paso 6: Cambiar a animación de zigzag
+            self._set_animacion("zigzag")
         elif nombre == "laser":
             # Verificar si el láser puede usarse (jugador debe estar debajo)
             if not self._puede_usar_laser(jugadores):
@@ -506,8 +711,11 @@ class Boss:
             ataque = AtaqueLaser(
                 boca_x, boca_y,
                 self.render_w,
-                self.x
+                self.x,
+                boss=self
             )
+            # Paso 6: Cambiar a animación de laser
+            self._set_animacion("laser")
         elif nombre == "emp":
             # Centro del boss como punto de origen de las ondas
             centro_boss_x = self.x + self.render_w // 2
@@ -515,8 +723,10 @@ class Boss:
 
             ataque = AtaqueEMP(
                 centro_boss_x, centro_boss_y,
-                self.proyectiles
+                self.proyectiles,
+                boss=self
             )
+            # EMP usa idle (sin animación especial por ahora)
         else:
             print(f"[BOSS] Ataque '{nombre}' aún no implementado")
             return
@@ -524,7 +734,7 @@ class Boss:
         # Añadir ataque a la lista de activos
         if ataque:
             self.ataques_activos.append(ataque)
-            print(f"[BOSS] Ejecutando ataque: {nombre} (fase {self.fase})")
+            print(f"[BOSS] Ejecutando ataque: {nombre} (fase {self.fase}) - Animación: {self.animacion_actual}")
 
         # Establecer cooldown
         self.cooldowns[nombre] = self.COOLDOWN_DURACION[nombre]
@@ -558,6 +768,16 @@ class Boss:
         # Renderizar ataques
         for ataque in self.ataques_activos:
             ataque.render(surface, camera_offset)
+
+    def _hay_laser_activo(self) -> bool:
+        """
+        Verifica si hay un ataque de laser activo en este momento.
+        Se usa para reducir la velocidad del boss mientras dispara.
+        """
+        for ataque in self.ataques_activos:
+            if isinstance(ataque, AtaqueLaser):
+                return True
+        return False
 
     def _puede_usar_laser(self, jugadores: list) -> bool:
         """
@@ -803,17 +1023,19 @@ class AtaqueFanout(AtaqueBoss):
     """
     Dispara 6 proyectiles en abanico de 120 grados.
     Cada proyectil se pausa en el aire y explota en 4 hijos en forma de cruz.
+    Incluye telegraph visual antes de disparar (Paso 7: sincronización de animación).
     """
 
     N_PROYECTILES = 6
     ANGULO_TOTAL = 120  # grados del abanico
-    VELOCIDAD_PADRE = 300  # px/segundo (aumentado de 180)
-    VELOCIDAD_HIJO = 400   # px/segundo (aumentado de 250)
+    VELOCIDAD_PADRE = 200  # px/segundo (reducido de 400 para más lentitud)
+    VELOCIDAD_HIJO = 250   # px/segundo (reducido de 500 para más lentitud)
     DAÑO_PADRE = 1
     DAÑO_HIJO = 1
     RADIO_PADRE = 10
     RADIO_HIJO = 6
-    TIEMPO_EXPLOSION = 0.4  # segundos antes de pausarse (reducido de 0.8)
+    TIEMPO_EXPLOSION = 1.2  # segundos antes de pausarse (aumentado de 0.6 para mantener rango)
+    TELEGRAPH = 0.3  # segundos de aviso visual ANTES de disparar (Paso 7)
 
     def __init__(self, boca_x: float, boca_y: float,
                  jugador, lista_proyectiles: list):
@@ -824,66 +1046,48 @@ class AtaqueFanout(AtaqueBoss):
             lista_proyectiles: Lista donde se añaden los proyectiles generados
         """
         super().__init__()
+        self.boca_x = boca_x
+        self.boca_y = boca_y
+        self.jugador = jugador
         self.lista_proyectiles = lista_proyectiles
         self.padres_activos = []
 
-        # Calcular dirección base hacia el jugador más cercano
-        dx_base = jugador.x - boca_x
-        dy_base = jugador.y - boca_y
-        dist = max(1, math.sqrt(dx_base**2 + dy_base**2))
+        # Fase de telegraph (Paso 7)
+        self.fase = "telegraph"  # telegraph → disparo → terminado
+        self.timer_fase = 0.0
+        self.proyectiles_creados = False
 
-        # Ángulo base normalizado
-        ang_base = math.degrees(
-            math.atan2(dy_base / dist, dx_base / dist)
-        )
-
-        # Crear 6 proyectiles padre en abanico
-        for i in range(self.N_PROYECTILES):
-            # Interpolación lineal de 0 a 1
-            t = i / (self.N_PROYECTILES - 1)
-
-            # Calcular ángulo para este proyectil
-            ang = ang_base - self.ANGULO_TOTAL / 2 + t * self.ANGULO_TOTAL
-            rad = math.radians(ang)
-
-            # Vector de dirección
-            dx = math.cos(rad)
-            dy = math.sin(rad)
-
-            # Crear proyectil padre
-            proj = ProyectilBoss(
-                x=boca_x,
-                y=boca_y,
-                dx=dx,
-                dy=dy,
-                daño=self.DAÑO_PADRE,
-                radio=self.RADIO_PADRE,
-                color=(220, 60, 60),
-                color_borde=(255, 180, 180),
-                puede_explotar=True,
-                tiempo_explosion=self.TIEMPO_EXPLOSION,
-                velocidad=self.VELOCIDAD_PADRE
-            )
-            self.padres_activos.append(proj)
-            lista_proyectiles.append(proj)
-
-        print(f"[ATAQUE] AtaqueFanout: {self.N_PROYECTILES} proyectiles "
-              f"en abanico de {self.ANGULO_TOTAL}°")
+        print(f"[ATAQUE] AtaqueFanout: telegraph ({self.TELEGRAPH}s) "
+              f"→ {self.N_PROYECTILES} proyectiles en abanico de {self.ANGULO_TOTAL}°")
 
     def update(self, dt: float, jugadores: list) -> None:
         """
-        Verifica si algún proyectil padre explotó y crea los hijos.
-        Termina cuando todos los padres están inactivos.
+        Maneja las fases del ataque: telegraph → disparo → explosiones → terminado.
+        Paso 7: Telegraph sincroniza con animación antes de disparar.
         """
-        # Verificar si algún padre explotó
-        for padre in self.padres_activos:
-            if padre.explotar_flag and not padre.activo:
-                self._crear_hijos(padre)
-                padre.explotar_flag = False
+        self.timer_fase += dt
 
-        # Terminar cuando todos los padres estén inactivos
-        if all(not p.activo for p in self.padres_activos):
-            self.terminado = True
+        if self.fase == "telegraph":
+            # Esperar a que termine la fase de telegraph
+            if self.timer_fase >= self.TELEGRAPH:
+                self.fase = "disparo"
+                self.timer_fase = 0.0
+                # Crear proyectiles ahora (después del telegraph)
+                if not self.proyectiles_creados:
+                    self._crear_proyectiles_padres()
+                    self.proyectiles_creados = True
+            return
+
+        if self.fase == "disparo":
+            # Verificar si algún padre explotó y crear hijos
+            for padre in self.padres_activos:
+                if padre.explotar_flag and not padre.activo:
+                    self._crear_hijos(padre)
+                    padre.explotar_flag = False
+
+            # Terminar cuando todos los padres estén inactivos
+            if all(not p.activo for p in self.padres_activos):
+                self.terminado = True
 
     def _crear_hijos(self, padre: ProyectilBoss) -> None:
         """
@@ -913,6 +1117,53 @@ class AtaqueFanout(AtaqueBoss):
             )
             self.lista_proyectiles.append(hijo)
 
+    def _crear_proyectiles_padres(self) -> None:
+        """
+        Crea los 6 proyectiles padre en abanico.
+        Se llama después del telegraph para sincronizar con la animación (Paso 7).
+        """
+        # Calcular dirección base hacia el jugador más cercano
+        dx_base = self.jugador.x - self.boca_x
+        dy_base = self.jugador.y - self.boca_y
+        dist = max(1, math.sqrt(dx_base**2 + dy_base**2))
+
+        # Ángulo base normalizado
+        ang_base = math.degrees(
+            math.atan2(dy_base / dist, dx_base / dist)
+        )
+
+        # Crear 6 proyectiles padre en abanico
+        for i in range(self.N_PROYECTILES):
+            # Interpolación lineal de 0 a 1
+            t = i / (self.N_PROYECTILES - 1)
+
+            # Calcular ángulo para este proyectil
+            ang = ang_base - self.ANGULO_TOTAL / 2 + t * self.ANGULO_TOTAL
+            rad = math.radians(ang)
+
+            # Vector de dirección
+            dx = math.cos(rad)
+            dy = math.sin(rad)
+
+            # Crear proyectil padre
+            proj = ProyectilBoss(
+                x=self.boca_x,
+                y=self.boca_y,
+                dx=dx,
+                dy=dy,
+                daño=self.DAÑO_PADRE,
+                radio=self.RADIO_PADRE,
+                color=(220, 60, 60),
+                color_borde=(255, 180, 180),
+                puede_explotar=True,
+                tiempo_explosion=self.TIEMPO_EXPLOSION,
+                velocidad=self.VELOCIDAD_PADRE
+            )
+            self.padres_activos.append(proj)
+            self.lista_proyectiles.append(proj)
+
+        print(f"[ATAQUE] Proyectiles padre creados después del telegraph")
+
     def render(self, surface: pygame.Surface,
                camera_offset=(0, 0)) -> None:
         """Los proyectiles se renderizan solos en _render_ataques()."""
@@ -923,33 +1174,98 @@ class AtaqueFanout(AtaqueBoss):
 # ATAQUE 2: ZIGZAG DE BALAS
 # ============================================================================
 
+class ProyectilZigzag:
+    """
+    Proyectil especial para zigzag que se mueve en patrón sinusoidal.
+    Se mueve hacia abajo mientras oscila lado a lado.
+    """
+    def __init__(self, x: float, y: float, lado: int,
+                 radio: int = 8, velocidad_y: float = 350):
+        self.x = x
+        self.y = y
+        self.radio = radio
+        self.velocidad_y = velocidad_y
+        self.lado = lado  # +1 o -1 para dirección inicial
+        self.activo = True
+
+        # Oscilación lateral (zigzag)
+        self.amplitud = 80  # píxeles de desviación
+        self.frecuencia = 0.08  # ciclos por segundo
+        self.timer_oscilacion = 0.0
+
+        self.color = (200, 50, 200)
+        self.color_borde = (255, 180, 255)
+        self.daño = 1
+
+    @property
+    def rect(self):
+        return pygame.Rect(
+            int(self.x) - self.radio,
+            int(self.y) - self.radio,
+            self.radio * 2,
+            self.radio * 2
+        )
+
+    def update(self, dt: float):
+        if not self.activo:
+            return
+
+        # Movimiento vertical (hacia abajo)
+        self.y += self.velocidad_y * dt
+
+        # Movimiento horizontal (zigzag sinusoidal)
+        self.timer_oscilacion += dt
+        offset_x = self.amplitud * math.sin(self.timer_oscilacion * self.frecuencia * 2 * math.pi)
+        self.x += offset_x * dt * self.lado
+
+        # Eliminar si sale de pantalla
+        if self.y > 680 or self.x < -100 or self.x > 1060:
+            self.activo = False
+
+    def render(self, surface: pygame.Surface, camera_offset=(0, 0)):
+        if not self.activo:
+            return
+
+        px = int(self.x - camera_offset[0])
+        py = int(self.y - camera_offset[1])
+
+        # Halo
+        halo = pygame.Surface((self.radio * 4, self.radio * 4), pygame.SRCALPHA)
+        pygame.draw.circle(halo, (*self.color, 40), (self.radio * 2, self.radio * 2), self.radio * 2)
+        surface.blit(halo, (px - self.radio * 2, py - self.radio * 2))
+
+        # Cuerpo
+        pygame.draw.circle(surface, self.color, (px, py), self.radio)
+        # Borde
+        pygame.draw.circle(surface, self.color_borde, (px, py), self.radio, 2)
+
+
 class AtaqueZigzag(AtaqueBoss):
     """
-    Dispara 12 proyectiles en rápida sucesión (cada 0.05 segundos)
-    con un patrón zigzag descendente.
-    Los proyectiles se desvían alternadamente izquierda/derecha.
+    Dispara 12 proyectiles que se mueven en patrón zigzag descendente.
+    Los proyectiles oscilan mientras bajan hacia el jugador.
     Incluye telegraph visual antes de comenzar el disparo.
     """
 
     N_BALAS = 12
-    INTERVALO = 0.05  # segundos entre disparos (reducido de 0.08)
-    VELOCIDAD = 400  # px/segundo (aumentado de 320)
-    ANG_BASE = 90  # grados (casi vertical hacia abajo)
-    DESVIACION = 35  # grados alternados (+/-)
+    INTERVALO = 0.08  # segundos entre disparos
+    VELOCIDAD_Y = 125  # px/segundo hacia abajo (reducido de 250 para más lentitud)
     DAÑO = 1
-    RADIO = 7
+    RADIO = 8
     TELEGRAPH = 0.3  # segundos de aviso visual
 
     def __init__(self, boca_x: float, boca_y: float,
-                 lista_proyectiles: list):
+                 lista_proyectiles: list, boss=None):
         """
         Args:
-            boca_x, boca_y: Posición donde se generan los proyectiles
+            boca_x, boca_y: Posición inicial donde se generan los proyectiles
             lista_proyectiles: Lista donde se añaden los proyectiles generados
+            boss: Referencia al boss para seguir su posición
         """
         super().__init__()
-        self.boca_x = boca_x
-        self.boca_y = boca_y
+        self.boca_x_inicial = boca_x
+        self.boca_y_inicial = boca_y
+        self.boss = boss  # referencia para seguir al boss
         self.lista_proyectiles = lista_proyectiles
 
         # Control del disparo
@@ -961,7 +1277,21 @@ class AtaqueZigzag(AtaqueBoss):
         self.fase = "telegraph"  # telegraph → activo → terminado
         self.timer_fase = 0.0
 
-        print(f"[ATAQUE] AtaqueZigzag: {self.N_BALAS} balas en zigzag")
+        print(f"[ATAQUE] AtaqueZigzag: {self.N_BALAS} proyectiles en zigzag (sigue al boss)")
+
+    @property
+    def boca_x(self) -> float:
+        """Posición X actual (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.x + self.boss.render_w // 2
+        return self.boca_x_inicial
+
+    @property
+    def boca_y(self) -> float:
+        """Posición Y actual (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.y + self.boss.render_h
+        return self.boca_y_inicial
 
     def update(self, dt: float, jugadores: list) -> None:
         """
@@ -989,33 +1319,18 @@ class AtaqueZigzag(AtaqueBoss):
 
     def _disparar_bala(self) -> None:
         """
-        Dispara una bala individual del zigzag.
-        Varía el ángulo entre 90±35 grados para efecto de zigzag.
+        Dispara un proyectil zigzag que oscila mientras baja.
         """
-        # Ángulo: casi vertical con desviación alternada
-        ang_deg = self.ANG_BASE + self.lado * self.DESVIACION
-        ang_rad = math.radians(ang_deg)
+        # Posición X ligeramente aleatoria para variedad
+        offset_x = random.uniform(-60, 60)
 
-        # Convertir ángulo a vector de dirección
-        dx = math.cos(ang_rad)
-        dy = math.sin(ang_rad)
-
-        # Posición X ligeramente aleatoria (dentro de 80px)
-        # para dar más variedad al patrón
-        offset_x = random.uniform(-80, 80)
-
-        # Crear proyectil
-        proj = ProyectilBoss(
+        # Crear proyectil zigzag
+        proj = ProyectilZigzag(
             x=self.boca_x + offset_x,
             y=self.boca_y,
-            dx=dx,
-            dy=dy,
-            daño=self.DAÑO,
+            lado=self.lado,
             radio=self.RADIO,
-            color=(200, 50, 200),  # Púrpura
-            color_borde=(255, 180, 255),  # Púrpura claro
-            puede_explotar=False,
-            velocidad=self.VELOCIDAD
+            velocidad_y=self.VELOCIDAD_Y
         )
         self.lista_proyectiles.append(proj)
 
@@ -1026,33 +1341,10 @@ class AtaqueZigzag(AtaqueBoss):
     def render(self, surface: pygame.Surface,
                camera_offset=(0, 0)) -> None:
         """
-        Renderiza telegraph visual si está en fase de aviso.
         Los proyectiles se renderizan solos en _render_ataques().
+        No necesita renderizado adicional.
         """
-        if self.fase == "telegraph":
-            # Mostrar líneas parpadeantes moradas indicando zona de fuego
-            cx = int(self.boca_x - camera_offset[0])
-            top = int(self.boca_y - camera_offset[1])
-            bot = int((self.boca_y + 600) - camera_offset[1])  # altura aproximada
-
-            progreso = self.timer_fase / self.TELEGRAPH
-            alpha = int(50 + 150 * progreso)
-
-            # Líneas verticales moradas
-            pygame.draw.line(
-                surface,
-                (200, 50, 200, alpha),
-                (cx - 40, top),
-                (cx - 40, bot),
-                2
-            )
-            pygame.draw.line(
-                surface,
-                (200, 50, 200, alpha),
-                (cx + 40, top),
-                (cx + 40, bot),
-                2
-            )
+        pass
 
 
 # ============================================================================
@@ -1068,26 +1360,28 @@ class AtaqueLaser(AtaqueBoss):
     """
 
     ANCHO_LASER = 80  # píxeles de ancho
-    DURACION = 1.5  # segundos de activo
-    TELEGRAPH = 0.6  # segundos de aviso visual
+    DURACION = 0.6  # segundos de activo (reducido de 1.5 para ser mucho más corto)
+    TELEGRAPH = 0.4  # segundos de aviso visual (reducido de 0.6)
     DAÑO_POR_INTERVALO = 1  # daño por aplicación
     DAÑO_INTERVALO = 0.3  # cada cuántos segundos aplica daño
     LASER_HEIGHT = 640  # altura máxima (llega hasta el suelo)
 
     def __init__(self, boca_x: float, boca_y: float,
-                 boss_render_w: int, boss_x: float):
+                 boss_render_w: int, boss_x: float, boss=None):
         """
         Args:
-            boca_x: Centro X donde sale el láser
-            boca_y: Y donde sale el láser (boca del boss)
+            boca_x: Centro X inicial donde sale el láser
+            boca_y: Y inicial donde sale el láser (boca del boss)
             boss_render_w: Ancho del sprite del boss (para referencias)
-            boss_x: X del boss (para referencias)
+            boss_x: X inicial del boss (para referencias)
+            boss: Referencia al boss para seguir su posición
         """
         super().__init__()
-        self.boca_x = boca_x
-        self.boca_y = boca_y
+        self.boca_x_inicial = boca_x
+        self.boca_y_inicial = boca_y
         self.boss_render_w = boss_render_w
-        self.boss_x = boss_x
+        self.boss_x_inicial = boss_x
+        self.boss = boss  # referencia para seguir al boss
 
         # Control de fases
         self.fase_laser = "telegraph"  # telegraph → activo → terminado
@@ -1098,7 +1392,28 @@ class AtaqueLaser(AtaqueBoss):
         self.laser_alto = self.LASER_HEIGHT
 
         print(f"[ATAQUE] AtaqueLaser: telegraph ({self.TELEGRAPH}s) "
-              f"→ activo ({self.DURACION}s)")
+              f"→ activo ({self.DURACION}s) (sigue al boss)")
+
+    @property
+    def boca_x(self) -> float:
+        """Posición X actual (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.x + self.boss.render_w // 2
+        return self.boca_x_inicial
+
+    @property
+    def boca_y(self) -> float:
+        """Posición Y actual (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.y + self.boss.render_h
+        return self.boca_y_inicial
+
+    @property
+    def boss_x(self) -> float:
+        """Posición X del boss (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.x
+        return self.boss_x_inicial
 
     def update(self, dt: float, jugadores: list) -> None:
         """
@@ -1262,49 +1577,142 @@ class AtaqueLaser(AtaqueBoss):
 # ATAQUE 4: PULSO EMP
 # ============================================================================
 
+class ProyectilEMP:
+    """
+    Proyectil especial para EMP que se expande lentamente.
+    Representa una bala/pulso de energía que crece en tamaño.
+    """
+    def __init__(self, cx: float, cy: float, radio_inicial: int = 20):
+        self.cx = cx
+        self.cy = cy
+        self.radio = radio_inicial
+        self.radio_max = 1200  # muy grande (aumentado de 600 para mantener rango)
+        self.velocidad_expansion = 40  # muy lento (reducido de 80 para más lentitud)
+        self.activo = True
+        self.dañado = set()  # jugadores ya dañados
+        self.color = (100, 200, 255)  # azul cian
+        self.daño = 1
+
+    @property
+    def rect(self) -> pygame.Rect:
+        """Rect del pulso para colisiones."""
+        return pygame.Rect(
+            int(self.cx) - int(self.radio),
+            int(self.cy) - int(self.radio),
+            int(self.radio) * 2,
+            int(self.radio) * 2
+        )
+
+    def update(self, dt: float):
+        if not self.activo:
+            return
+
+        self.radio += self.velocidad_expansion * dt
+
+        if self.radio >= self.radio_max:
+            self.activo = False
+
+    def render(self, surface: pygame.Surface, camera_offset=(0, 0)):
+        if not self.activo:
+            return
+
+        cx = int(self.cx - camera_offset[0])
+        cy = int(self.cy - camera_offset[1])
+        radio = int(self.radio)
+
+        # Limitar el radio de renderizado para evitar crashes de pygame
+        # cuando el círculo es muy grande
+        if radio > 800:
+            return
+
+        try:
+            # Bala/pulso expandiéndose
+            pygame.draw.circle(surface, self.color, (cx, cy), radio, 4)
+            # Anillo interior más brillante
+            if radio > 10:
+                pygame.draw.circle(surface, (180, 240, 255), (cx, cy), int(radio * 0.7), 2)
+        except (pygame.error, OverflowError, ValueError) as e:
+            # Silenciar errores de pygame si el círculo es muy grande
+            print(f"[EMP] Error renderizando pulso: {e}")
+
+    def verificar_colision(self, jugador) -> bool:
+        """Verifica si el jugador toca este pulso."""
+        if not hasattr(jugador, 'x') or not hasattr(jugador, 'y'):
+            return False
+
+        jid = id(jugador)
+        if jid in self.dañado:
+            return False
+
+        jcx = jugador.x + getattr(jugador, 'w', 32) // 2
+        jcy = jugador.y + getattr(jugador, 'h', 48) // 2
+
+        dist = math.sqrt((jcx - self.cx)**2 + (jcy - self.cy)**2)
+
+        if abs(dist - self.radio) < 30:
+            self.dañado.add(jid)
+            return True
+
+        return False
+
+
 class AtaqueEMP(AtaqueBoss):
     """
-    Emite 3 ondas de choque circulares expansivas en sucesión rápida.
-    Las ondas se expanden desde el centro del boss y dañan al jugador
-    cuando las cruza.
+    Emite 3 ráfagas de balas en patrón circular desde el boss.
+    Cada ráfaga dispara múltiples proyectiles en todas direcciones (360°).
     Incluye telegraph visual con pulso azul de aviso.
     """
 
-    N_ONDAS = 3
-    INTERVALO_ONDAS = 0.4  # segundos entre ondas
-    VELOCIDAD = 280  # px/segundo de expansión
-    RADIO_MAX = 500  # píxeles máximo
-    GROSOR = 12  # píxeles de grosor del anillo
+    N_RAFAGAS = 3  # número de ráfagas
+    N_BALAS_POR_RAFAGA = 12  # balas en cada ráfaga circular
+    INTERVALO_RAFAGAS = 0.5  # segundos entre ráfagas
+    VELOCIDAD_BALA = 200  # px/segundo
+    RADIO_BALA = 6
     DAÑO = 1
-    TELEGRAPH = 0.5  # segundos de aviso visual
+    TELEGRAPH = 0.6  # segundos de aviso visual
 
     def __init__(self, boca_x: float, boca_y: float,
-                 lista_proyectiles: list):
+                 lista_proyectiles: list, boss=None):
         """
         Args:
-            boca_x: Centro X de expansión (generalmente centro del boss)
-            boca_y: Centro Y de expansión (generalmente centro del boss)
-            lista_proyectiles: Lista de proyectiles (no se usa, pero por consistencia)
+            boca_x: Centro X de disparo (generalmente centro del boss)
+            boca_y: Centro Y de disparo (generalmente centro del boss)
+            lista_proyectiles: Lista donde añadir proyectiles
+            boss: Referencia al boss para seguir su posición
         """
         super().__init__()
-        self.cx = boca_x
-        self.cy = boca_y
+        self.cx_inicial = boca_x
+        self.cy_inicial = boca_y
+        self.boss = boss  # referencia para seguir al boss
         self.lista_proyectiles = lista_proyectiles
 
-        # Control de ondas
-        self.ondas_creadas = 0
-        self.timer_onda = 0.0
-        self.ondas_activas = []  # lista de dicts con radio, alpha, dañado
+        # Control de ráfagas
+        self.rafagas_creadas = 0
+        self.timer_rafaga = 0.0
 
         # Fase de telegraph
         self.fase = "telegraph"  # telegraph → activo → terminado
         self.timer_fase = 0.0
 
-        print(f"[ATAQUE] AtaqueEMP: {self.N_ONDAS} ondas expansivas (con telegraph)")
+        print(f"[ATAQUE] AtaqueEMP: {self.N_RAFAGAS} ráfagas circulares de balas (con telegraph)")
+
+    @property
+    def cx(self) -> float:
+        """Posición X actual (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.x + self.boss.render_w // 2
+        return self.cx_inicial
+
+    @property
+    def cy(self) -> float:
+        """Posición Y actual (sigue al boss si existe referencia)"""
+        if self.boss:
+            return self.boss.y + self.boss.render_h // 2
+        return self.cy_inicial
 
     def update(self, dt: float, jugadores: list) -> None:
         """
-        Actualiza el ataque EMP: telegraph → ondas expansivas → terminado.
+        Actualiza el ataque EMP: telegraph → ráfagas de balas → terminado.
         """
         self.timer_fase += dt
 
@@ -1315,74 +1723,60 @@ class AtaqueEMP(AtaqueBoss):
                 self.timer_fase = 0.0
             return
 
-        # Fase activa: crear y expandir ondas
+        # Fase activa: crear ráfagas de balas
         if self.fase == "activo":
-            # Crear nuevas ondas en intervalos
-            if self.ondas_creadas < self.N_ONDAS:
-                self.timer_onda += dt
-                if self.timer_onda >= self.INTERVALO_ONDAS:
-                    self.timer_onda -= self.INTERVALO_ONDAS
-                    # Nueva onda: radio 0, alpha 255, sin jugadores dañados
-                    self.ondas_activas.append({
-                        "radio": 0.0,
-                        "alpha": 255,
-                        "dañado": set()  # IDs de jugadores dañados por esta onda
-                    })
-                    self.ondas_creadas += 1
+            # Crear nuevas ráfagas en intervalos
+            if self.rafagas_creadas < self.N_RAFAGAS:
+                self.timer_rafaga += dt
+                if self.timer_rafaga >= self.INTERVALO_RAFAGAS:
+                    self.timer_rafaga -= self.INTERVALO_RAFAGAS
+                    self._crear_rafaga_circular()
+                    self.rafagas_creadas += 1
 
-        # Expandir ondas existentes y verificar colisiones
-        for onda in self.ondas_activas:
-            onda["radio"] += self.VELOCIDAD * dt
-            progreso = onda["radio"] / self.RADIO_MAX
-            onda["alpha"] = int(255 * (1 - progreso))
-
-            # Verificar colisión con jugadores
-            for jugador in jugadores:
-                if not hasattr(jugador, 'x') or not hasattr(jugador, 'y'):
-                    continue
-
-                # Identificador único del jugador
-                jid = id(jugador)
-
-                # Si ya fue dañado por esta onda, saltar
-                if jid in onda["dañado"]:
-                    continue
-
-                # Centro del jugador
-                jcx = jugador.x + getattr(jugador, 'w', 32) // 2
-                jcy = jugador.y + getattr(jugador, 'h', 48) // 2
-
-                # Distancia desde el centro del EMP
-                dist = math.sqrt((jcx - self.cx)**2 + (jcy - self.cy)**2)
-
-                # El jugador toca la onda si está cerca del radio actual
-                # (dentro de +/- 20px del radio de la onda)
-                if abs(dist - onda["radio"]) < 20:
-                    jugador.take_damage(self.DAÑO)
-                    onda["dañado"].add(jid)
-                    print(f"[BOSS] Onda EMP golpeó al jugador: daño={self.DAÑO}")
-
-        # Limpiar ondas que llegaron al máximo y extinguirse
-        self.ondas_activas = [
-            o for o in self.ondas_activas
-            if o["radio"] < self.RADIO_MAX
-        ]
-
-        # Terminar cuando todas las ondas se disiparon
-        if (self.ondas_creadas >= self.N_ONDAS and
-                not self.ondas_activas):
+        # Terminar cuando se crearon todas las ráfagas
+        if self.rafagas_creadas >= self.N_RAFAGAS:
             self.terminado = True
+
+    def _crear_rafaga_circular(self) -> None:
+        """
+        Crea una ráfaga de balas disparadas en patrón circular (360°).
+        """
+        # Calcular ángulo entre cada bala
+        angulo_paso = 360 / self.N_BALAS_POR_RAFAGA
+
+        for i in range(self.N_BALAS_POR_RAFAGA):
+            # Ángulo en radianes
+            angulo = math.radians(i * angulo_paso)
+
+            # Dirección normalizada
+            dx = math.cos(angulo)
+            dy = math.sin(angulo)
+
+            # Crear proyectil bala
+            bala = ProyectilBoss(
+                x=self.cx,
+                y=self.cy,
+                dx=dx,
+                dy=dy,
+                daño=self.DAÑO,
+                radio=self.RADIO_BALA,
+                color=(100, 200, 255),  # cian
+                color_borde=(180, 240, 255),
+                puede_explotar=False,
+                velocidad=self.VELOCIDAD_BALA
+            )
+            self.lista_proyectiles.append(bala)
 
     def render(self, surface: pygame.Surface,
                camera_offset=(0, 0)) -> None:
         """
-        Renderiza telegraph visual (pulso azul de aviso) y las ondas expansivas.
-        Cada onda es un anillo de cian eléctrico que se expande.
+        Renderiza telegraph visual (pulso azul de aviso).
+        Los pulsos activos se renderizan solos a través de ProyectilEMP.render().
         """
         cx = int(self.cx - camera_offset[0])
         cy = int(self.cy - camera_offset[1])
 
-        # Renderizar telegraph visual (pulso azul)
+        # Renderizar telegraph visual (pulso azul de aviso)
         if self.fase == "telegraph":
             progreso = self.timer_fase / self.TELEGRAPH
             alpha = int(150 * (1 - progreso))  # Se desvanece
@@ -1417,53 +1811,4 @@ class AtaqueEMP(AtaqueBoss):
             surface.blit(
                 pulso_surf,
                 (cx - radio_pulso - 50, cy - radio_pulso - 50)
-            )
-
-        # Renderizar ondas activas
-        for onda in self.ondas_activas:
-            radio = int(onda["radio"])
-            alpha = max(0, onda["alpha"])
-
-            if radio <= 0 or alpha <= 0:
-                continue
-
-            # Crear superficie para la onda con canal alpha
-            tam = (radio + self.GROSOR) * 2 + 4
-            onda_surf = pygame.Surface(
-                (tam, tam),
-                pygame.SRCALPHA
-            )
-            centro = (tam // 2, tam // 2)
-
-            # Onda exterior (cian eléctrico)
-            pygame.draw.circle(
-                onda_surf,
-                (0, 200, 255, alpha),
-                centro,
-                radio,
-                self.GROSOR
-            )
-
-            # Onda interior más brillante (cian más claro)
-            pygame.draw.circle(
-                onda_surf,
-                (180, 240, 255, min(255, alpha + 50)),
-                centro,
-                radio,
-                3
-            )
-
-            # Halo exterior muy tenue (cyan oscuro)
-            pygame.draw.circle(
-                onda_surf,
-                (0, 150, 200, alpha // 3),
-                centro,
-                radio + self.GROSOR // 2,
-                4
-            )
-
-            # Blittear la onda en la pantalla
-            surface.blit(
-                onda_surf,
-                (cx - tam // 2, cy - tam // 2)
             )

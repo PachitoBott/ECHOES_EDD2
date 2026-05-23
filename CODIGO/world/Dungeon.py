@@ -1,10 +1,11 @@
 import random
 import math
-from collections import deque
+from collections import deque, defaultdict
 from typing import Dict, Tuple, Set
 from Config import CFG
 from world.Room import Room
 from data_structures.graph import Grafo
+from systems.spawn_system import calcular_indices_zona
 
 Vec = Tuple[int, int]
 DIRS: Dict[str, Vec] = {"N": (0, -1), "S": (0, 1), "E": (1, 0), "W": (-1, 0)}
@@ -118,6 +119,13 @@ class Dungeon:
 
             # 3.5) Asignar zonas narrativas (Fase 5) según profundidad BFS
             self._assign_zones()
+
+            # 3.6) Calcular índices de sala dentro de cada zona (para sistema de spawn)
+            salas_por_zona = defaultdict(list)
+            for pos, zona in self.zones.items():
+                if pos in self.rooms:
+                    salas_por_zona[zona].append(self.rooms[pos])
+            calcular_indices_zona(salas_por_zona)
 
             # 4) CRÍTICO: Colocar el boss ANTES de tallar corredores
             #    Esto garantiza que la puerta norte del boss esté bloqueada cuando carve_corridors() se ejecute

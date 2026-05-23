@@ -542,6 +542,22 @@ class Game:
         self._finalize_run_statistics(finalize_reason)
         self._stats_pending_reason = None
 
+        # ================================================================
+        # Cerrar conexiones del menú para liberar puerto 5555
+        # (NetworkManager del juego también usa 5555)
+        # ================================================================
+        if hasattr(self, '_servidor_menu') and self._servidor_menu:
+            self._servidor_menu.cerrar()
+            log_game.info("[OK] Servidor del menú cerrado")
+        if hasattr(self, '_cliente_menu') and self._cliente_menu:
+            self._cliente_menu.cerrar()
+            log_game.info("[OK] Cliente del menú cerrado")
+
+        # Esperar a que el puerto se libere completamente antes de
+        # que NetworkManager intente usarlo (evita timeout)
+        import time as time_module
+        time_module.sleep(0.5)
+
         # Resetear el pool de posts para el nuevo run
         posts_pool.reset_run()
 
@@ -823,6 +839,12 @@ class Game:
         # Net manager para detectar si hay cliente conectado
         if self.net:
             start_menu.set_net_manager(self.net)
+
+        # Pasar referencias del servidor/cliente del menú
+        if hasattr(self, '_servidor_menu') and self._servidor_menu:
+            start_menu.set_servidor_menu(self._servidor_menu)
+        if hasattr(self, '_cliente_menu') and self._cliente_menu:
+            start_menu.set_cliente_menu(self._cliente_menu)
 
         # Player (si ya existe de una sesión anterior)
         player_para_lobby = None
@@ -1851,7 +1873,11 @@ class Game:
             if hasattr(self.dungeon, "main_path"):
                 on_main_path = 1 if pos in self.dungeon.main_path else 0
             difficulty = 1 + depth + branch_factor + (depth // 3) + on_main_path
-            room.ensure_spawn(difficulty=difficulty)
+
+            # Obtener zona de la sala (nuevo sistema de spawn por probabilidades)
+            zona = self.dungeon.room_zone(pos)
+
+            room.ensure_spawn(difficulty=difficulty, zone=zona, dungeon=self.dungeon)
 
     def _get_closest_player_for_enemy(self, enemy, room_pos=None) -> object:
         """
