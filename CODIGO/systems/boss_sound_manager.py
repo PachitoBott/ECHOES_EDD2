@@ -72,7 +72,7 @@ class BossSoundManager:
             "zigzag": 1.0,    # Volumen normal para Zigzag
             "laser": 0.4,     # Laser al 40% (80% del 50% anterior)
             "emp": 1.0,       # Volumen normal para EMP
-            "proyectil": 0.15, # Proyectil dividido al 15% (muy bajo, casi imperceptible)
+            "proyectil": 0.03, # Proyectil dividido al 3% (muy muy bajo)
         }
 
         for nombre, ruta in self.SONIDOS.items():
