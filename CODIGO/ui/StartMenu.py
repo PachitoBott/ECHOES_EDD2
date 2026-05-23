@@ -445,45 +445,45 @@ class StartMenu:
             try:
                 if self.lobby and self.lobby.terminado:
                     # Solo el servidor puede terminar el lobby (cliente tiene eventos bloqueados)
-                if self.lobby.resultado == "jugar":
-                    # SERVIDOR: Iniciar juego
-                    self.modo_coop_solicitado = self.lobby.p2_conectado
-                    self.overlay_key = None
+                    if self.lobby.resultado == "jugar":
+                        # SERVIDOR: Iniciar juego
+                        self.modo_coop_solicitado = self.lobby.p2_conectado
+                        self.overlay_key = None
 
-                    seed = self.selected_seed()
-                    import random
-                    if seed is None:
-                        seed = random.randint(0, 999999)
-                    self.seed_text = str(seed)
+                        seed = self.selected_seed()
+                        import random
+                        if seed is None:
+                            seed = random.randint(0, 999999)
+                        self.seed_text = str(seed)
 
-                    # Enviar START_GAME y esperar ACK del cliente (si hay cliente conectado)
-                    if self.servidor_menu and self.servidor_menu.cliente_conectado:
-                        print(f"[SERVIDOR] Enviando START_GAME con seed {seed}...")
-                        cliente_listo = self.servidor_menu.enviar_inicio_juego(seed, timeout=5.0)
+                        # Enviar START_GAME y esperar ACK del cliente (si hay cliente conectado)
+                        if self.servidor_menu and self.servidor_menu.cliente_conectado:
+                            print(f"[SERVIDOR] Enviando START_GAME con seed {seed}...")
+                            cliente_listo = self.servidor_menu.enviar_inicio_juego(seed, timeout=5.0)
 
-                        if cliente_listo:
-                            print("[SERVIDOR] ✓ Cliente confirmó, iniciando juego...")
+                            if cliente_listo:
+                                print("[SERVIDOR] ✓ Cliente confirmó, iniciando juego...")
+                            else:
+                                print("[SERVIDOR] ⚠ Timeout esperando confirmación del cliente, iniciando igualmente...")
+                                # Esperar un poco de todas formas
+                                import time
+                                time.sleep(1.0)
                         else:
-                            print("[SERVIDOR] ⚠ Timeout esperando confirmación del cliente, iniciando igualmente...")
-                            # Esperar un poco de todas formas
-                            import time
-                            time.sleep(1.0)
-                    else:
-                        print("[SERVIDOR] Iniciando juego (sin cliente conectado)")
+                            print("[SERVIDOR] Iniciando juego (sin cliente conectado)")
 
-                    self._start_requested = True
-                    running = False
+                        self._start_requested = True
+                        running = False
 
-                elif self.lobby.resultado == "volver":
-                    # Volver al menú principal
-                    self.lobby = None
-                    self.overlay_key = None
-                    # Notificar al cliente (servidor)
-                    if self.servidor_menu:
-                        try:
-                            self.servidor_menu.enviar_estado_menu("principal")
-                        except Exception as e:
-                            print(f"[MENU] Error notificando estado: {e}")
+                    elif self.lobby.resultado == "volver":
+                        # Volver al menú principal
+                        self.lobby = None
+                        self.overlay_key = None
+                        # Notificar al cliente (servidor)
+                        if self.servidor_menu:
+                            try:
+                                self.servidor_menu.enviar_estado_menu("principal")
+                            except Exception as e:
+                                print(f"[MENU] Error notificando estado: {e}")
             except Exception as e:
                 print(f"[MENU] Error procesando lobby: {e}")
                 import traceback
