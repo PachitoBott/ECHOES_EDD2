@@ -345,10 +345,11 @@ class StartMenu:
                     # Chequear si servidor ordenó iniciar (con lock para thread-safety)
                     with self.cliente_menu.lock:
                         if self.cliente_menu.iniciar_juego:
-                            print(f"[MENU CLIENT] ✓ Recibido START_GAME del servidor")
+                            print(f"[MENU CLIENT] ✓ Recibido START_GAME del servidor, seed={self.cliente_menu.seed_juego}")
                             self.seed_text = str(self.cliente_menu.seed_juego)
                             self.modo_coop_solicitado = True
                             self._start_requested = True
+                            print(f"[MENU CLIENT] Transicionando a juego cooperativo...")
                             running = False
                             break
 

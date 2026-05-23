@@ -394,24 +394,19 @@ class Game:
         self.remote_enemies: dict = {}  # Almacena enemigos remotos sincronizados del servidor
         self._send_state_interval = 0.1  # Enviar estado cada 100ms (~10 Hz)
         self._last_state_send = 0.0
+
+        # IMPORTANTE: No iniciar NetworkManager aquí (puerto 5555 está siendo usado
+        # por ServidorMenu/ClienteMenu). Se iniciará DESPUÉS del menú sincronizado.
         if self._net_mode == "server":
             self.net = NetworkManager.como_servidor(port=self._net_port, seed=None)
-            if not self.net.iniciar():
-                log_game.error("[ERROR] No se pudo iniciar servidor de red")
-                self.running = False
-            else:
-                log_game.info(f"[OK] Servidor escuchando en puerto {self._net_port}")
+            log_game.info(f"[NET] NetworkManager creado como SERVIDOR (iniciará después del menú)")
         elif self._net_mode == "client":
             self.net = NetworkManager.como_cliente(
                 host=self._net_host,
                 port=self._net_port,
                 rol=self._net_role,
             )
-            if not self.net.iniciar():
-                log_game.error(f"[ERROR] No se pudo conectar a {self._net_host}:{self._net_port}")
-                self.running = False
-            else:
-                log_game.info(f"[OK] Conectado al servidor como {self._net_role}")
+            log_game.info(f"[NET] NetworkManager creado como CLIENTE (iniciará después del menú)")
 
         # ---------- Herramientas de desarrollo ----------
         # Consola de debug (F1): siempre creada, solo visible en debug_mode
@@ -580,6 +575,7 @@ class Game:
         # Resetear el pool de posts para el nuevo run
         posts_pool.reset_run()
 
+        # Crear dungeon PRIMERO para obtener la seed
         params = self.cfg.dungeon_params()
         if dungeon_params:
             params = {**params, **dungeon_params}
@@ -589,10 +585,30 @@ class Game:
         pygame.display.set_caption(f"Echoes — Seed {self.current_seed}")
         log_game.info(f"Nueva partida — seed={self.current_seed}  salas={len(self.dungeon.rooms)}")
 
-        # Actualizar seed del servidor (para que la comunique a los clientes)
+        # ================================================================
+        # Actualizar seed en NetworkManager ANTES de iniciar
+        # (crucial: el servidor rechaza clientes sin seed)
+        # ================================================================
         if self.net and self.net.es_servidor and hasattr(self.net, '_servidor'):
             self.net._servidor.seed = self.current_seed
-            log_game.info(f"[OK] Seed compartida con clientes: {self.current_seed}")
+            log_game.info(f"[NET] Seed actualizada en servidor: {self.current_seed}")
+
+        # ================================================================
+        # INICIAR NetworkManager AHORA que puerto 5555 está libre
+        # Y el servidor ya tiene su seed
+        # ================================================================
+        if self.net and not self.net._iniciado:
+            log_game.info("[NET] Iniciando NetworkManager después de cerrar menú...")
+            if not self.net.iniciar():
+                log_game.error("[ERROR] No se pudo iniciar NetworkManager del juego")
+                # Continuar de todas formas (juego offline)
+                self.net = None
+            else:
+                log_game.info("[OK] NetworkManager del juego iniciado correctamente")
+                if self.net.es_servidor:
+                    log_game.info(f"[OK] Servidor escuchando en puerto {self._net_port} con seed {self.current_seed}")
+                else:
+                    log_game.info(f"[OK] Cliente conectado como {self._net_role}")
 
         # preparar inventario de la tienda para esta seed
         if hasattr(self, "shop"):
@@ -1859,6 +1875,10 @@ class Game:
             # Detener sonidos del jugador
             if self.player:
                 self.player.stop_all_sounds()
+            # Detener sonido idle del boss (no debe sonar durante el minijuego)
+            if hasattr(room, "boss") and room.boss is not None:
+                if hasattr(room.boss, "sound_manager") and room.boss.sound_manager:
+                    room.boss.sound_manager.detener_todo()
             return
 
         # Si el minijuego está activo, procesarlo y no actualizar el resto del juego
@@ -3169,6 +3189,12 @@ class Game:
         Crea y activa la pantalla de versus.
         Se llama cuando el jugador aprueba el minijuego Papers Please.
         """
+        # Reactivar sonido idle del boss (se detuvo durante el minijuego)
+        room = self.dungeon.current_room if hasattr(self, "dungeon") else None
+        if room and hasattr(room, "boss") and room.boss is not None:
+            if hasattr(room.boss, "sound_manager") and room.boss.sound_manager:
+                room.boss.sound_manager.iniciar_idle()
+
         # Obtener animaciones idle
         anim_p1 = None
         if hasattr(self.player, "_animations") and "idle" in self.player._animations:
