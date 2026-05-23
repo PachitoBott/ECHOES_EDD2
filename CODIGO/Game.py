@@ -778,6 +778,7 @@ class Game:
                 traceback.print_exc()
                 menu_ok = False
 
+            print(f"[GAME DEBUG] menu_ok={menu_ok}, self.running={self.running}")
             if not menu_ok:
                 print("[GAME] Menú falló o usuario cerró, terminando...")
                 pygame.mouse.set_visible(True)
@@ -786,8 +787,10 @@ class Game:
                 pygame.quit()
                 sys.exit(0)
 
+            print("[GAME] ✓ Entrando al game loop...")
             self._frame_counter = 0
             while self.running:
+                print(f"[GAME DEBUG] Iteración del loop, self.running={self.running}")
                 try:
                     dt = self.clock.tick(self.cfg.FPS) / 1000.0
                     self.door_cooldown = max(0.0, self.door_cooldown - dt)
