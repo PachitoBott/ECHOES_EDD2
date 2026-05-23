@@ -37,10 +37,10 @@ class PantallaVersus:
     VELOCIDAD_JUGADOR = 10.0  # px/segundo
 
     # Velocidad del boss
-    VELOCIDAD_BOSS = 30.0  # px/segundo
+    VELOCIDAD_BOSS = 10.0  # px/segundo - igual que jugador 1
 
     # Límite de avance: los jugadores no pasan del centro - este margen
-    MARGEN_CENTRO = 300  # px desde el centro — mucho menos avance
+    MARGEN_CENTRO = 150  # px desde el centro — mucho menos avance
 
     # Tamaño del retrato del boss
     BOSS_W = 280
@@ -98,8 +98,8 @@ class PantallaVersus:
         self._cargar_assets()
         self._cargar_fuentes()
 
-        # Posición del boss (lado derecho, fijo)
-        self.boss_x = logical_w * 0.72
+        # Posición del boss (lado derecho)
+        self.boss_x = float(logical_w * 0.85 - 150)  # 100px más a la izquierda
         self.boss_y = self.cy - self.BOSS_H // 2
 
         # Efectos de entrada
@@ -173,21 +173,24 @@ class PantallaVersus:
             self.alpha_general = 255.0
 
         # Mover jugadores y boss lentamente hacia el centro
-        limite = self.limite_x
+        limite_p1 = self.limite_x
         limite_boss = float(self.cx + self.MARGEN_CENTRO)
 
-        if self.p1_x < limite:
+        # P1 se mueve desde la izquierda hacia el centro
+        if self.p1_x < limite_p1:
             self.p1_x += self.VELOCIDAD_JUGADOR * dt
-            self.p1_x = min(self.p1_x, limite)
+            self.p1_x = min(self.p1_x, limite_p1)
 
-        if self.hay_p2 and self.p2_x < limite:
+        # P2 se mueve desde la izquierda hacia el centro
+        if self.hay_p2 and self.p2_x < limite_p1:
             self.p2_x += self.VELOCIDAD_JUGADOR * dt
-            self.p2_x = min(self.p2_x, limite)
+            self.p2_x = min(self.p2_x, limite_p1)
 
-        # Mover boss hacia el jugador (más rápido)
-        if self.boss_x > limite_boss:
+        # Boss se mueve desde la derecha hacia el centro
+        boss_limite_izq = float(self.cx + self.MARGEN_CENTRO)
+        if self.boss_x > boss_limite_izq:
             self.boss_x -= self.VELOCIDAD_BOSS * dt
-            self.boss_x = max(self.boss_x, limite_boss)
+            self.boss_x = max(self.boss_x, boss_limite_izq)
 
         # Terminar después de la duración
         if self.timer >= self.DURACION:
