@@ -541,6 +541,17 @@ class Game:
         self._finalize_run_statistics(finalize_reason)
         self._stats_pending_reason = None
 
+        # ================================================================
+        # Cerrar conexiones del menú para liberar puerto 5555
+        # (NetworkManager del juego también usa 5555)
+        # ================================================================
+        if hasattr(self, '_servidor_menu') and self._servidor_menu:
+            self._servidor_menu.cerrar()
+            log_game.info("[OK] Servidor del menú cerrado")
+        if hasattr(self, '_cliente_menu') and self._cliente_menu:
+            self._cliente_menu.cerrar()
+            log_game.info("[OK] Cliente del menú cerrado")
+
         # Resetear el pool de posts para el nuevo run
         posts_pool.reset_run()
 
