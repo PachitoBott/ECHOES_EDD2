@@ -52,6 +52,7 @@ from systems.death_effect import DeathEffectManager
 from systems.power_effects import power_effect_manager
 from systems.spawn_effect import SpawnEffectManager
 from systems.minigame_papers import MinijuegoPapers, posts_pool
+from systems.music_manager import music_manager
 
 
 class RemoteProjectile:
@@ -651,8 +652,12 @@ class Game:
 
         self._run_start_time = perf_counter()
 
+        # --- Música: iniciar cinemática intro ---
+        music_manager.reproducir("cinematica_intro", loop=True, fade_in_ms=800)
+
         # Trigger narrativa: marcar para reproducir intro en el primer frame
         self._intro_played = False
+        self._intro_cinematica_activa = False  # Track when intro cinematic is playing
         self._current_zone = 1
         self._zones_cinematics_shown = set()
         self._zone_banner_text = ""
@@ -1734,7 +1739,13 @@ class Game:
             # [FEATURE] Skip intro si se especificó --skip-intro
             if not self._skip_intro:
                 self.cinematics.reproducir("intro")
+                self._intro_cinematica_activa = True
             return
+
+        # --- Detectar cuando la cinemática intro termina ---
+        if self._intro_cinematica_activa and not self.cinematics.activo:
+            self._intro_cinematica_activa = False
+            music_manager.detener(fade_out_ms=1000)
 
         room = self.dungeon.current_room
 
@@ -1757,6 +1768,10 @@ class Game:
             self.minijuego_activo = True
             self.minijuego = MinijuegoPapers(self.cfg.SCREEN_W, self.cfg.SCREEN_H)
             self.ultima_sala_fue_boss = True
+            # --- Música: reproducir minijuego ---
+            music_manager.reproducir("minigame", loop=False, fade_in_ms=500)
+            # Bajar volumen del minijuego
+            music_manager.set_volumen(0.2)
             return
 
         # Si el minijuego está activo, procesarlo y no actualizar el resto del juego
@@ -1775,10 +1790,17 @@ class Game:
             if self.minijuego.terminado:
                 if not self.minijuego.aprobado:
                     # No aprobó - reiniciar la partida
+                    # (La música se reiniciará con start_new_run)
+                    music_manager.detener(fade_out_ms=800)
                     self._stats_pending_reason = "minigame_failed"
                     self.start_new_run(seed=self.current_seed)
                 else:
                     # Aprobó - mostrar pantalla de versus antes del boss
+                    # Detener música del minijuego
+                    music_manager.detener(fade_out_ms=200)
+                    # Reproducir música del boss para el versus screen
+                    music_manager.set_volumen(0.7)
+                    music_manager.reproducir("boss_fight", loop=True, fade_in_ms=500)
                     self._activar_pantalla_versus()
                     self.minijuego_activo = False
                     self.minijuego = None
@@ -1802,6 +1824,8 @@ class Game:
             if self.pantalla_versus.terminado:
                 self.pantalla_versus_activa = False
                 self.pantalla_versus = None
+                # --- Música: detener para boss fight (silencio) ---
+                music_manager.detener(fade_out_ms=500)
             else:
                 # La pantalla sigue activa, no actualizar el resto del juego
                 return
@@ -2504,6 +2528,9 @@ class Game:
                     room_id=(self.dungeon.i, self.dungeon.j)
                 )
                 self.net.enviar(evento)
+            # --- Música: detener al completar boss room ---
+            if not was_cleared_before and room.cleared and getattr(room, "type", "") == "boss":
+                music_manager.detener(fade_out_ms=1500)
         self._update_room_lock(room)
         if getattr(self.player, "hp", 1) <= 0:
             self._handle_player_death(room)
@@ -2723,6 +2750,9 @@ class Game:
         summary = self._collect_run_summary()
         self._record_stats_death()
         self._finalize_run_statistics("player_death")
+
+        # --- Música: detener música al morir ---
+        music_manager.detener(fade_out_ms=1500)
 
         action = self._show_game_over_screen(summary)
 
@@ -3069,6 +3099,8 @@ class Game:
             anim_p2=anim_p2,
         )
         self.pantalla_versus_activa = True
+        # Nota: música del boss se reproducirá en el primer frame del versus screen
+        # para asegurar transición suave sin gaps de silencio
 
     def _check_boss_room_entry(self, room) -> None:
         """Muestra un banner temporal al entrar a la sala del boss (solo una vez por run)."""
