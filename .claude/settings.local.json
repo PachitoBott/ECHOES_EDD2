@@ -40,7 +40,9 @@
       "Bash(python -m py_compile ui/StartMenu.py)",
       "Bash(python test_menu_network.py)",
       "PowerShell(Get-Job -Name \"GameServer\")",
-      "PowerShell(Stop-Job -Force)"
+      "PowerShell(Stop-Job -Force)",
+      "Bash(Get-ChildItem -Recurse -Include \"*.py\")",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }

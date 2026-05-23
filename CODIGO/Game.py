@@ -300,18 +300,19 @@ class Game:
             custom_y=895   # Same height as P1
         )
 
-        # --- Cargar animaciones de Cyborg para jugador remoto ---
-        self._cyborg_animations: dict = {}
+        # --- Cargar animaciones del servidor (FutureSoldier) para jugador remoto ---
+        # En modo cliente, el jugador remoto es el servidor (FutureSoldier)
+        self._server_player_animations: dict = {}
         try:
             from systems.animation import AnimationManager
-            self._cyborg_animations = AnimationManager.load_from_json(
-                "assets/sprites/player2/animations.json",
-                "assets/sprites/player2"
+            self._server_player_animations = AnimationManager.load_from_json(
+                "assets/sprites/player/animations.json",
+                "assets/sprites/player"
             )
-            log_game.info("[OK] Animaciones de Cyborg cargadas para jugador remoto")
+            log_game.info("[OK] Animaciones del servidor (FutureSoldier) cargadas para jugador remoto")
         except Exception as e:
-            log_game.warning(f"[WARNING] No se pudieron cargar animaciones de Cyborg: {e}")
-            self._cyborg_animations = {}
+            log_game.warning(f"[WARNING] No se pudieron cargar animaciones del servidor: {e}")
+            self._server_player_animations = {}
 
         # ---------- Recursos ----------
         self.tileset_manager = TilesetManager()
@@ -628,8 +629,20 @@ class Game:
         px, py = room.center_px()
         spawn_x = px - Player.HITBOX_SIZE[0] / 2
         spawn_y = py - Player.HITBOX_SIZE[1] / 2
+
+        # Determinar sprite_dir basado en rol (servidor vs cliente)
+        sprite_dir = None
+        if self.net and not self.net.es_servidor:
+            # Cliente: si es ALIADO, usar player2 (Cyborg)
+            sprite_dir = "assets/sprites/player2" if self.net.es_aliado else "assets/sprites/player"
+            log_game.info(f"[MULTIJUGADOR] Cliente creado como {('ALIADO' if self.net.es_aliado else 'VICTIMA')} - Sprite: {sprite_dir}")
+        else:
+            # Servidor: siempre usar player (FutureSoldier)
+            if self.net:
+                log_game.info("[MULTIJUGADOR] Servidor creado - Sprite: assets/sprites/player")
+
         if not hasattr(self, "player"):
-            self.player = Player(spawn_x, spawn_y)
+            self.player = Player(spawn_x, spawn_y, sprite_dir=sprite_dir)
         else:
             self.player.x, self.player.y = spawn_x, spawn_y
         if hasattr(self.player, "reset_loadout"):
@@ -1824,8 +1837,8 @@ class Game:
         self.hud_panel_p2.update(dt)
 
         # --- Actualizar animaciones de Cyborg para jugador remoto ---
-        if "idle" in self._cyborg_animations:
-            self._cyborg_animations["idle"].update(dt)
+        if "idle" in self._server_player_animations:
+            self._server_player_animations["idle"].update(dt)
 
         # --- Actualizar fondo matrix ---
         self.matrix_bg.update(dt)
@@ -3505,9 +3518,9 @@ class Game:
 
             sala_actual = (self.dungeon.i, self.dungeon.j)
             if sala_remota == sala_actual:
-                # Renderizar sprite de Cyborg con animación idle
-                if "idle" in self._cyborg_animations:
-                    frame = self._cyborg_animations["idle"].current_frame()
+                # Renderizar sprite del servidor (FutureSoldier) con animación idle
+                if "idle" in self._server_player_animations:
+                    frame = self._server_player_animations["idle"].current_frame()
                     # Escalar el frame a 32x32 para coincidir con el tamaño esperado
                     scaled_frame = pygame.transform.scale(frame, (32, 32))
                     self.world.blit(scaled_frame, (int(x), int(y)))

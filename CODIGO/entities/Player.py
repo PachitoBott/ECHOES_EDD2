@@ -789,8 +789,10 @@ class Player(Entity):
 
     def _build_animations(self) -> dict[str, Animation]:
         """Carga animaciones desde spritesheets + JSON."""
-        json_path = "assets/sprites/player/animations.json"
-        sprite_dir = "assets/sprites/player"
+        # Usar sprite_dir dinámico si está definido, sino usar player por defecto
+        base_dir = "assets/sprites/player2" if self.sprite_dir and "player2" in str(self.sprite_dir) else "assets/sprites/player"
+        json_path = f"{base_dir}/animations.json"
+        sprite_dir = base_dir
 
         try:
             animations = AnimationManager.load_from_json(json_path, sprite_dir)
