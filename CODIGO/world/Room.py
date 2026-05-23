@@ -15,6 +15,7 @@ from entities.Enemy import (
 )
 import entities.Enemy as enemy_mod  # <- para usar enemy_mod.WANDER
 from core.asset_paths import assets_dir
+from systems.spawn_system import seleccionar_enemigos_para_sala
 
 # Plantillas de encuentros por umbral de dificultad para ZONA 1.
 # Solo: BasicEnemy, FastChaserEnemy, TankEnemy, ShooterEnemy
@@ -179,6 +180,33 @@ ENCOUNTER_TABLE_TRANSITION_ZONE2: list[tuple[int, list[list[Type[Enemy]]]]] = [
 
 # Mantener alias para compatibilidad
 ENCOUNTER_TABLE = ENCOUNTER_TABLE_ZONE1
+
+
+# ============================================================================
+# Mapeo de nombre de clase (string) -> clase de Enemy para el nuevo sistema
+# ============================================================================
+ENEMY_CLASS_MAP = {
+    "BasicEnemy": BasicEnemy,
+    "FastChaserEnemy": FastChaserEnemy,
+    "ShooterEnemy": ShooterEnemy,
+    "TankEnemy": TankEnemy,
+    "EmojiEnemy": EmojiEnemy,
+    "TelefonoEnemy": TelefonoEnemy,
+    "FakerEnemy": FakerEnemy,
+}
+
+
+def convertir_tipo_enemigo_a_clase(tipo_nombre: str) -> Type[Enemy] | None:
+    """
+    Convierte el nombre de un enemigo (string) a su clase.
+
+    Args:
+        tipo_nombre: nombre de la clase como string (ej: "TankEnemy")
+
+    Returns:
+        La clase del enemigo, o None si no existe
+    """
+    return ENEMY_CLASS_MAP.get(tipo_nombre, None)
 
 
 _OBSTACLE_ASSET_DIR = assets_dir("obstacles")
@@ -981,23 +1009,57 @@ class Room:
         return True
 
     def ensure_spawn(self, difficulty: int = 1, zone: int = 1, dungeon=None) -> None:
+        """
+        Genera enemigos para la sala usando el nuevo sistema de probabilidades por zona.
+
+        Args:
+            difficulty: Nivel de dificultad (1-10)
+            zone: Zona de la sala (1 o 2)
+            dungeon: Referencia al dungeon (para acceder a índices de zona)
+        """
         if self._spawn_done or self.bounds is None or self.no_spawn:
             return
+
         rx, ry, rw, rh = self.bounds
         ts = CFG.TILE_SIZE
 
-        encounter_factories = self._pick_encounter(difficulty, zone, dungeon)
-        if not encounter_factories:
+        # Obtener índice y total de salas en la zona
+        idx_en_zona = getattr(self, "index_in_zone", 0)
+        total_salas_zona = getattr(self, "total_in_zone", 1)
+
+        # Usar nuevo sistema: seleccionar enemigos por probabilidades
+        tipos_enemigos = seleccionar_enemigos_para_sala(
+            zona_sala=zone,
+            idx_en_zona=idx_en_zona,
+            total_salas_zona=total_salas_zona,
+            n_enemigos=None  # Usa valores por defecto según zona
+        )
+
+        if not tipos_enemigos:
             self._spawn_done = True
             return
+
+        # Convertir nombres de clases a clases reales
+        factories = []
+        for tipo_nombre in tipos_enemigos:
+            factory = convertir_tipo_enemigo_a_clase(tipo_nombre)
+            if factory:
+                factories.append(factory)
+
+        if not factories:
+            self._spawn_done = True
+            return
+
+        # Spawnear cada enemigo
         used_tiles: set[tuple[int, int]] = set(self._obstacle_tiles)
-        for factory in encounter_factories:
+        for factory in factories:
             # Intentar encontrar una baldosa libre para ubicar al enemigo
             for _ in range(12):
                 tx = random.randint(rx + 1, rx + rw - 2)
                 ty = random.randint(ry + 1, ry + rh - 2)
                 if (tx, ty) in used_tiles:
                     continue
+
                 px = tx * ts + ts // 2 - 6
                 py = ty * ts + ts // 2 - 6
                 enemy = factory(px, py)
@@ -1017,41 +1079,41 @@ class Room:
                 self.enemies.append(enemy)
                 break
 
-        # Escalado adicional: probabilidad de sumar un perseguidor extra
+        # Probabilidad pequeña de enemigo extra (escalado con dificultad)
         extra_chance = min(0.1 * max(0, difficulty - 1), 0.5)
-        if random.random() < extra_chance:
-            for _ in range(12):
-                tx = random.randint(rx + 1, rx + rw - 2)
-                ty = random.randint(ry + 1, ry + rh - 2)
-                if (tx, ty) in used_tiles:
-                    continue
-                px = tx * ts + ts // 2 - 6
-                py = ty * ts + ts // 2 - 6
+        if random.random() < extra_chance and self.enemies:
+            # Seleccionar un tipo extra basado en las probabilidades de zona
+            tipos_extra = seleccionar_enemigos_para_sala(
+                zona_sala=zone,
+                idx_en_zona=idx_en_zona,
+                total_salas_zona=total_salas_zona,
+                n_enemigos=1
+            )
 
-                # Seleccionar enemigo extra según la zona
-                if zone >= 2:
-                    # Zona 2: seleccionar un enemigo de la tabla de zona 2
-                    bonus_factories = self._pick_encounter(difficulty, zone, dungeon)
-                    if bonus_factories:
-                        bonus_factory = random.choice(bonus_factories)
-                        bonus = bonus_factory(px, py)
-                    else:
-                        continue
-                else:
-                    # Zona 1: FastChaserEnemy por defecto
-                    bonus = FastChaserEnemy(px, py)
+            if tipos_extra:
+                factory_extra = convertir_tipo_enemigo_a_clase(tipos_extra[0])
+                if factory_extra:
+                    for _ in range(12):
+                        tx = random.randint(rx + 1, rx + rw - 2)
+                        ty = random.randint(ry + 1, ry + rh - 2)
+                        if (tx, ty) in used_tiles:
+                            continue
 
-                # Validar que el enemigo está completamente dentro de la sala
-                if not self._is_enemy_fully_inside_room(bonus):
-                    continue
+                        px = tx * ts + ts // 2 - 6
+                        py = ty * ts + ts // 2 - 6
+                        bonus = factory_extra(px, py)
 
-                # Marcar buffer zone dinámico del enemigo extra
-                self._mark_enemy_buffer_zone(bonus, used_tiles)
+                        # Validar que el enemigo está dentro de la sala
+                        if not self._is_enemy_fully_inside_room(bonus):
+                            continue
 
-                bonus._pick_wander()
-                bonus.state = enemy_mod.WANDER
-                self.enemies.append(bonus)
-                break
+                        # Marcar buffer zone
+                        self._mark_enemy_buffer_zone(bonus, used_tiles)
+
+                        bonus._pick_wander()
+                        bonus.state = enemy_mod.WANDER
+                        self.enemies.append(bonus)
+                        break
 
         if self.enemies:
             self.locked = True

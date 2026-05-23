@@ -1847,7 +1847,11 @@ class Game:
             if hasattr(self.dungeon, "main_path"):
                 on_main_path = 1 if pos in self.dungeon.main_path else 0
             difficulty = 1 + depth + branch_factor + (depth // 3) + on_main_path
-            room.ensure_spawn(difficulty=difficulty)
+
+            # Obtener zona de la sala (nuevo sistema de spawn por probabilidades)
+            zona = self.dungeon.room_zone(pos)
+
+            room.ensure_spawn(difficulty=difficulty, zone=zona, dungeon=self.dungeon)
 
     def _get_closest_player_for_enemy(self, enemy, room_pos=None) -> object:
         """
