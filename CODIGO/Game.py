@@ -1849,6 +1849,10 @@ class Game:
             # Detener sonidos del jugador
             if self.player:
                 self.player.stop_all_sounds()
+            # Detener sonido idle del boss (no debe sonar durante el minijuego)
+            if hasattr(room, "boss") and room.boss is not None:
+                if hasattr(room.boss, "sound_manager") and room.boss.sound_manager:
+                    room.boss.sound_manager.detener_todo()
             return
 
         # Si el minijuego está activo, procesarlo y no actualizar el resto del juego
@@ -3159,6 +3163,12 @@ class Game:
         Crea y activa la pantalla de versus.
         Se llama cuando el jugador aprueba el minijuego Papers Please.
         """
+        # Reactivar sonido idle del boss (se detuvo durante el minijuego)
+        room = self.dungeon.current_room if hasattr(self, "dungeon") else None
+        if room and hasattr(room, "boss") and room.boss is not None:
+            if hasattr(room.boss, "sound_manager") and room.boss.sound_manager:
+                room.boss.sound_manager.iniciar_idle()
+
         # Obtener animaciones idle
         anim_p1 = None
         if hasattr(self.player, "_animations") and "idle" in self.player._animations:
