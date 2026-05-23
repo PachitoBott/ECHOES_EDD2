@@ -552,6 +552,11 @@ class Game:
             self._cliente_menu.cerrar()
             log_game.info("[OK] Cliente del menú cerrado")
 
+        # Esperar a que el puerto se libere completamente antes de
+        # que NetworkManager intente usarlo (evita timeout)
+        import time as time_module
+        time_module.sleep(0.5)
+
         # Resetear el pool de posts para el nuevo run
         posts_pool.reset_run()
 
