@@ -56,6 +56,62 @@ def cargar_boss_idle(ruta: str) -> list[pygame.Surface]:
     return frames
 
 
+def cargar_spritesheet_boss(ruta: str,
+                            frame_w: int = 736,
+                            frame_h: int = 400,
+                            cols: int = 5,
+                            n_usar: int = 22) -> list[pygame.Surface]:
+    """
+    Carga un spritesheet del boss de forma genérica.
+    Funciona con cualquier cuadrícula (cols x filas) y cualquier número de frames.
+
+    Args:
+        ruta: Ruta al archivo PNG
+        frame_w: Ancho de cada frame en píxeles (default: 736)
+        frame_h: Alto de cada frame en píxeles (default: 400)
+        cols: Número de columnas en la cuadrícula (default: 5)
+        n_usar: Número de frames a extraer (default: 22)
+
+    Returns:
+        Lista de superficies pygame con los frames cargados
+    """
+    try:
+        img = pygame.image.load(ruta).convert_alpha()
+    except pygame.error as e:
+        print(f"[BOSS ANIM] Error cargando {ruta}: {e}")
+        return []
+
+    ancho_total, alto_total = img.get_size()
+    frames = []
+
+    # Calcular número de filas basado en el número de frames y columnas
+    filas = (n_usar + cols - 1) // cols
+
+    # Extraer frames de la cuadrícula
+    for i in range(n_usar):
+        col = i % cols
+        fila = i // cols
+
+        x = col * frame_w
+        y = fila * frame_h
+
+        # Validar que el frame está dentro del spritesheet
+        if x + frame_w > ancho_total or y + frame_h > alto_total:
+            print(f"[BOSS ANIM] Frame {i} fuera de rango en {ruta}")
+            break
+
+        try:
+            # Crear superficie con el frame
+            frame = img.subsurface(pygame.Rect(x, y, frame_w, frame_h))
+            frames.append(frame.copy())
+        except Exception as e:
+            print(f"[BOSS ANIM] Error extrayendo frame {i}: {e}")
+            break
+
+    print(f"[BOSS ANIM] Cargados {len(frames)} frames de {ruta}")
+    return frames
+
+
 class Boss:
     """
     Wall boss anclado en la pared superior de la sala.
@@ -63,7 +119,8 @@ class Boss:
     """
 
     # Configuración de animación
-    FPS_IDLE = 8  # frames por segundo
+    FPS_IDLE = 8  # frames por segundo (animación idle, loop)
+    FPS_ATAQUE = 30  # frames por segundo (animaciones de ataque, no-loop)
 
     # Configuración de movimiento
     SPEED = 200  # px/segundo lateral (aumentado de 60)
@@ -97,11 +154,16 @@ class Boss:
         self.max_hp = self.MAX_HP
         self.hit_flash_timer = 0.0  # Timer para titilar blanco
 
-        # Cargar sprites
-        self.frames: list[pygame.Surface] = []
-        self.frame_actual = 0
-        self.timer_frame = 0.0
-        self.intervalo_frame = 1.0 / self.FPS_IDLE
+        # Sistema de animación mejorado
+        self.frames_idle: list[pygame.Surface] = []  # Animación idle (11 frames, loop)
+        self.frames_ataques: dict[str, list[pygame.Surface]] = {}  # Ataques (22 frames cada uno)
+
+        # Control de animación actual
+        self.animacion_actual = "idle"  # Animación en reproducción
+        self.frame_actual = 0  # Índice del frame actual
+        self.timer_frame = 0.0  # Acumulador de tiempo
+        self.intervalo_frame = 1.0 / self.FPS_IDLE  # Intervalo entre frames
+        self.animacion_terminada = False  # Flag si la animación no-loop terminó
 
         # Tamaño de render
         self.render_w = 0
@@ -122,44 +184,68 @@ class Boss:
         self._init_sistema_ataques()
 
     def _cargar_sprites(self) -> None:
-        """Carga boss_idle.png desde assets."""
-        # Buscar en ubicaciones comunes
-        rutas_candidatas = [
-            "assets/boss_idle.png",
-            "assets/sprites/boss_idle.png",
-            "assets/enemies/boss_idle.png",
-            "assets/sprites/enemies/boss_idle.png",
-        ]
-
-        ruta_encontrada: Optional[str] = None
-        for ruta in rutas_candidatas:
-            if os.path.exists(ruta):
-                ruta_encontrada = ruta
-                break
-
-        if not ruta_encontrada:
-            print("[BOSS] boss_idle.png no encontrado.")
-            print("       Ubicaciones intentadas:")
+        """Carga todas las animaciones del boss (idle + 3 ataques)."""
+        # Función helper para buscar archivo
+        def buscar_archivo(nombre: str) -> Optional[str]:
+            rutas_candidatas = [
+                f"assets/{nombre}",
+                f"assets/sprites/{nombre}",
+                f"assets/enemies/{nombre}",
+                f"assets/sprites/enemies/{nombre}",
+            ]
             for ruta in rutas_candidatas:
-                print(f"         - {ruta}")
+                if os.path.exists(ruta):
+                    return ruta
+            return None
+
+        # Parámetros de spritesheet
+        FRAME_W = 736
+        FRAME_H = 400
+        self.render_w = int(FRAME_W * self.RENDER_SCALE)
+        self.render_h = int(FRAME_H * self.RENDER_SCALE)
+
+        # --- CARGAR IDLE (4 columnas x 3 filas, 11 frames) ---
+        ruta_idle = buscar_archivo("boss_idle.png")
+        if ruta_idle:
+            frames_raw = cargar_boss_idle(ruta_idle)
+            self.frames_idle = [
+                pygame.transform.scale(f, (self.render_w, self.render_h))
+                for f in frames_raw
+            ]
+            print(f"[BOSS] Idle cargado: {len(self.frames_idle)} frames")
+        else:
+            print("[BOSS] boss_idle.png no encontrado, usando placeholder")
             self._usar_placeholder()
             return
 
-        frames_raw = cargar_boss_idle(ruta_encontrada)
-        if not frames_raw:
-            self._usar_placeholder()
-            return
+        # --- CARGAR ANIMACIONES DE ATAQUE (5x5, 22 frames cada una) ---
+        animaciones_ataque = {
+            "laser": "AtaqueLaser.png",
+            "zigzag": "AtaqueZigzag.png",
+            "fanout": "AtaqueFanout.png",
+        }
 
-        # Escalar frames al tamaño de render
-        FRAME_W_RAW = 736
-        FRAME_H_RAW = 400
-        self.render_w = int(FRAME_W_RAW * self.RENDER_SCALE)
-        self.render_h = int(FRAME_H_RAW * self.RENDER_SCALE)
+        for nombre_ataque, archivo in animaciones_ataque.items():
+            ruta = buscar_archivo(archivo)
+            if ruta:
+                frames_raw = cargar_spritesheet_boss(
+                    ruta,
+                    frame_w=FRAME_W,
+                    frame_h=FRAME_H,
+                    cols=5,
+                    n_usar=22
+                )
+                self.frames_ataques[nombre_ataque] = [
+                    pygame.transform.scale(f, (self.render_w, self.render_h))
+                    for f in frames_raw
+                ]
+                print(f"[BOSS] Animación '{nombre_ataque}' cargada: "
+                      f"{len(self.frames_ataques[nombre_ataque])} frames")
+            else:
+                # Fallback: usar idle si no existe el archivo de ataque
+                print(f"[BOSS] {archivo} no encontrado, usando idle para '{nombre_ataque}'")
+                self.frames_ataques[nombre_ataque] = self.frames_idle
 
-        self.frames = [
-            pygame.transform.scale(f, (self.render_w, self.render_h))
-            for f in frames_raw
-        ]
         print(f"[BOSS] Tamaño de render: {self.render_w}x{self.render_h}px "
               f"(escala {self.RENDER_SCALE*100:.0f}%)")
 
@@ -207,6 +293,113 @@ class Boss:
         self.y = float(self.pared_y - 64)
 
         print(f"[BOSS] Posición inicial: ({self.x:.0f}, {self.y:.0f})")
+
+    # ============================================================================
+    # MÉTODOS DE CONTROL DE ANIMACIÓN (Paso 4)
+    # ============================================================================
+
+    def _set_animacion(self, nombre: str) -> None:
+        """
+        Cambia la animación actual y reinicia el contador de frames.
+
+        Args:
+            nombre: 'idle', 'laser', 'zigzag', o 'fanout'
+        """
+        if nombre == self.animacion_actual:
+            return  # Ya está reproduciendo esta animación
+
+        # Validar que la animación existe
+        if nombre != "idle" and nombre not in self.frames_ataques:
+            print(f"[BOSS] Advertencia: animación '{nombre}' no existe, usando idle")
+            nombre = "idle"
+
+        self.animacion_actual = nombre
+        self.frame_actual = 0
+        self.timer_frame = 0.0
+        self.animacion_terminada = False
+
+        print(f"[BOSS ANIM] Cambio a animación: '{nombre}'")
+
+    def _update_animacion(self, dt: float) -> None:
+        """
+        Avanza el contador de frames basado en el tiempo transcurrido.
+        Maneja diferente velocidad para idle vs ataques:
+        - Idle: FPS_IDLE (20 fps)
+        - Ataques: FPS_ATAQUE (30 fps)
+
+        Animaciones no-loop terminan cuando alcanzan el último frame.
+
+        Args:
+            dt: Delta time en segundos
+        """
+        # Determinar FPS según tipo de animación
+        if self.animacion_actual == "idle":
+            fps = self.FPS_IDLE
+        else:
+            fps = self.FPS_ATAQUE
+
+        intervalo = 1.0 / fps
+        self.timer_frame += dt
+
+        # Obtener lista de frames actual
+        frames = self._get_frames_actual()
+        if not frames:
+            return
+
+        # Avanzar frame si acumulamos suficiente tiempo
+        while self.timer_frame >= intervalo:
+            self.timer_frame -= intervalo
+            self.frame_actual += 1
+
+            # Manejo de end-of-animation
+            if self.frame_actual >= len(frames):
+                if self.animacion_actual == "idle":
+                    # Idle es loop: reiniciar al principio
+                    self.frame_actual = 0
+                else:
+                    # Ataques son no-loop: marcar terminada y volver a idle
+                    self.frame_actual = len(frames) - 1  # Quedar en último frame
+                    self.animacion_terminada = True
+                    print(f"[BOSS ANIM] Animación '{self.animacion_actual}' terminada, "
+                          f"volviendo a idle")
+                    self._set_animacion("idle")
+                    return
+
+    def _get_frame_actual(self) -> pygame.Surface:
+        """
+        Retorna el frame actual de la animación en reproducción.
+
+        Returns:
+            pygame.Surface del frame actual, o placeholder si no disponible
+        """
+        frames = self._get_frames_actual()
+        if not frames:
+            # Fallback a idle si algo falla
+            frames = self.frames_idle if self.frames_idle else []
+
+        if not frames:
+            # Último recurso: crear placeholder
+            placeholder = pygame.Surface((self.render_w, self.render_h), pygame.SRCALPHA)
+            placeholder.fill((100, 100, 100, 200))
+            return placeholder
+
+        # Clampear índice por si acaso
+        idx = max(0, min(self.frame_actual, len(frames) - 1))
+        return frames[idx]
+
+    def _get_frames_actual(self) -> list[pygame.Surface]:
+        """
+        Helper interno: retorna lista de frames para la animación actual.
+
+        Returns:
+            Lista de pygame.Surface para la animación activa
+        """
+        if self.animacion_actual == "idle":
+            return self.frames_idle
+        elif self.animacion_actual in self.frames_ataques:
+            return self.frames_ataques[self.animacion_actual]
+        else:
+            return self.frames_idle  # Fallback
 
     def activar(self) -> None:
         """Llamar cuando el jugador entra a la sala."""
@@ -263,13 +456,10 @@ class Boss:
         # Debug: mostrar estado cada 30 frames
         if self._debug_frame_counter % 30 == 0:
             print(f"[BOSS] UPDATE ACTIVO: x={self.x:.1f}, vel={self.velocidad_x}, dt={dt:.4f}, "
-                  f"frame={self.frame_actual}/{len(self.frames)}, sala_rect=({self.sala_rect.left}, {self.sala_rect.right})")
+                  f"frame={self.frame_actual}/?, sala_rect=({self.sala_rect.left}, {self.sala_rect.right})")
 
-        # Actualizar animación idle
-        self.timer_frame += dt
-        if self.timer_frame >= self.intervalo_frame:
-            self.timer_frame -= self.intervalo_frame
-            self.frame_actual = (self.frame_actual + 1) % len(self.frames)
+        # Actualizar animación (Paso 5: usar nuevo sistema)
+        self._update_animacion(dt)
 
         # Movimiento lateral (reducido si hay un laser activo)
         x_anterior = self.x
@@ -308,10 +498,8 @@ class Boss:
         # Renderizar ataques ANTES del sprite para que queden debajo
         self._render_ataques(surface, camera_offset=(0, 0))
 
-        if not self.frames:
-            return
-
-        frame = self.frames[self.frame_actual]
+        # Obtener frame actual usando nuevo sistema de animación (Paso 5)
+        frame = self._get_frame_actual()
         pos_x = int(self.x)
         pos_y = int(self.y)
 
@@ -325,6 +513,14 @@ class Boss:
             surface.blit(frame_white, (pos_x, pos_y))
         else:
             surface.blit(frame, (pos_x, pos_y))
+
+    @property
+    def frames(self) -> list[pygame.Surface]:
+        """Retorna los frames de la animación actual (compatibilidad)."""
+        if self.animacion_actual == "idle":
+            return self.frames_idle
+        else:
+            return self.frames_ataques.get(self.animacion_actual, self.frames_idle)
 
     @property
     def rect(self) -> pygame.Rect:
@@ -496,12 +692,16 @@ class Boss:
                 jugador_objetivo,
                 self.proyectiles
             )
+            # Paso 6: Cambiar a animación de fanout
+            self._set_animacion("fanout")
         elif nombre == "zigzag":
             ataque = AtaqueZigzag(
                 boca_x, boca_y,
                 self.proyectiles,
                 boss=self
             )
+            # Paso 6: Cambiar a animación de zigzag
+            self._set_animacion("zigzag")
         elif nombre == "laser":
             # Verificar si el láser puede usarse (jugador debe estar debajo)
             if not self._puede_usar_laser(jugadores):
@@ -514,6 +714,8 @@ class Boss:
                 self.x,
                 boss=self
             )
+            # Paso 6: Cambiar a animación de laser
+            self._set_animacion("laser")
         elif nombre == "emp":
             # Centro del boss como punto de origen de las ondas
             centro_boss_x = self.x + self.render_w // 2
@@ -524,6 +726,7 @@ class Boss:
                 self.proyectiles,
                 boss=self
             )
+            # EMP usa idle (sin animación especial por ahora)
         else:
             print(f"[BOSS] Ataque '{nombre}' aún no implementado")
             return
@@ -531,7 +734,7 @@ class Boss:
         # Añadir ataque a la lista de activos
         if ataque:
             self.ataques_activos.append(ataque)
-            print(f"[BOSS] Ejecutando ataque: {nombre} (fase {self.fase})")
+            print(f"[BOSS] Ejecutando ataque: {nombre} (fase {self.fase}) - Animación: {self.animacion_actual}")
 
         # Establecer cooldown
         self.cooldowns[nombre] = self.COOLDOWN_DURACION[nombre]
@@ -820,6 +1023,7 @@ class AtaqueFanout(AtaqueBoss):
     """
     Dispara 6 proyectiles en abanico de 120 grados.
     Cada proyectil se pausa en el aire y explota en 4 hijos en forma de cruz.
+    Incluye telegraph visual antes de disparar (Paso 7: sincronización de animación).
     """
 
     N_PROYECTILES = 6
@@ -831,6 +1035,7 @@ class AtaqueFanout(AtaqueBoss):
     RADIO_PADRE = 10
     RADIO_HIJO = 6
     TIEMPO_EXPLOSION = 1.2  # segundos antes de pausarse (aumentado de 0.6 para mantener rango)
+    TELEGRAPH = 0.3  # segundos de aviso visual ANTES de disparar (Paso 7)
 
     def __init__(self, boca_x: float, boca_y: float,
                  jugador, lista_proyectiles: list):
@@ -841,66 +1046,48 @@ class AtaqueFanout(AtaqueBoss):
             lista_proyectiles: Lista donde se añaden los proyectiles generados
         """
         super().__init__()
+        self.boca_x = boca_x
+        self.boca_y = boca_y
+        self.jugador = jugador
         self.lista_proyectiles = lista_proyectiles
         self.padres_activos = []
 
-        # Calcular dirección base hacia el jugador más cercano
-        dx_base = jugador.x - boca_x
-        dy_base = jugador.y - boca_y
-        dist = max(1, math.sqrt(dx_base**2 + dy_base**2))
+        # Fase de telegraph (Paso 7)
+        self.fase = "telegraph"  # telegraph → disparo → terminado
+        self.timer_fase = 0.0
+        self.proyectiles_creados = False
 
-        # Ángulo base normalizado
-        ang_base = math.degrees(
-            math.atan2(dy_base / dist, dx_base / dist)
-        )
-
-        # Crear 6 proyectiles padre en abanico
-        for i in range(self.N_PROYECTILES):
-            # Interpolación lineal de 0 a 1
-            t = i / (self.N_PROYECTILES - 1)
-
-            # Calcular ángulo para este proyectil
-            ang = ang_base - self.ANGULO_TOTAL / 2 + t * self.ANGULO_TOTAL
-            rad = math.radians(ang)
-
-            # Vector de dirección
-            dx = math.cos(rad)
-            dy = math.sin(rad)
-
-            # Crear proyectil padre
-            proj = ProyectilBoss(
-                x=boca_x,
-                y=boca_y,
-                dx=dx,
-                dy=dy,
-                daño=self.DAÑO_PADRE,
-                radio=self.RADIO_PADRE,
-                color=(220, 60, 60),
-                color_borde=(255, 180, 180),
-                puede_explotar=True,
-                tiempo_explosion=self.TIEMPO_EXPLOSION,
-                velocidad=self.VELOCIDAD_PADRE
-            )
-            self.padres_activos.append(proj)
-            lista_proyectiles.append(proj)
-
-        print(f"[ATAQUE] AtaqueFanout: {self.N_PROYECTILES} proyectiles "
-              f"en abanico de {self.ANGULO_TOTAL}°")
+        print(f"[ATAQUE] AtaqueFanout: telegraph ({self.TELEGRAPH}s) "
+              f"→ {self.N_PROYECTILES} proyectiles en abanico de {self.ANGULO_TOTAL}°")
 
     def update(self, dt: float, jugadores: list) -> None:
         """
-        Verifica si algún proyectil padre explotó y crea los hijos.
-        Termina cuando todos los padres están inactivos.
+        Maneja las fases del ataque: telegraph → disparo → explosiones → terminado.
+        Paso 7: Telegraph sincroniza con animación antes de disparar.
         """
-        # Verificar si algún padre explotó
-        for padre in self.padres_activos:
-            if padre.explotar_flag and not padre.activo:
-                self._crear_hijos(padre)
-                padre.explotar_flag = False
+        self.timer_fase += dt
 
-        # Terminar cuando todos los padres estén inactivos
-        if all(not p.activo for p in self.padres_activos):
-            self.terminado = True
+        if self.fase == "telegraph":
+            # Esperar a que termine la fase de telegraph
+            if self.timer_fase >= self.TELEGRAPH:
+                self.fase = "disparo"
+                self.timer_fase = 0.0
+                # Crear proyectiles ahora (después del telegraph)
+                if not self.proyectiles_creados:
+                    self._crear_proyectiles_padres()
+                    self.proyectiles_creados = True
+            return
+
+        if self.fase == "disparo":
+            # Verificar si algún padre explotó y crear hijos
+            for padre in self.padres_activos:
+                if padre.explotar_flag and not padre.activo:
+                    self._crear_hijos(padre)
+                    padre.explotar_flag = False
+
+            # Terminar cuando todos los padres estén inactivos
+            if all(not p.activo for p in self.padres_activos):
+                self.terminado = True
 
     def _crear_hijos(self, padre: ProyectilBoss) -> None:
         """
@@ -929,6 +1116,53 @@ class AtaqueFanout(AtaqueBoss):
                 velocidad=self.VELOCIDAD_HIJO
             )
             self.lista_proyectiles.append(hijo)
+
+    def _crear_proyectiles_padres(self) -> None:
+        """
+        Crea los 6 proyectiles padre en abanico.
+        Se llama después del telegraph para sincronizar con la animación (Paso 7).
+        """
+        # Calcular dirección base hacia el jugador más cercano
+        dx_base = self.jugador.x - self.boca_x
+        dy_base = self.jugador.y - self.boca_y
+        dist = max(1, math.sqrt(dx_base**2 + dy_base**2))
+
+        # Ángulo base normalizado
+        ang_base = math.degrees(
+            math.atan2(dy_base / dist, dx_base / dist)
+        )
+
+        # Crear 6 proyectiles padre en abanico
+        for i in range(self.N_PROYECTILES):
+            # Interpolación lineal de 0 a 1
+            t = i / (self.N_PROYECTILES - 1)
+
+            # Calcular ángulo para este proyectil
+            ang = ang_base - self.ANGULO_TOTAL / 2 + t * self.ANGULO_TOTAL
+            rad = math.radians(ang)
+
+            # Vector de dirección
+            dx = math.cos(rad)
+            dy = math.sin(rad)
+
+            # Crear proyectil padre
+            proj = ProyectilBoss(
+                x=self.boca_x,
+                y=self.boca_y,
+                dx=dx,
+                dy=dy,
+                daño=self.DAÑO_PADRE,
+                radio=self.RADIO_PADRE,
+                color=(220, 60, 60),
+                color_borde=(255, 180, 180),
+                puede_explotar=True,
+                tiempo_explosion=self.TIEMPO_EXPLOSION,
+                velocidad=self.VELOCIDAD_PADRE
+            )
+            self.padres_activos.append(proj)
+            self.lista_proyectiles.append(proj)
+
+        print(f"[ATAQUE] Proyectiles padre creados después del telegraph")
 
     def render(self, surface: pygame.Surface,
                camera_offset=(0, 0)) -> None:
