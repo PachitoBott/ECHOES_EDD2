@@ -2097,21 +2097,72 @@ class Game:
     def _recibir_estado_p2(self, estado_datos: dict) -> None:
         """
         Paso 5: Recibe y procesa el estado de P2 desde el servidor (cliente).
-        Almacena el estado en remote_players para sincronización.
+        - En cliente: sincroniza vidas a self.player y dispara respawn si es necesario
+        - En servidor: actualiza remote_players para renderizar (no usado normalmente)
         """
+        # Cliente: sincronizar vidas de P2 desde servidor a self.player
+        if self.net and not self.net.es_servidor and self.player:
+            if "p2_vidas" in estado_datos:
+                new_lives = estado_datos["p2_vidas"]
+                old_lives = self.player.lives
+
+                # Detectar cambio de vidas
+                if new_lives != old_lives:
+                    log_game.warning(f"[P2_SYNC] Recibida actualización de vidas: {old_lives} → {new_lives}")
+
+                    # Guardar el valor anterior para detectar respawn
+                    self.player._previous_lives = old_lives
+                    # Actualizar al nuevo valor
+                    self.player.lives = new_lives
+
+                    # Detectar si debe respawnear (impar → par)
+                    should_respawn = (old_lives % 2 == 1) and (new_lives % 2 == 0)
+                    if should_respawn:
+                        log_game.warning(f"[P2_RESPAWN] Respawn detectado: {old_lives}→{new_lives}")
+                        if hasattr(self.player, "respawn"):
+                            self.player.respawn()
+                        else:
+                            max_hp = getattr(self.player, "max_hp", 1)
+                            self.player.hp = max_hp
+                            invuln = getattr(self.player, "respawn_invulnerability", 2.0)
+                            self.player.invulnerable_timer = max(
+                                getattr(self.player, "invulnerable_timer", 0.0), invuln
+                            )
+
+                        # Efecto visual de respawn
+                        room = getattr(self.dungeon, 'current_room', None)
+                        if room and hasattr(room, 'center_px'):
+                            try:
+                                if hasattr(self, 'spawn_effect_manager') and hasattr(self.player, "_animations"):
+                                    idle_sprite = self.player._animations.get("idle")
+                                    if idle_sprite:
+                                        px, py = room.center_px()
+                                        self.spawn_effect_manager.spawn(
+                                            px - 9, py - 12,
+                                            idle_sprite.current_frame() if hasattr(idle_sprite, 'current_frame') else idle_sprite,
+                                            lifetime=0.5,
+                                            num_particles=25
+                                        )
+                            except Exception as e:
+                                log_game.warning(f"Error al crear spawn effect: {e}")
+
+                        # Limpiar proyectiles después de respawn
+                        self.enemy_projectiles.clear()
+                        self.remote_projectiles.clear()
+
+        # Servidor/Cliente: actualizar remote_players (para renderizar P2 remoto si es necesario)
         if not self.remote_players:
             return
-        # Buscar al servidor (P1) en remote_players
         for rol, player_data in self.remote_players.items():
-            # Actualizar los datos de P2 en el estado del jugador remoto (servidor)
             if "p2_vidas" in estado_datos:
                 player_data["p2_vidas"] = estado_datos["p2_vidas"]
             if "p2_oro" in estado_datos:
                 player_data["p2_oro"] = estado_datos["p2_oro"]
             if "p2_invulnerable" in estado_datos:
                 player_data["p2_invulnerable"] = estado_datos["p2_invulnerable"]
-            if "p2_pos" in estado_datos:
-                player_data["p2_pos"] = estado_datos["p2_pos"]
+            if "p2_x" in estado_datos and "p2_y" in estado_datos:
+                player_data["p2_x"] = estado_datos["p2_x"]
+                player_data["p2_y"] = estado_datos["p2_y"]
 
     def _get_player_data_p2(self) -> dict:
         """
@@ -2736,6 +2787,27 @@ class Game:
                 player_invulnerable = getattr(self.player, "is_invulnerable", lambda: False)()
             else:
                 projectile.alive = False
+
+        # --- Daño a P2 por proyectiles remotos (cliente) ---
+        # En cliente: detectar colisiones contra proyectiles remotos sincronizados del servidor
+        if self.net and not self.net.es_servidor and self.remote_projectiles:
+            for remote_proj in self.remote_projectiles[:]:
+                if not remote_proj.alive:
+                    continue
+                if not remote_proj.rect().colliderect(player_rect):
+                    continue
+                if player_invulnerable:
+                    # Ignorar proyectil si estamos invulnerable
+                    continue
+                took_hit = False
+                if hasattr(self.player, "take_damage"):
+                    took_hit = bool(self.player.take_damage(1))
+                if took_hit:
+                    remote_proj.alive = False
+                    player_invulnerable = getattr(self.player, "is_invulnerable", lambda: False)()
+                    log_game.warning(f"[P2_DAMAGE] Proyectil remoto causó daño, vidas={self.player.lives}")
+                else:
+                    remote_proj.alive = False
 
         # --- Manejo de daño para P2 (solo en servidor) ---
         if self.estado_p2 and self.net and self.net.es_servidor:
