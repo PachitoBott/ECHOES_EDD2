@@ -106,6 +106,10 @@ class Player(Entity):
         self._dash_dir = (0.0, -1.0)
         self._last_move_dir = (0.0, -1.0)
 
+        # --- Velocidad heredada para balas (momentum) ---
+        self.vel_x = 0.0  # Velocidad actual X
+        self.vel_y = 0.0  # Velocidad actual Y
+
         # Rastro visual del dash
         self.dash_trail_lifetime = 0.22
         self.dash_trail_interval = 0.02
@@ -234,6 +238,11 @@ class Player(Entity):
             if mag > 0:
                 move_dx /= mag
                 move_dy /= mag
+
+        # Calcular velocidad heredada para balas (antes de mover)
+        # Esta es la velocidad que heredarán los proyectiles disparados
+        self.vel_x = move_dx * speed_scale * self.base_speed
+        self.vel_y = move_dy * speed_scale * self.base_speed
 
         self.move(move_dx * speed_scale, move_dy * speed_scale, dt, room)
 
@@ -486,8 +495,9 @@ class Player(Entity):
         cx = self.x + self.w / 2
         cy = self.y + self.h / 2
 
-        # Disparar con dirección cardinal
-        created = self.weapon.fire((cx, cy), self._shoot_dir_current)
+        # Disparar con dirección cardinal, heredando momentum del movimiento actual
+        created = self.weapon.fire((cx, cy), self._shoot_dir_current,
+                                   player_vel_x=self.vel_x, player_vel_y=self.vel_y)
         if not created:
             return
 
