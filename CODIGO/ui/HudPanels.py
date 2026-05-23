@@ -469,7 +469,7 @@ class HUDPanel:
         # --- Sistema de animación del personaje ---
         self._animaciones: dict = {}
         self._personaje_sprites: dict = {}  # Almacena sprites P2 cuando estén disponibles
-        self._cyborg_idle: pygame.Surface | None = None  # Imagen idle de Cyborg para P2
+        self._animaciones_cyborg: dict = {}  # Animaciones de Cyborg para P2
         self._cargar_animaciones_personaje()
 
         # --- Sistema de iconos de poderes ---
@@ -512,35 +512,27 @@ class HUDPanel:
             self.rect.y = self.MARGIN
 
     def _cargar_animaciones_personaje(self) -> None:
-        """Carga las animaciones del personaje (idle para P1, Cyborg_Idle para P2)."""
-        if self.player_id == 1:
-            # Cargar animaciones de Daniel para P1
-            try:
-                from systems.animation import AnimationManager
+        """Carga las animaciones del personaje (Daniel para P1, Cyborg para P2)."""
+        try:
+            from systems.animation import AnimationManager
+
+            if self.player_id == 1:
+                # Cargar animaciones de Daniel para P1
                 self._animaciones = AnimationManager.load_from_json(
                     "assets/sprites/player/animations.json",
                     "assets/sprites/player"
                 )
-            except Exception as e:
-                print(f"[WARNING] HUDPanel: No se pudieron cargar animaciones: {e}")
-                self._animaciones = {}
-        else:
-            # Cargar animación Cyborg_Idle para P2 (primer frame)
-            try:
-                cyborg_path = "assets/sprites/player2/Cyborg_Idle.png"
-                spritesheet = pygame.image.load(cyborg_path).convert_alpha()
-
-                # Extraer el primer frame del spritesheet (asumiendo 64x64 por frame)
-                frame_width = 64
-                frame_height = 64
-                first_frame = pygame.Surface((frame_width, frame_height), pygame.SRCALPHA)
-                first_frame.blit(spritesheet, (0, 0), pygame.Rect(0, 0, frame_width, frame_height))
-
-                self._cyborg_idle = first_frame
-                print(f"[OK] Cyborg_Idle primer frame cargado desde: {cyborg_path}")
-            except Exception as e:
-                print(f"[WARNING] HUDPanel: No se pudo cargar Cyborg_Idle desde {cyborg_path}: {e}")
-                self._cyborg_idle = None
+            else:
+                # Cargar animaciones de Cyborg para P2
+                self._animaciones_cyborg = AnimationManager.load_from_json(
+                    "assets/sprites/player2/animations.json",
+                    "assets/sprites/player2"
+                )
+                print(f"[OK] Animaciones de Cyborg cargadas")
+        except Exception as e:
+            print(f"[WARNING] HUDPanel: No se pudieron cargar animaciones: {e}")
+            self._animaciones = {}
+            self._animaciones_cyborg = {}
 
     def _cargar_iconos_poderes(self) -> None:
         """Carga los iconos de poderes del spritesheet."""
@@ -552,8 +544,12 @@ class HUDPanel:
 
     def update(self, dt: float) -> None:
         """Actualiza las animaciones del panel (llamar cada frame del juego)."""
-        if "idle" in self._animaciones:
-            self._animaciones["idle"].update(dt)
+        if self.player_id == 1:
+            if "idle" in self._animaciones:
+                self._animaciones["idle"].update(dt)
+        else:
+            if "idle" in self._animaciones_cyborg:
+                self._animaciones_cyborg["idle"].update(dt)
 
     def set_personaje_p2_sprites(self, sprite_dict: dict) -> None:
         """
@@ -683,13 +679,14 @@ class HUDPanel:
         y = int(panel_center_y - SPRITE_SIZE_SCALED // 2 - 30)  # -30px hacia arriba
 
         if es_p2:
-            # Panel P2: mostrar Cyborg_Idle escalado a 128x128
-            if self._cyborg_idle is not None:
-                # Escalar la imagen de cyborg al tamaño estándar
-                scaled_cyborg = pygame.transform.scale(self._cyborg_idle, (SPRITE_SIZE_SCALED, SPRITE_SIZE_SCALED))
-                surface.blit(scaled_cyborg, (x, y))
+            # Panel P2: mostrar animación idle de Cyborg escalada a 128x128
+            if "idle" in self._animaciones_cyborg:
+                frame = self._animaciones_cyborg["idle"].current_frame()
+                # Escalar el frame a 128x128 para coincidir con el jugador
+                scaled_frame = pygame.transform.scale(frame, (SPRITE_SIZE_SCALED, SPRITE_SIZE_SCALED))
+                surface.blit(scaled_frame, (x, y))
             else:
-                # Fallback: placeholder gris si no se pudo cargar la imagen
+                # Placeholder si no hay animaciones cargadas
                 placeholder = pygame.Surface((SPRITE_SIZE_SCALED, SPRITE_SIZE_SCALED))
                 placeholder.fill((100, 100, 100))  # Gris oscuro
                 pygame.draw.rect(placeholder, (150, 150, 150), placeholder.get_rect(), 2)

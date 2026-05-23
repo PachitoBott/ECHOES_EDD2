@@ -1,0 +1,62 @@
+{
+  "frame_width": 64,
+  "frame_height": 64,
+  "animations": {
+    "idle": {
+      "file": "Cyborg_Idle.png",
+      "total_frames": 6,
+      "frame_indices": [0, 1, 2, 3, 4, 5],
+      "fps": 12,
+      "loop": true
+    },
+    "walk": {
+      "file": "Cyborg_Walk.png",
+      "total_frames": 10,
+      "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+      "fps": 18,
+      "loop": true
+    },
+    "run": {
+      "file": "Cyborg_Run.png",
+      "total_frames": 8,
+      "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7],
+      "fps": 24,
+      "loop": true
+    },
+    "pistol_aim": {
+      "file": "Cyborg_PistolAim.png",
+      "total_frames": 5,
+      "frame_indices": [0, 1, 2, 3, 4],
+      "fps": 20,
+      "loop": false
+    },
+    "pistol_aim_run": {
+      "file": "Cyborg_PistolAimRun.png",
+      "total_frames": 8,
+      "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7],
+      "fps": 24,
+      "loop": true
+    },
+    "pistol_aim_run_up": {
+      "file": "Cyborg_PistolAimRunUp.png",
+      "total_frames": 8,
+      "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7],
+      "fps": 24,
+      "loop": true
+    },
+    "pistol_aim_run_down": {
+      "file": "Cyborg_PistolAimRunDown.png",
+      "total_frames": 8,
+      "frame_indices": [0, 1, 2, 3, 4, 5, 6, 7],
+      "fps": 24,
+      "loop": true
+    },
+    "death": {
+      "file": "Cyborg_Death.png",
+      "total_frames": 6,
+      "frame_indices": [0, 1, 2, 3, 4, 5],
+      "fps": 10,
+      "loop": false
+    }
+  }
+}
