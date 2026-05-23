@@ -2114,8 +2114,7 @@ class Game:
     def _recibir_estado_p2(self, estado_datos: dict) -> None:
         """
         Paso 5: Recibe y procesa el estado de P2 desde el servidor (cliente).
-        - En cliente: sincroniza vidas a self.player y dispara respawn si es necesario
-        - En servidor: actualiza remote_players para renderizar (no usado normalmente)
+        En cliente: sincroniza vidas a self.player y dispara respawn usando misma lógica que P1.
         """
         # Cliente: sincronizar vidas de P2 desde servidor a self.player
         if self.net and not self.net.es_servidor and self.player:
@@ -2127,15 +2126,18 @@ class Game:
                 if new_lives != old_lives:
                     log_game.warning(f"[P2_SYNC] Recibida actualización de vidas: {old_lives} → {new_lives}")
 
-                    # Guardar el valor anterior para detectar respawn
+                    # Usar la MISMA lógica que P1: lose_life() y should_respawn()
                     self.player._previous_lives = old_lives
-                    # Actualizar al nuevo valor
                     self.player.lives = new_lives
 
                     # Detectar si debe respawnear (impar → par)
                     should_respawn = (old_lives % 2 == 1) and (new_lives % 2 == 0)
+
                     if should_respawn:
                         log_game.warning(f"[P2_RESPAWN] Respawn detectado: {old_lives}→{new_lives}")
+                        room = getattr(self.dungeon, 'current_room', None)
+
+                        # Ejecutar respawn (MISMA lógica que P1)
                         if hasattr(self.player, "respawn"):
                             self.player.respawn()
                         else:
@@ -2146,35 +2148,37 @@ class Game:
                                 getattr(self.player, "invulnerable_timer", 0.0), invuln
                             )
 
-                        # Efecto visual de respawn
-                        room = getattr(self.dungeon, 'current_room', None)
-                        if room and hasattr(room, 'center_px'):
-                            try:
-                                if hasattr(self, 'spawn_effect_manager') and hasattr(self.player, "_animations"):
-                                    idle_sprite = self.player._animations.get("idle")
-                                    if idle_sprite:
-                                        px, py = room.center_px()
-                                        self.spawn_effect_manager.spawn(
-                                            px - 9, py - 12,
-                                            idle_sprite.current_frame() if hasattr(idle_sprite, 'current_frame') else idle_sprite,
-                                            lifetime=0.5,
-                                            num_particles=25
-                                        )
-                            except Exception as e:
-                                log_game.warning(f"Error al crear spawn effect: {e}")
+                        # Reset posición al centro (MISMA lógica que P1)
+                        if room and hasattr(room, "center_px"):
+                            px, py = room.center_px()
+                            self.player.x = px - self.player.w / 2
+                            self.player.y = py - self.player.h / 2
 
-                        # Limpiar proyectiles después de respawn
+                        # Efecto visual de spawn (MISMA lógica que P1)
+                        try:
+                            if hasattr(self.player, "_animations") and "idle" in self.player._animations:
+                                idle_sprite = self.player._animations["idle"].current_frame()
+                                self.spawn_effect_manager.spawn(
+                                    self.player.x,
+                                    self.player.y,
+                                    idle_sprite,
+                                    lifetime=0.5,
+                                    num_particles=25
+                                )
+                        except Exception as e:
+                            log_game.warning(f"Error al iniciar spawn effect: {e}")
+
+                        self.projectiles.clear()
                         self.enemy_projectiles.clear()
-                        self.remote_projectiles.clear()
+                        self.door_cooldown = 0.25
 
                     # Chequear si P2 llegó a 0 vidas (game over)
                     if new_lives <= 0:
                         log_game.warning("[P2_GAME_OVER] P2 llegó a 0 vidas - game over compartido")
-                        # El servidor ya envió el evento, pero el cliente también lo procesa aquí
                         self._handle_remote_game_over("P2")
                         return
 
-        # Servidor/Cliente: actualizar remote_players (para renderizar P2 remoto si es necesario)
+        # Servidor/Cliente: actualizar remote_players para renderizar P2 remoto en servidor
         if not self.remote_players:
             return
         for rol, player_data in self.remote_players.items():
@@ -2184,9 +2188,6 @@ class Game:
                 player_data["p2_oro"] = estado_datos["p2_oro"]
             if "p2_invulnerable" in estado_datos:
                 player_data["p2_invulnerable"] = estado_datos["p2_invulnerable"]
-            if "p2_x" in estado_datos and "p2_y" in estado_datos:
-                player_data["p2_x"] = estado_datos["p2_x"]
-                player_data["p2_y"] = estado_datos["p2_y"]
 
     def _get_player_data_p2(self) -> dict:
         """
