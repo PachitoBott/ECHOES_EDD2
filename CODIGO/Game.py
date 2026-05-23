@@ -300,19 +300,31 @@ class Game:
             custom_y=895   # Same height as P1
         )
 
-        # --- Cargar animaciones del servidor (FutureSoldier) para jugador remoto ---
-        # En modo cliente, el jugador remoto es el servidor (FutureSoldier)
+        # --- Cargar animaciones de ambos jugadores para renderizado remoto ---
+        # Servidor necesita animar al jugador remoto (cliente = Cyborg/player2)
+        # Cliente necesita animar al jugador remoto (servidor = FutureSoldier/player)
         self._server_player_animations: dict = {}
+        self._client_ally_animations: dict = {}
+
         try:
             from systems.animation import AnimationManager
+            # Siempre cargar animaciones de FutureSoldier (para cliente cuando es remoto)
             self._server_player_animations = AnimationManager.load_from_json(
                 "assets/sprites/player/animations.json",
                 "assets/sprites/player"
             )
-            log_game.info("[OK] Animaciones del servidor (FutureSoldier) cargadas para jugador remoto")
+            log_game.info("[OK] Animaciones del servidor (FutureSoldier) cargadas")
+
+            # Siempre cargar animaciones de Cyborg (para servidor cuando es remoto)
+            self._client_ally_animations = AnimationManager.load_from_json(
+                "assets/sprites/player2/animations.json",
+                "assets/sprites/player2"
+            )
+            log_game.info("[OK] Animaciones del cliente aliado (Cyborg) cargadas")
         except Exception as e:
-            log_game.warning(f"[WARNING] No se pudieron cargar animaciones del servidor: {e}")
+            log_game.warning(f"[WARNING] No se pudieron cargar animaciones de jugadores remotos: {e}")
             self._server_player_animations = {}
+            self._client_ally_animations = {}
 
         # ---------- Recursos ----------
         self.tileset_manager = TilesetManager()
@@ -1839,6 +1851,8 @@ class Game:
         # --- Actualizar animaciones de Cyborg para jugador remoto ---
         if "idle" in self._server_player_animations:
             self._server_player_animations["idle"].update(dt)
+        if "idle" in self._client_ally_animations:
+            self._client_ally_animations["idle"].update(dt)
 
         # --- Actualizar fondo matrix ---
         self.matrix_bg.update(dt)
@@ -3518,15 +3532,20 @@ class Game:
 
             sala_actual = (self.dungeon.i, self.dungeon.j)
             if sala_remota == sala_actual:
-                # Renderizar sprite del servidor (FutureSoldier) con animación idle
-                if "idle" in self._server_player_animations:
-                    frame = self._server_player_animations["idle"].current_frame()
-                    # Escalar el frame a 32x32 para coincidir con el tamaño esperado
-                    scaled_frame = pygame.transform.scale(frame, (32, 32))
-                    self.world.blit(scaled_frame, (int(x), int(y)))
+                # Seleccionar animaciones según rol del remoto
+                # En servidor: remoto es cliente (ALIADO) = Cyborg
+                # En cliente: remoto es servidor (VICTIMA) = FutureSoldier
+                is_server = self.net.es_servidor if self.net else False
+                animations = self._client_ally_animations if is_server else self._server_player_animations
+
+                # Renderizar sprite con animación idle
+                if "idle" in animations:
+                    frame = animations["idle"].current_frame()
+                    # Usar tamaño original (64x64) en lugar de rescalar a 32x32
+                    self.world.blit(frame, (int(x), int(y)))
                 else:
                     # Fallback: cubo negro si no hay animaciones
-                    pygame.draw.rect(self.world, (0, 0, 0), (int(x), int(y), 32, 32), 2)
+                    pygame.draw.rect(self.world, (0, 0, 0), (int(x), int(y), 64, 64), 2)
 
         self.projectiles.draw(self.world)
         self.enemy_projectiles.draw(self.world)
