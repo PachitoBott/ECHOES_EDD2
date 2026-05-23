@@ -538,6 +538,18 @@ class Player(Entity):
             created.append(extra)
 
         self._start_shoot_animation()
+
+        # --- Sonido de disparo ---
+        try:
+            from pathlib import Path
+            gun_sound_path = Path(__file__).parent.parent / "assets" / "audio" / "default_gun_sfx.mp3"
+            if gun_sound_path.exists():
+                sound = pygame.mixer.Sound(str(gun_sound_path))
+                sound.set_volume(0.3)
+                sound.play()
+        except Exception:
+            pass
+
         adder = getattr(out_projectiles, "add", None)
         for bullet in created:
             if callable(adder):

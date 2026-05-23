@@ -53,6 +53,7 @@ from systems.power_effects import power_effect_manager
 from systems.spawn_effect import SpawnEffectManager
 from systems.minigame_papers import MinijuegoPapers, posts_pool
 from systems.music_manager import music_manager
+from systems.music_manager import music_manager
 
 
 class RemoteProjectile:
@@ -377,6 +378,7 @@ class Game:
         self._zones_cinematics_shown: set = set()  # zonas cuya cinemática ya se mostró esta run
         self._boss_defeat_cinematics_queued: bool = False  # flag para cinematicas post-boss
         self._cinematics_queue: list = []  # cola de cinematics para reproducir en secuencia
+        self._should_return_to_menu: bool = False  # Flag para volver al menú después de cinemática final
 
         # Banner de zona (estilo Binding of Isaac)
         self._zone_banner_text: str = ""
@@ -1729,6 +1731,14 @@ class Game:
     def _update(self, dt: float, events: list) -> None:
         # Guardar dt para acceso en métodos de sincronización
         self.dt = dt
+
+        # --- Chequear si debe volver al menú principal (después de cinemática final) ---
+        if self._should_return_to_menu:
+            self._should_return_to_menu = False
+            music_manager.detener(fade_out_ms=500)
+            if not self._open_start_menu():
+                self.running = False
+            return
 
         # --- Networking: procesar eventos de red y enviar estado ---
         if self.net:
@@ -3223,6 +3233,11 @@ class Game:
         # Limpiar cola anterior y agregar nuevas cinematics
         self._cinematics_queue = cinematics_list[1:]  # Todas excepto la primera
 
+        # --- Reproducir música de cinemática final ---
+        music_manager.detener(fade_out_ms=500)
+        music_manager.set_volumen(0.7)
+        music_manager.reproducir("cinematica_intro", loop=True, fade_in_ms=800)
+
         # Crear callback para procesar la cola
         def process_queue_callback():
             if self._cinematics_queue:
@@ -3238,9 +3253,15 @@ class Game:
             return
 
         next_cinematic = self._cinematics_queue.pop(0)
+        is_last = len(self._cinematics_queue) == 0  # Verificar si es la última
 
-        # Crear callback para procesar el resto de la cola
+        # Crear callback para procesar el resto de la cola o ir al menú
         def process_queue_callback():
+            if is_last:
+                # --- Última cinemática: marcar para ir al menú principal ---
+                self._should_return_to_menu = True
+                return
+
             if self._cinematics_queue:
                 self._play_next_cinematic_from_queue()
 

@@ -752,10 +752,12 @@ class ProfesorIbarra:
         if self.pregunta_respondida:
             # Ya respondió esta pregunta, ir directamente a tienda
             self.estado = self.TIENDA
+            self._play_professor_sound()
         else:
             # Primera vez o nueva pregunta: seleccionar pregunta aleatoria
             self._seleccionar_pregunta_aleatoria()
             self.estado = self.PREGUNTA
+            self._play_professor_sound()
 
     def responder(self, opcion_idx: int, player) -> None:
         """Registra la respuesta, otorga recompensa y cambia a FEEDBACK."""
@@ -804,6 +806,21 @@ class ProfesorIbarra:
         self._msg_timer = 0.0
         # Resetear para permitir nueva pregunta en próxima interacción
         self.pregunta_respondida = False
+
+    def _play_professor_sound(self) -> None:
+        """Reproduce un sonido aleatorio del profesor al hablar."""
+        try:
+            import random
+            from pathlib import Path
+            # Elegir uno de los tres sonidos aleatoriamente
+            sfx_num = random.randint(0, 2)
+            sound_path = Path(__file__).parent.parent / "assets" / "audio" / f"shopkeeper_sfx_{sfx_num}.mp3"
+            if sound_path.exists():
+                sound = pygame.mixer.Sound(str(sound_path))
+                sound.set_volume(0.5)
+                sound.play()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Manejo de eventos de la tienda carousel
