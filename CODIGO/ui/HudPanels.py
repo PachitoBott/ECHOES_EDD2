@@ -469,6 +469,7 @@ class HUDPanel:
         # --- Sistema de animación del personaje ---
         self._animaciones: dict = {}
         self._personaje_sprites: dict = {}  # Almacena sprites P2 cuando estén disponibles
+        self._cyborg_idle: pygame.Surface | None = None  # Imagen idle de Cyborg para P2
         self._cargar_animaciones_personaje()
 
         # --- Sistema de iconos de poderes ---
@@ -511,17 +512,26 @@ class HUDPanel:
             self.rect.y = self.MARGIN
 
     def _cargar_animaciones_personaje(self) -> None:
-        """Carga las animaciones del personaje (idle para P1, placeholder para P2)."""
-        try:
-            from systems.animation import AnimationManager
-            # Cargar animaciones de Daniel
-            self._animaciones = AnimationManager.load_from_json(
-                "assets/sprites/player/animations.json",
-                "assets/sprites/player"
-            )
-        except Exception as e:
-            print(f"[WARNING] HUDPanel: No se pudieron cargar animaciones: {e}")
-            self._animaciones = {}
+        """Carga las animaciones del personaje (idle para P1, Cyborg_Idle para P2)."""
+        if self.player_id == 1:
+            # Cargar animaciones de Daniel para P1
+            try:
+                from systems.animation import AnimationManager
+                self._animaciones = AnimationManager.load_from_json(
+                    "assets/sprites/player/animations.json",
+                    "assets/sprites/player"
+                )
+            except Exception as e:
+                print(f"[WARNING] HUDPanel: No se pudieron cargar animaciones: {e}")
+                self._animaciones = {}
+        else:
+            # Cargar imagen Cyborg_Idle para P2
+            try:
+                cyborg_path = "CODIGO/assets/sprites/player2/Cyborg_Idle.png"
+                self._cyborg_idle = pygame.image.load(cyborg_path).convert_alpha()
+            except Exception as e:
+                print(f"[WARNING] HUDPanel: No se pudo cargar Cyborg_Idle: {e}")
+                self._cyborg_idle = None
 
     def _cargar_iconos_poderes(self) -> None:
         """Carga los iconos de poderes del spritesheet."""
@@ -664,19 +674,25 @@ class HUDPanel:
         y = int(panel_center_y - SPRITE_SIZE_SCALED // 2 - 30)  # -30px hacia arriba
 
         if es_p2:
-            # Panel P2: mostrar placeholder hasta que lleguen sprites
-            placeholder = pygame.Surface((SPRITE_SIZE_SCALED, SPRITE_SIZE_SCALED))
-            placeholder.fill((100, 100, 100))  # Gris oscuro
-            pygame.draw.rect(placeholder, (150, 150, 150), placeholder.get_rect(), 2)
-            # Texto "P2"
-            try:
-                font = pygame.font.SysFont(None, 48)
-                text = font.render("P2", True, (200, 200, 200))
-                text_rect = text.get_rect(center=(SPRITE_SIZE_SCALED // 2, SPRITE_SIZE_SCALED // 2))
-                placeholder.blit(text, text_rect)
-            except:
-                pass
-            surface.blit(placeholder, (x, y))
+            # Panel P2: mostrar Cyborg_Idle escalado a 128x128
+            if self._cyborg_idle is not None:
+                # Escalar la imagen de cyborg al tamaño estándar
+                scaled_cyborg = pygame.transform.scale(self._cyborg_idle, (SPRITE_SIZE_SCALED, SPRITE_SIZE_SCALED))
+                surface.blit(scaled_cyborg, (x, y))
+            else:
+                # Fallback: placeholder gris si no se pudo cargar la imagen
+                placeholder = pygame.Surface((SPRITE_SIZE_SCALED, SPRITE_SIZE_SCALED))
+                placeholder.fill((100, 100, 100))  # Gris oscuro
+                pygame.draw.rect(placeholder, (150, 150, 150), placeholder.get_rect(), 2)
+                # Texto "P2"
+                try:
+                    font = pygame.font.SysFont(None, 48)
+                    text = font.render("P2", True, (200, 200, 200))
+                    text_rect = text.get_rect(center=(SPRITE_SIZE_SCALED // 2, SPRITE_SIZE_SCALED // 2))
+                    placeholder.blit(text, text_rect)
+                except:
+                    pass
+                surface.blit(placeholder, (x, y))
         else:
             # Panel P1: mostrar animación de Daniel (idle) escalada a 128x128
             if "idle" in self._animaciones:
