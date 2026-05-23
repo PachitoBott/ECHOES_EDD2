@@ -390,24 +390,19 @@ class Game:
         self.remote_enemies: dict = {}  # Almacena enemigos remotos sincronizados del servidor
         self._send_state_interval = 0.1  # Enviar estado cada 100ms (~10 Hz)
         self._last_state_send = 0.0
+
+        # IMPORTANTE: No iniciar NetworkManager aquí (puerto 5555 está siendo usado
+        # por ServidorMenu/ClienteMenu). Se iniciará DESPUÉS del menú sincronizado.
         if self._net_mode == "server":
             self.net = NetworkManager.como_servidor(port=self._net_port, seed=None)
-            if not self.net.iniciar():
-                log_game.error("[ERROR] No se pudo iniciar servidor de red")
-                self.running = False
-            else:
-                log_game.info(f"[OK] Servidor escuchando en puerto {self._net_port}")
+            log_game.info(f"[NET] NetworkManager creado como SERVIDOR (iniciará después del menú)")
         elif self._net_mode == "client":
             self.net = NetworkManager.como_cliente(
                 host=self._net_host,
                 port=self._net_port,
                 rol=self._net_role,
             )
-            if not self.net.iniciar():
-                log_game.error(f"[ERROR] No se pudo conectar a {self._net_host}:{self._net_port}")
-                self.running = False
-            else:
-                log_game.info(f"[OK] Conectado al servidor como {self._net_role}")
+            log_game.info(f"[NET] NetworkManager creado como CLIENTE (iniciará después del menú)")
 
         # ---------- Herramientas de desarrollo ----------
         # Consola de debug (F1): siempre creada, solo visible en debug_mode
@@ -572,6 +567,23 @@ class Game:
         # que NetworkManager intente usarlo (evita timeout)
         import time as time_module
         time_module.sleep(0.5)
+
+        # ================================================================
+        # INICIAR NetworkManager AHORA que puerto 5555 está libre
+        # (antes estaba siendo usado por ServidorMenu/ClienteMenu)
+        # ================================================================
+        if self.net and not self.net._iniciado:
+            log_game.info("[NET] Iniciando NetworkManager después de cerrar menú...")
+            if not self.net.iniciar():
+                log_game.error("[ERROR] No se pudo iniciar NetworkManager del juego")
+                # Continuar de todas formas (juego offline)
+                self.net = None
+            else:
+                log_game.info("[OK] NetworkManager del juego iniciado correctamente")
+                if self.net.es_servidor:
+                    log_game.info(f"[OK] Servidor escuchando en puerto {self._net_port}")
+                else:
+                    log_game.info(f"[OK] Cliente conectado como {self._net_role}")
 
         # Resetear el pool de posts para el nuevo run
         posts_pool.reset_run()
