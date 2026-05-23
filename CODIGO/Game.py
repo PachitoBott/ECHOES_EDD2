@@ -3027,6 +3027,7 @@ class Game:
         # Reducir HP actual
         self.estado_p2.hp = max(0, self.estado_p2.hp - amount)
         self.estado_p2.timer_invulnerable = self.estado_p2.TIEMPO_INVULNERABLE
+        log_game.warning(f"[P2] Daño recibido: {amount}, HP ahora: {self.estado_p2.hp}, Vidas: {self.estado_p2.lives}")
         # Si HP llega a 0, perder una vida
         if self.estado_p2.hp <= 0:
             self._handle_p2_death()
@@ -3037,25 +3038,31 @@ class Game:
         if not self.estado_p2:
             return
 
-        # Registrar vidas previas para detectar corazón completo
+        log_game.warning(f"[P2] Muerte: lives={self.estado_p2.lives}, previous={self.estado_p2._previous_lives}")
+
+        # Guardar vidas ANTES de decrementar (para detect corazón completo)
         prev_lives = self.estado_p2._previous_lives
+        self.estado_p2._previous_lives = self.estado_p2.lives
 
         # Perder una vida
         self.estado_p2.lives = max(0, self.estado_p2.lives - 1)
-        self.estado_p2._previous_lives = prev_lives
 
         if self.estado_p2.lives <= 0:
             self.estado_p2.vivo = False
+            log_game.warning("[P2] GAME OVER - sin vidas restantes")
             return
 
         # Detectar si se perdió un CORAZÓN COMPLETO (impar → par)
-        # Ej: 5→4, 3→2, 1→0
-        should_respawn = (prev_lives % 2 == 1) and (self.estado_p2.lives % 2 == 0)
+        # Con 10 vidas: 10→9 no, 9→8 sí, 8→7 no, 7→6 sí, etc.
+        should_respawn = (self.estado_p2._previous_lives % 2 == 1) and (self.estado_p2.lives % 2 == 0)
+
+        log_game.warning(f"[P2] After death: lives={self.estado_p2.lives}, should_respawn={should_respawn}")
 
         if should_respawn:
             # Restaurar HP y dar invulnerabilidad
             self.estado_p2.hp = self.estado_p2.max_hp
             self.estado_p2.timer_invulnerable = self.estado_p2.respawn_invulnerability
+
             # Reaparición en el centro de la sala
             if hasattr(self.dungeon, 'current_room'):
                 room = self.dungeon.current_room
@@ -3063,12 +3070,11 @@ class Game:
                     px, py = room.center_px()
                     self.estado_p2.x = px - 9  # Centrado (PLAYER_HITBOX_SIZE[0] / 2)
                     self.estado_p2.y = py - 12  # Centrado (PLAYER_HITBOX_SIZE[1] / 2)
+                    log_game.warning(f"[P2] RESPAWN en ({self.estado_p2.x:.0f}, {self.estado_p2.y:.0f})")
         else:
             # No es corazón completo, solo restaurar HP para siguiente daño
             self.estado_p2.hp = self.estado_p2.max_hp
-
-        # Actualizar previous_lives para el siguiente ciclo
-        self.estado_p2._previous_lives = self.estado_p2.lives
+            log_game.warning(f"[P2] HP restaurado sin respawn")
 
     def _handle_player_death(self, room) -> None:
         log_player.warning("Jugador murió — lives=%s", getattr(self.player, "lives", "?"))
