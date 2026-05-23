@@ -217,6 +217,7 @@ class Game:
         port: int = 5555,
         host: str = "127.0.0.1",
         role: str = "victim",
+        skip_intro: bool = False,
     ) -> None:
         pygame.init()
         self.cfg = cfg
@@ -225,6 +226,7 @@ class Game:
         self._net_port = port
         self._net_host = host
         self._net_role = role
+        self._skip_intro = skip_intro
 
         # ---------- Ventana ----------
         self.screen = pygame.display.set_mode(
@@ -539,6 +541,22 @@ class Game:
         self._finalize_run_statistics(finalize_reason)
         self._stats_pending_reason = None
 
+        # ================================================================
+        # Cerrar conexiones del menú para liberar puerto 5555
+        # (NetworkManager del juego también usa 5555)
+        # ================================================================
+        if hasattr(self, '_servidor_menu') and self._servidor_menu:
+            self._servidor_menu.cerrar()
+            log_game.info("[OK] Servidor del menú cerrado")
+        if hasattr(self, '_cliente_menu') and self._cliente_menu:
+            self._cliente_menu.cerrar()
+            log_game.info("[OK] Cliente del menú cerrado")
+
+        # Esperar a que el puerto se libere completamente antes de
+        # que NetworkManager intente usarlo (evita timeout)
+        import time as time_module
+        time_module.sleep(0.5)
+
         # Resetear el pool de posts para el nuevo run
         posts_pool.reset_run()
 
@@ -816,6 +834,12 @@ class Game:
         # Net manager para detectar si hay cliente conectado
         if self.net:
             start_menu.set_net_manager(self.net)
+
+        # Pasar referencias del servidor/cliente del menú
+        if hasattr(self, '_servidor_menu') and self._servidor_menu:
+            start_menu.set_servidor_menu(self._servidor_menu)
+        if hasattr(self, '_cliente_menu') and self._cliente_menu:
+            start_menu.set_cliente_menu(self._cliente_menu)
 
         # Player (si ya existe de una sesión anterior)
         player_para_lobby = None
@@ -1685,7 +1709,9 @@ class Game:
         # --- Trigger intro cinemática en primer frame ---
         if not self._intro_played:
             self._intro_played = True
-            self.cinematics.reproducir("intro")
+            # [FEATURE] Skip intro si se especificó --skip-intro
+            if not self._skip_intro:
+                self.cinematics.reproducir("intro")
             return
 
         room = self.dungeon.current_room
