@@ -1166,6 +1166,16 @@ class Game:
             if self.net and not self.net.es_servidor:
                 self._handle_transicion_completada(ev)
 
+        elif ev.tipo == "p1_game_over":
+            # P1 murió - ambos jugadores pierden
+            log_game.warning("[GAME_OVER] Recibido evento: P1 MURIÓ")
+            self._handle_remote_game_over("P1")
+
+        elif ev.tipo == "p2_game_over":
+            # P2 murió - ambos jugadores pierden
+            log_game.warning("[GAME_OVER] Recibido evento: P2 MURIÓ")
+            self._handle_remote_game_over("P2")
+
         else:
             log_net.debug(f"Evento de red no manejado: {ev.tipo}")
 
@@ -3112,7 +3122,7 @@ class Game:
         if not self.estado_p2:
             return
 
-        log_game.warning(f"[P2] Muerte: lives={self.estado_p2.lives}, previous={self.estado_p2._previous_lives}")
+        log_game.warning(f"[P2_DEATH] HP se agotó: lives={self.estado_p2.lives}, previous={self.estado_p2._previous_lives}")
 
         # Guardar vidas ANTES de decrementar (para detect corazón completo)
         prev_lives = self.estado_p2._previous_lives
@@ -3120,17 +3130,22 @@ class Game:
 
         # Perder una vida
         self.estado_p2.lives = max(0, self.estado_p2.lives - 1)
+        log_game.warning(f"[P2_DEATH] Vidas decrementadas: {prev_lives} → {self.estado_p2.lives}")
 
         if self.estado_p2.lives <= 0:
             self.estado_p2.vivo = False
-            log_game.warning("[P2] GAME OVER - sin vidas restantes")
+            log_game.warning("[P2_DEATH] *** GAME OVER - P2 MUERE (0 vidas) ***")
+            # Notificar al cliente que P2 murió
+            if self.net and self.net.es_servidor:
+                from network.protocol import msg_evento
+                self.net.enviar(msg_evento("p2_game_over", {}))
             return
 
         # Detectar si se perdió un CORAZÓN COMPLETO (impar → par)
         # Con 10 vidas: 10→9 no, 9→8 sí, 8→7 no, 7→6 sí, etc.
         should_respawn = (self.estado_p2._previous_lives % 2 == 1) and (self.estado_p2.lives % 2 == 0)
 
-        log_game.warning(f"[P2] After death: lives={self.estado_p2.lives}, should_respawn={should_respawn}")
+        log_game.warning(f"[P2_RESPAWN] Lógica: {self.estado_p2._previous_lives}%2={self.estado_p2._previous_lives % 2}, {self.estado_p2.lives}%2={self.estado_p2.lives % 2}, should_respawn={should_respawn}")
 
         if should_respawn:
             # Restaurar HP y dar invulnerabilidad
@@ -3233,6 +3248,14 @@ class Game:
                 self.enemy_projectiles.clear()
             return
 
+        # P1 murió (sin vidas)
+        log_game.warning("[P1_DEATH] *** GAME OVER - P1 MUERE (0 vidas) ***")
+
+        # Notificar al otro jugador que P1 murió
+        if self.net:
+            from network.protocol import msg_evento
+            self.net.enviar(msg_evento("p1_game_over", {}))
+
         summary = self._collect_run_summary()
         self._record_stats_death()
         self._finalize_run_statistics("player_death")
@@ -3253,6 +3276,45 @@ class Game:
 
         # Cualquier otra acción reinicia la partida con nueva seed.
         self.start_new_run(seed=None)
+
+    def _handle_remote_game_over(self, quien_murio: str) -> None:
+        """
+        Manejador para cuando el otro jugador muere.
+        Ambos jugadores ven la pantalla de game over.
+        """
+        log_game.warning(f"[GAME_OVER] {quien_murio} murió - mostrando game over para ambos jugadores")
+
+        summary = self._collect_run_summary()
+        self._record_stats_death()
+        self._finalize_run_statistics("remote_player_death")
+
+        # --- Música: detener música al morir ---
+        music_manager.detener(fade_out_ms=1500)
+
+        # Mostrar pantalla de game over con mensaje que indica quién murió
+        action = self._show_game_over_screen_remote(summary, quien_murio)
+
+        if action == "quit":
+            self.running = False
+            return
+
+        if action == "main_menu":
+            if not self._open_start_menu():
+                self.running = False
+            return
+
+        # Reiniciar la partida con nueva seed
+        self.start_new_run(seed=None)
+
+    def _show_game_over_screen_remote(self, summary: dict[str, int], quien_murio: str) -> str:
+        """
+        Muestra pantalla de game over cuando el otro jugador muere.
+        """
+        pygame.mouse.set_visible(True)
+        background = self.screen.copy()
+        game_over = GameOverScreen(self.screen)
+        action = game_over.run(summary, background=background)
+        return action
 
     def _record_stats_death(self) -> None:
         try:
