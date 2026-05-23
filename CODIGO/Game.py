@@ -689,6 +689,13 @@ class Game:
             self.player.reset_loadout()
         setattr(self.player, "gold", 0)
 
+        # Inicializar estado_p2 en el servidor (cuando hay cliente conectado)
+        if self.net and self.net.es_servidor:
+            self.estado_p2 = EstadoJugador2()
+            self.estado_p2.x = spawn_x
+            self.estado_p2.y = spawn_y
+            log_game.info(f"[P2] Estado inicializado en servidor: pos=({spawn_x:.0f}, {spawn_y:.0f})")
+
         # Almacenar referencia de player en el menú para la próxima vez que se abra
         # (El menú será recreado la próxima vez que se abre _open_start_menu)
         # Por ahora solo guardamos la referencia en self para usarla después
@@ -1071,6 +1078,11 @@ class Game:
                 ev.datos["posicion_valida"] = True
                 self.remote_players[origen] = ev.datos
                 log_game.debug(f"[ESTADO_REMOTO] {origen} está en sala {sala_remota}")
+
+                # SERVIDOR: Actualizar posición de P2 desde posición del cliente remoto
+                if self.net and self.net.es_servidor and self.estado_p2:
+                    self.estado_p2.x = float(pos_data[0])
+                    self.estado_p2.y = float(pos_data[1])
 
                 # Paso 5: Procesar estado de P2 si está incluido en el mensaje
                 if "p2_vidas" in ev.datos or "p2_oro" in ev.datos:
@@ -2722,7 +2734,7 @@ class Game:
 
         # --- Manejo de daño para P2 (solo en servidor) ---
         if self.estado_p2 and self.net and self.net.es_servidor:
-            p2_invulnerable = self.estado_p2.invulnerable and self.estado_p2.timer_invulnerable > 0.0
+            p2_invulnerable = self.estado_p2.timer_invulnerable > 0.0
             p2_rect = self._get_p2_rect()
 
             # Daño por contacto con enemigos
