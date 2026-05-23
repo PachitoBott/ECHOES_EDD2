@@ -2076,6 +2076,13 @@ class Game:
         player_died = self._handle_collisions(room)
         if player_died:
             return
+
+        # Chequear si P2 murió (en servidor)
+        if self.estado_p2 and self.net and self.net.es_servidor and not self.estado_p2.vivo:
+            log_game.warning("[GAME_OVER] P2 murió - mostrando game over para ambos jugadores")
+            self._handle_remote_game_over("P2")
+            return
+
         self._update_pickups(dt, room)
         self._handle_room_transition(room)
         self._update_shop(events)
@@ -2159,6 +2166,13 @@ class Game:
                         # Limpiar proyectiles después de respawn
                         self.enemy_projectiles.clear()
                         self.remote_projectiles.clear()
+
+                    # Chequear si P2 llegó a 0 vidas (game over)
+                    if new_lives <= 0:
+                        log_game.warning("[P2_GAME_OVER] P2 llegó a 0 vidas - game over compartido")
+                        # El servidor ya envió el evento, pero el cliente también lo procesa aquí
+                        self._handle_remote_game_over("P2")
+                        return
 
         # Servidor/Cliente: actualizar remote_players (para renderizar P2 remoto si es necesario)
         if not self.remote_players:
