@@ -707,7 +707,8 @@ class Boss:
             ataque = AtaqueFanout(
                 boca_x, boca_y,
                 jugador_objetivo,
-                self.proyectiles
+                self.proyectiles,
+                sound_manager=self.sound_manager
             )
             # Paso 6: Cambiar a animación de fanout
             self._set_animacion("fanout")
@@ -1057,18 +1058,20 @@ class AtaqueFanout(AtaqueBoss):
     TELEGRAPH = 0.3  # segundos de aviso visual ANTES de disparar (Paso 7)
 
     def __init__(self, boca_x: float, boca_y: float,
-                 jugador, lista_proyectiles: list):
+                 jugador, lista_proyectiles: list, sound_manager=None):
         """
         Args:
             boca_x, boca_y: Posición donde se generan los proyectiles
             jugador: Jugador objetivo (para calcular ángulo base)
             lista_proyectiles: Lista donde se añaden los proyectiles generados
+            sound_manager: Gestor de sonidos del boss (opcional)
         """
         super().__init__()
         self.boca_x = boca_x
         self.boca_y = boca_y
         self.jugador = jugador
         self.lista_proyectiles = lista_proyectiles
+        self.sound_manager = sound_manager
         self.padres_activos = []
 
         # Fase de telegraph (Paso 7)
@@ -1112,7 +1115,12 @@ class AtaqueFanout(AtaqueBoss):
         """
         Crea 4 proyectiles hijo en forma de cruz (cardinal).
         Se disparan desde la posición del padre en el momento de explosión.
+        Reproduce sonido de proyectil al dividirse.
         """
+        # Reproducir sonido de proyectil dividiéndose
+        if self.sound_manager:
+            self.sound_manager.reproducir_sonido_proyectil()
+
         # Direcciones cardinales: arriba, abajo, izquierda, derecha
         direcciones = [
             (0, -1),  # arriba
