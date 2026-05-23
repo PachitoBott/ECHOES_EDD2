@@ -2132,6 +2132,12 @@ class Game:
 
                     # Detectar si debe respawnear (impar → par)
                     should_respawn = (old_lives % 2 == 1) and (new_lives % 2 == 0)
+                    log_player.warning(f"[P2_RESPAWN_CHECK] prev={old_lives}, curr={new_lives}, should_respawn={should_respawn}")
+
+                    # Validación adicional
+                    if should_respawn and not ((old_lives % 2 == 1) and (new_lives % 2 == 0)):
+                        log_player.warning(f"[P2_RESPAWN_ERROR] should_respawn=True pero lógica no coincide! Forzando False")
+                        should_respawn = False
 
                     if should_respawn:
                         log_game.warning(f"[P2_RESPAWN] Respawn detectado: {old_lives}→{new_lives}")
@@ -3206,6 +3212,16 @@ class Game:
             # Check if a complete corazón was lost (should_respawn)
             if hasattr(self.player, "should_respawn"):
                 should_do_respawn = bool(self.player.should_respawn())
+                # Verificación adicional: solo respawn si fue de impar a par
+                prev = getattr(self.player, "_previous_lives", 0)
+                curr = self.player.lives
+                is_heart_lost = (prev % 2 == 1) and (curr % 2 == 0)
+                log_player.warning(f"[RESPAWN_CHECK] prev={prev}, curr={curr}, should_respawn={should_do_respawn}, is_heart_lost={is_heart_lost}")
+
+                # Validación: solo respawn si la lógica es correcta
+                if should_do_respawn and not is_heart_lost:
+                    log_player.warning(f"[RESPAWN_ERROR] should_respawn=True pero no se perdió corazón! Forzando False")
+                    should_do_respawn = False
 
             # ONLY respawn and reset position if a complete corazón was lost
             if should_do_respawn:
