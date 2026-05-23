@@ -377,6 +377,25 @@ class StartMenu:
                 # Si está "principal", "lobby", etc., continuar normalmente
 
             # ================================================================
+            # PROCESAR MENSAJES DE RED DEL CLIENTE
+            # ================================================================
+            if self.cliente_menu:
+                try:
+                    self.cliente_menu.procesar_mensajes_pendientes()
+
+                    # Si el cliente recibió START_GAME del servidor, transicionar al juego
+                    if self.cliente_menu.iniciar_juego:
+                        print(f"[MENU CLIENT] Detectado START_GAME, iniciando juego...")
+                        self.seed_text = str(self.cliente_menu.seed_juego)
+                        self.modo_coop_solicitado = True
+                        self._start_requested = True
+                        running = False
+                except Exception as e:
+                    print(f"[MENU] Error procesando mensajes cliente: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            # ================================================================
             # ACTUALIZAR LOBBY
             # ================================================================
             if self.lobby:
