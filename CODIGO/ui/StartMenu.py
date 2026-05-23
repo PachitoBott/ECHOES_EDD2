@@ -341,15 +341,22 @@ class StartMenu:
                 # Procesar mensajes del servidor
                 self.cliente_menu.procesar_mensajes_pendientes()
 
-                # Si el servidor ordenó iniciar el juego
-                if self.cliente_menu.iniciar_juego:
-                    self.cliente_menu.iniciar_juego = False
+                # Si el servidor ordenó iniciar el juego (thread-safe con lock)
+                debe_iniciar = False
+                seed_servidor = None
+                with self.cliente_menu.lock:
+                    debe_iniciar = self.cliente_menu.iniciar_juego
+                    seed_servidor = self.cliente_menu.seed_juego
+                    if debe_iniciar:
+                        self.cliente_menu.iniciar_juego = False
+
+                if debe_iniciar:
                     self.modo_coop_solicitado = True
                     self._start_requested = True
                     running = False
                     # Usar seed del servidor
-                    if self.cliente_menu.seed_juego is not None:
-                        self.seed_text = str(self.cliente_menu.seed_juego)
+                    if seed_servidor is not None:
+                        self.seed_text = str(seed_servidor)
                     break
 
                 # Sincronizar pantalla actual con servidor

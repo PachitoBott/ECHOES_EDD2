@@ -138,25 +138,34 @@ class ClienteMenu:
         tipo = msg.get("type")
 
         if tipo == "MENU_STATE":
-            self.pantalla_actual = msg.get("pantalla", "principal")
+            with self.lock:
+                self.pantalla_actual = msg.get("pantalla", "principal")
             log_net.info(f"[CLIENTE MENU] Pantalla: {self.pantalla_actual}")
 
         elif tipo == "LOBBY_STATE":
-            self.lobby_state = msg
+            with self.lock:
+                self.lobby_state = msg
 
         elif tipo == "CONFIG_STATE":
             volumen = msg.get("volumen")
             if volumen is not None:
-                self.config["volumen"] = volumen
-                # Aplicar volumen en el cliente también
-                if pygame.mixer.get_init():
-                    pygame.mixer.music.set_volume(volumen / 100.0)
-                log_net.info(f"[CLIENTE MENU] Volumen: {volumen}")
+                with self.lock:
+                    self.config["volumen"] = volumen
+                # NO aplicar volumen desde hilo de red, solo setear flag
+                # El volumen se aplicará desde el game loop principal
+                log_net.info(f"[CLIENTE MENU] Volumen recibido: {volumen}")
 
         elif tipo == "START_GAME":
-            self.iniciar_juego = True
-            self.seed_juego = msg.get("seed", 0)
-            log_net.info(f"[CLIENTE MENU] Iniciando juego con seed {self.seed_juego}")
+            try:
+                print(f"[CLIENTE] Recibido START_GAME: {msg}")
+                self.iniciar_juego = True
+                self.seed_juego = msg.get("seed", 0)
+                print(f"[CLIENTE] Flags seteados, seed={self.seed_juego}")
+                log_net.info(f"[CLIENTE MENU] Iniciando juego con seed {self.seed_juego}")
+            except Exception as e:
+                print(f"[CLIENTE ERROR] Al procesar START_GAME: {e}")
+                import traceback
+                traceback.print_exc()
 
     def enviar(self, msg: Dict[str, Any]) -> bool:
         """
