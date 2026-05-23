@@ -371,6 +371,7 @@ class Game:
         self._intro_played: bool = False
         self._zones_cinematics_shown: set = set()  # zonas cuya cinemática ya se mostró esta run
         self._boss_defeat_cinematics_queued: bool = False  # flag para cinematicas post-boss
+        self._cinematics_queue: list = []  # cola de cinematics para reproducir en secuencia
 
         # Banner de zona (estilo Binding of Isaac)
         self._zone_banner_text: str = ""
@@ -638,6 +639,7 @@ class Game:
         self._zone_banner_timer = 0.0
         self._boss_banner_shown = False
         self._boss_defeat_cinematics_queued = False
+        self._cinematics_queue = []
 
     def _reset_runtime_state(self) -> None:
         self.projectiles.clear()
@@ -2972,23 +2974,37 @@ class Game:
 
     def _queue_boss_defeat_cinematics(self) -> None:
         """
-        Encadena las 4 cinematicas post-boss en orden:
-        1. boss_defeat → callback para siguiente
-        2. boss_defeat_unmasked_pixel → callback para siguiente
-        3. regresando_al_mundo_verdad → callback para siguiente
-        4. nigoria → callback final
+        Encola las 4 cinematicas post-boss para reproducirlas en secuencia:
+        1. boss_defeat
+        2. boss_defeat_unmasked_pixel
+        3. regresando_al_mundo_verdad
+        4. nigoria
+
+        Se usan callbacks para avanzar a la siguiente cinematics cuando termina la actual.
         """
-        def play_unmasked():
-            self.cinematics.reproducir("boss_defeat_unmasked_pixel", callback_fin=play_returning)
+        cinematics_list = [
+            "boss_defeat",
+            "boss_defeat_unmasked_pixel",
+            "regresando_al_mundo_verdad",
+            "nigoria"
+        ]
 
-        def play_returning():
-            self.cinematics.reproducir("regresando_al_mundo_verdad", callback_fin=play_nigoria)
+        # Limpiar cola anterior (por si acaso)
+        self._cinematics_queue = []
 
-        def play_nigoria():
-            self.cinematics.reproducir("nigoria", callback_fin=None)
+        # Crear callback que avance a la siguiente cinematics
+        def make_callback(index):
+            def callback():
+                if index + 1 < len(cinematics_list):
+                    next_cinematic = cinematics_list[index + 1]
+                    next_callback = make_callback(index + 1)
+                    self.cinematics.reproducir(next_cinematic, callback_fin=next_callback)
+            return callback
 
-        # Iniciar la cadena con la primera cinemática
-        self.cinematics.reproducir("boss_defeat", callback_fin=play_unmasked)
+        # Iniciar con la primera cinematics
+        if cinematics_list:
+            first_callback = make_callback(0)
+            self.cinematics.reproducir(cinematics_list[0], callback_fin=first_callback)
 
     def _show_zone_banner(self, title: str, subtitle: str = "") -> None:
         """Activa el banner de zona con el texto dado."""
