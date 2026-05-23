@@ -699,6 +699,14 @@ class ProfesorIbarra:
         self.tooltip = ItemTooltip(pygame.font.SysFont(None, 14))
         self._item_hover = False  # Rastrea si hay hover activo sobre un item
 
+        # --- Sonido de compra ---
+        self._buy_sound = None
+        try:
+            self._buy_sound = pygame.mixer.Sound("assets/audio/buy_sfx.mp3")
+            self._buy_sound.set_volume(0.6)
+        except (pygame.error, FileNotFoundError):
+            pass  # Sin sonido si no se encuentra
+
     # ------------------------------------------------------------------
     # Selección de preguntas
     # ------------------------------------------------------------------
@@ -846,6 +854,13 @@ class ProfesorIbarra:
             self._set_msg(f"Comprado! ({remaining} restante{'s' if remaining != 1 else ''})")
         else:
             self._set_msg("Comprado! (limite alcanzado)")
+
+        # Reproducir sonido de compra
+        if self._buy_sound:
+            try:
+                self._buy_sound.play()
+            except pygame.error:
+                pass
 
     def _apply_item(self, iid: str, player) -> None:
         """Aplica o almacena el efecto del ítem comprado."""
