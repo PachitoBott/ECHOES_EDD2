@@ -3541,8 +3541,22 @@ class Game:
                 # Renderizar sprite con animación idle
                 if "idle" in animations:
                     frame = animations["idle"].current_frame()
-                    # Usar tamaño original (64x64) en lugar de rescalar a 32x32
-                    self.world.blit(frame, (int(x), int(y)))
+
+                    # Calcular la posición usando el mismo offset que Player.draw()
+                    # Constantes de Player.py
+                    PLAYER_HITBOX_SIZE = (18, 24)
+                    PLAYER_SPRITE_SIZE = (64, 64)
+                    PLAYER_HITBOX_OFFSET = (23, 40)
+                    PLAYER_SPRITE_CENTER_OFFSET_Y = (
+                        PLAYER_HITBOX_OFFSET[1] + PLAYER_HITBOX_SIZE[1] // 2 - PLAYER_SPRITE_SIZE[1] // 2
+                    )
+
+                    # Aplicar el mismo cálculo de posición que Player.draw()
+                    sprite_rect = frame.get_rect()
+                    sprite_rect.centerx = int(round(x + PLAYER_HITBOX_SIZE[0] / 2))
+                    sprite_rect.centery = int(round(y + PLAYER_HITBOX_SIZE[1] / 2 - PLAYER_SPRITE_CENTER_OFFSET_Y))
+
+                    self.world.blit(frame, sprite_rect)
                 else:
                     # Fallback: cubo negro si no hay animaciones
                     pygame.draw.rect(self.world, (0, 0, 0), (int(x), int(y), 64, 64), 2)
