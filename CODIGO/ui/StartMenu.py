@@ -366,12 +366,25 @@ class StartMenu:
                     self.lobby.update(dt)
 
                     # Actualizar estado de conexión P2 en tiempo real
-                    if self.net_manager:
+                    # Servidor: usar cliente_conectado del servidor_menu
+                    # Cliente: usar lobby_state recibido del servidor
+                    if self.servidor_menu:
                         try:
-                            p2_conectado = "aliado" in self.net_manager.roles_conectados()
+                            p2_conectado = self.servidor_menu.cliente_conectado
+                            self.lobby.set_p2_conectado(p2_conectado)
+                            # Enviar estado actualizado al cliente
+                            self.servidor_menu.enviar_estado_lobby(p2_conectado)
+                        except Exception as e:
+                            print(f"[MENU] Error actualizando estado P2 (servidor): {e}")
+                    elif self.cliente_menu:
+                        try:
+                            # Cliente recibe el estado del lobby del servidor
+                            with self.cliente_menu.lock:
+                                lobby_state = self.cliente_menu.lobby_state
+                            p2_conectado = lobby_state.get('p2_conectado', False)
                             self.lobby.set_p2_conectado(p2_conectado)
                         except Exception as e:
-                            print(f"[MENU] Error actualizando estado P2: {e}")
+                            print(f"[MENU] Error actualizando estado P2 (cliente): {e}")
                 except Exception as e:
                     print(f"[MENU] Error actualizando lobby: {e}")
                     import traceback
@@ -495,12 +508,20 @@ class StartMenu:
                                 btn_asset=self.btn_normal,
                                 anim_p1=None,
                             )
-                            if self.net_manager:
+                            if self.servidor_menu:
                                 try:
-                                    p2_conectado = "aliado" in self.net_manager.roles_conectados()
+                                    p2_conectado = self.servidor_menu.cliente_conectado
                                     self.lobby.set_p2_conectado(p2_conectado)
                                 except Exception as e:
-                                    print(f"[MENU] Error detectando P2 en lobby: {e}")
+                                    print(f"[MENU] Error detectando P2 en lobby (servidor): {e}")
+                            elif self.cliente_menu:
+                                try:
+                                    with self.cliente_menu.lock:
+                                        lobby_state = self.cliente_menu.lobby_state
+                                    p2_conectado = lobby_state.get('p2_conectado', False)
+                                    self.lobby.set_p2_conectado(p2_conectado)
+                                except Exception as e:
+                                    print(f"[MENU] Error detectando P2 en lobby (cliente): {e}")
                         except Exception as e:
                             print(f"[MENU] Error creando lobby: {e}")
                             import traceback
@@ -762,13 +783,23 @@ class StartMenu:
         )
 
         # Establecer estado inicial: verificar si hay cliente conectado
-        if self.net_manager:
-            p2_conectado = "aliado" in self.net_manager.roles_conectados()
-            self.lobby.set_p2_conectado(p2_conectado)
-
-        # Notificar al cliente que entramos al lobby (servidor)
         if self.servidor_menu:
-            self.servidor_menu.enviar_estado_menu("lobby")
+            try:
+                p2_conectado = self.servidor_menu.cliente_conectado
+                self.lobby.set_p2_conectado(p2_conectado)
+                # Notificar al cliente que entramos al lobby y su estado de conexión
+                self.servidor_menu.enviar_estado_menu("lobby")
+                self.servidor_menu.enviar_estado_lobby(p2_conectado)
+            except Exception as e:
+                print(f"[MENU] Error estableciendo estado P2 inicial (servidor): {e}")
+        elif self.cliente_menu:
+            try:
+                with self.cliente_menu.lock:
+                    lobby_state = self.cliente_menu.lobby_state
+                p2_conectado = lobby_state.get('p2_conectado', False)
+                self.lobby.set_p2_conectado(p2_conectado)
+            except Exception as e:
+                print(f"[MENU] Error estableciendo estado P2 inicial (cliente): {e}")
 
         self.overlay_key = "lobby"
         return True

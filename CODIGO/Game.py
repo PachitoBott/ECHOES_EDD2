@@ -206,6 +206,35 @@ class RemoteEnemy:
         return (self.x + self.w / 2, self.y + self.h / 2)
 
 
+class EstadoJugador2:
+    """
+    Estado autoritativo del jugador 2 (cliente/aliado).
+    Vive en el servidor — es la fuente de verdad para vida y monedas de P2.
+    """
+    def __init__(self):
+        # Vida (10 vidas = 5 corazones)
+        self.lives = 10         # Vida actual
+        self.max_lives = 10     # Vida máxima
+        self._previous_lives = 10  # Para detectar respawn de corazón completo
+        self.vivo = True
+        self.reviviendo = False  # Animación de respawn
+        self.hp = 1  # HP actual (se resetea con respawn)
+        self.max_hp = 1  # HP máximo
+
+        # Monedas
+        self.gold = 0           # Monedas actuales
+
+        # Posición (ya sincronizada)
+        self.x = 0.0
+        self.y = 0.0
+
+        # Invulnerabilidad temporal al recibir daño
+        self.invulnerable = False
+        self.timer_invulnerable = 0.0
+        self.TIEMPO_INVULNERABLE = 1.2  # segundos
+        self.respawn_invulnerability = 2.0  # Invulnerabilidad después de respawn
+
+
 class Game:
     COIN_SPRITE_NAME = "moneda.png"
     COIN_ICON_DEFAULT_SCALE = 1.5
@@ -300,18 +329,31 @@ class Game:
             custom_y=895   # Same height as P1
         )
 
-        # --- Cargar animaciones de Cyborg para jugador remoto ---
-        self._cyborg_animations: dict = {}
+        # --- Cargar animaciones de ambos jugadores para renderizado remoto ---
+        # Servidor necesita animar al jugador remoto (cliente = Cyborg/player2)
+        # Cliente necesita animar al jugador remoto (servidor = FutureSoldier/player)
+        self._server_player_animations: dict = {}
+        self._client_ally_animations: dict = {}
+
         try:
             from systems.animation import AnimationManager
-            self._cyborg_animations = AnimationManager.load_from_json(
+            # Siempre cargar animaciones de FutureSoldier (para cliente cuando es remoto)
+            self._server_player_animations = AnimationManager.load_from_json(
+                "assets/sprites/player/animations.json",
+                "assets/sprites/player"
+            )
+            log_game.info("[OK] Animaciones del servidor (FutureSoldier) cargadas")
+
+            # Siempre cargar animaciones de Cyborg (para servidor cuando es remoto)
+            self._client_ally_animations = AnimationManager.load_from_json(
                 "assets/sprites/player2/animations.json",
                 "assets/sprites/player2"
             )
-            log_game.info("[OK] Animaciones de Cyborg cargadas para jugador remoto")
+            log_game.info("[OK] Animaciones del cliente aliado (Cyborg) cargadas")
         except Exception as e:
-            log_game.warning(f"[WARNING] No se pudieron cargar animaciones de Cyborg: {e}")
-            self._cyborg_animations = {}
+            log_game.warning(f"[WARNING] No se pudieron cargar animaciones de jugadores remotos: {e}")
+            self._server_player_animations = {}
+            self._client_ally_animations = {}
 
         # ---------- Recursos ----------
         self.tileset_manager = TilesetManager()
@@ -392,6 +434,10 @@ class Game:
         # ---------- Networking (Fase 3) ----------
         self.net: NetworkManager | None = None
         self.remote_players: dict = {}  # Almacena estado de jugadores remotos
+
+        # --- Estado de Jugador 2 (solo servidor en modo multijugador) ---
+        self.estado_p2: EstadoJugador2 | None = None
+        self._timer_sync_p2 = 0.0  # Timer para sincronización periódica de P2
         self.remote_enemies: dict = {}  # Almacena enemigos remotos sincronizados del servidor
         self._send_state_interval = 0.1  # Enviar estado cada 100ms (~10 Hz)
         self._last_state_send = 0.0
@@ -629,13 +675,32 @@ class Game:
         px, py = room.center_px()
         spawn_x = px - Player.HITBOX_SIZE[0] / 2
         spawn_y = py - Player.HITBOX_SIZE[1] / 2
+
+        # Determinar sprite_dir basado en rol (servidor vs cliente)
+        sprite_dir = None
+        if self.net and not self.net.es_servidor:
+            # Cliente: si es ALIADO, usar player2 (Cyborg)
+            sprite_dir = "assets/sprites/player2" if self.net.es_aliado else "assets/sprites/player"
+            log_game.info(f"[MULTIJUGADOR] Cliente creado como {('ALIADO' if self.net.es_aliado else 'VICTIMA')} - Sprite: {sprite_dir}")
+        else:
+            # Servidor: siempre usar player (FutureSoldier)
+            if self.net:
+                log_game.info("[MULTIJUGADOR] Servidor creado - Sprite: assets/sprites/player")
+
         if not hasattr(self, "player"):
-            self.player = Player(spawn_x, spawn_y)
+            self.player = Player(spawn_x, spawn_y, sprite_dir=sprite_dir)
         else:
             self.player.x, self.player.y = spawn_x, spawn_y
         if hasattr(self.player, "reset_loadout"):
             self.player.reset_loadout()
         setattr(self.player, "gold", 0)
+
+        # Inicializar estado_p2 en el servidor (cuando hay cliente conectado)
+        if self.net and self.net.es_servidor:
+            self.estado_p2 = EstadoJugador2()
+            self.estado_p2.x = spawn_x
+            self.estado_p2.y = spawn_y
+            log_game.info(f"[P2] Estado inicializado en servidor: pos=({spawn_x:.0f}, {spawn_y:.0f})")
 
         # Almacenar referencia de player en el menú para la próxima vez que se abra
         # (El menú será recreado la próxima vez que se abre _open_start_menu)
@@ -1020,6 +1085,15 @@ class Game:
                 self.remote_players[origen] = ev.datos
                 log_game.debug(f"[ESTADO_REMOTO] {origen} está en sala {sala_remota}")
 
+                # SERVIDOR: Actualizar posición de P2 desde posición del cliente remoto
+                if self.net and self.net.es_servidor and self.estado_p2:
+                    self.estado_p2.x = float(pos_data[0])
+                    self.estado_p2.y = float(pos_data[1])
+
+                # Paso 5: Procesar estado de P2 si está incluido en el mensaje
+                if "p2_vidas" in ev.datos or "p2_oro" in ev.datos:
+                    self._recibir_estado_p2(ev.datos)
+
         elif ev.tipo == "enemigo_muerto":
             # Enemigo fue eliminado por otro jugador
             self._handle_remote_enemy_death(ev)
@@ -1092,6 +1166,16 @@ class Game:
             # Notificación del servidor de que la transición se completó
             if self.net and not self.net.es_servidor:
                 self._handle_transicion_completada(ev)
+
+        elif ev.tipo == "p1_game_over":
+            # P1 murió - ambos jugadores pierden
+            log_game.warning("[GAME_OVER] Recibido evento: P1 MURIÓ")
+            self._handle_remote_game_over("P1")
+
+        elif ev.tipo == "p2_game_over":
+            # P2 murió - ambos jugadores pierden
+            log_game.warning("[GAME_OVER] Recibido evento: P2 MURIÓ")
+            self._handle_remote_game_over("P2")
 
         else:
             log_net.debug(f"Evento de red no manejado: {ev.tipo}")
@@ -1242,6 +1326,10 @@ class Game:
                         self.death_effect_manager.spawn(enemy_encontrado.x, enemy_encontrado.y, frame)
                 except Exception as e:
                     log_game.debug(f"[MUERTE_REMOTA] Error al disparar efecto: {e}")
+
+                # NUEVO: Soltar monedas para el cliente (en cliente, P2 puede recogerlas)
+                log_game.debug(f"[MUERTE_REMOTA] [COINS] Soltando monedas en cliente para enemigo muerto")
+                self._drop_enemy_coins(enemy_encontrado, room)
 
                 # [DIAG] ELIMINAR del dict
                 log_game.debug(f"[MUERTE_REMOTA] [DELETE] Eliminando índice {indice_encontrado}...")
@@ -1638,10 +1726,15 @@ class Game:
                 hp_despues = getattr(enemy, "hp", -1)
                 log_game.debug(f"[DISPARO_CLIENTE] Daño aplicado: HP {hp_antes} -> {hp_despues}")
 
-                # Si el enemigo muere, enviar evento
+                # Si el enemigo muere, soltar monedas y enviar evento
                 if enemy.hp <= 0:
                     enemy_id = getattr(enemy, 'enemy_id', '?')
                     log_game.warning(f"[DISPARO_CLIENTE] [DEATH] Enemigo {enemy_id} muere. Reportando muerte en ({enemy.x:.1f},{enemy.y:.1f})")
+
+                    # NUEVO: Soltar monedas cuando P2 mata enemigo
+                    self._drop_enemy_coins(enemy, room)
+                    log_game.warning(f"[DISPARO_CLIENTE] [COINS] Monedas soltadas para P2")
+
                     from network.protocol import msg_enemigo_muerto
                     evento_muerte = msg_enemigo_muerto(
                         enemy.x, enemy.y,
@@ -1782,6 +1875,13 @@ class Game:
                     "vidas": int(getattr(self.player, "lives", 0)),
                     "apoyo": int(getattr(self.player, "gold", 0)),
                 }
+                # Incluir estado de P2 si existe (solo servidor)
+                if self.estado_p2:
+                    estado_local["p2_vidas"] = int(self.estado_p2.lives)
+                    estado_local["p2_oro"] = int(self.estado_p2.gold)
+                    estado_local["p2_invulnerable"] = self.estado_p2.timer_invulnerable > 0.0
+                    estado_local["p2_x"] = float(self.estado_p2.x)
+                    estado_local["p2_y"] = float(self.estado_p2.y)
                 self._last_state_send = ahora
 
             # Procesar red y enviar estado
@@ -1836,8 +1936,10 @@ class Game:
         self.hud_panel_p2.update(dt)
 
         # --- Actualizar animaciones de Cyborg para jugador remoto ---
-        if "idle" in self._cyborg_animations:
-            self._cyborg_animations["idle"].update(dt)
+        if "idle" in self._server_player_animations:
+            self._server_player_animations["idle"].update(dt)
+        if "idle" in self._client_ally_animations:
+            self._client_ally_animations["idle"].update(dt)
 
         # --- Actualizar fondo matrix ---
         self.matrix_bg.update(dt)
@@ -1950,6 +2052,7 @@ class Game:
                 return
 
         self._update_player(dt, room)
+        self._update_estado_p2(dt)
         # [FIX SYNC] Cliente NO crea enemigos — los recibe del servidor
         # Solo el servidor debe llamar a _spawn_room_enemies
         if self.net is None or self.net.es_servidor:
@@ -1994,6 +2097,13 @@ class Game:
         player_died = self._handle_collisions(room)
         if player_died:
             return
+
+        # Chequear si P2 murió (en servidor)
+        if self.estado_p2 and self.net and self.net.es_servidor and not self.estado_p2.vivo:
+            log_game.warning("[GAME_OVER] P2 murió - mostrando game over para ambos jugadores")
+            self._handle_remote_game_over("P2")
+            return
+
         self._update_pickups(dt, room)
         self._handle_room_transition(room)
         self._update_shop(events)
@@ -2015,6 +2125,137 @@ class Game:
             self.player.invulnerable_timer = 9999.0
 
         self.player.update(dt, room, self.projectiles)
+
+    def _update_estado_p2(self, dt: float) -> None:
+        """Actualiza el estado de P2 (solo servidor en multijugador)."""
+        if not self.estado_p2:
+            return
+        self.estado_p2.timer_invulnerable = max(0.0, self.estado_p2.timer_invulnerable - dt)
+
+    def _recibir_estado_p2(self, estado_datos: dict) -> None:
+        """
+        Paso 5: Recibe y procesa el estado de P2 desde el servidor (cliente).
+        En cliente: sincroniza vidas a self.player y dispara respawn usando misma lógica que P1.
+        """
+        # Cliente: sincronizar vidas de P2 desde servidor a self.player
+        if self.net and not self.net.es_servidor and self.player:
+            if "p2_vidas" in estado_datos:
+                new_lives = estado_datos["p2_vidas"]
+                old_lives = self.player.lives
+
+                # Detectar cambio de vidas
+                if new_lives != old_lives:
+                    log_game.warning(f"[P2_SYNC] Recibida actualización de vidas: {old_lives} → {new_lives}")
+
+                    # Usar la MISMA lógica que P1: lose_life() y should_respawn()
+                    self.player._previous_lives = old_lives
+                    self.player.lives = new_lives
+
+                    # Detectar si debe respawnear (impar → par)
+                    should_respawn = (old_lives % 2 == 1) and (new_lives % 2 == 0)
+                    log_player.warning(f"[P2_RESPAWN_CHECK] prev={old_lives}, curr={new_lives}, should_respawn={should_respawn}")
+
+                    # Validación adicional
+                    if should_respawn and not ((old_lives % 2 == 1) and (new_lives % 2 == 0)):
+                        log_player.warning(f"[P2_RESPAWN_ERROR] should_respawn=True pero lógica no coincide! Forzando False")
+                        should_respawn = False
+
+                    if should_respawn:
+                        log_game.warning(f"[P2_RESPAWN] Respawn detectado: {old_lives}→{new_lives}")
+                        room = getattr(self.dungeon, 'current_room', None)
+
+                        # Ejecutar respawn (MISMA lógica que P1)
+                        if hasattr(self.player, "respawn"):
+                            self.player.respawn()
+                        else:
+                            max_hp = getattr(self.player, "max_hp", 1)
+                            self.player.hp = max_hp
+                            invuln = getattr(self.player, "respawn_invulnerability", 2.0)
+                            self.player.invulnerable_timer = max(
+                                getattr(self.player, "invulnerable_timer", 0.0), invuln
+                            )
+
+                        # Reset posición al centro (MISMA lógica que P1)
+                        if room and hasattr(room, "center_px"):
+                            px, py = room.center_px()
+                            self.player.x = px - self.player.w / 2
+                            self.player.y = py - self.player.h / 2
+
+                        # Efecto visual de spawn (MISMA lógica que P1)
+                        try:
+                            if hasattr(self.player, "_animations") and "idle" in self.player._animations:
+                                idle_sprite = self.player._animations["idle"].current_frame()
+                                self.spawn_effect_manager.spawn(
+                                    self.player.x,
+                                    self.player.y,
+                                    idle_sprite,
+                                    lifetime=0.5,
+                                    num_particles=25
+                                )
+                        except Exception as e:
+                            log_game.warning(f"Error al iniciar spawn effect: {e}")
+
+                        self.projectiles.clear()
+                        self.enemy_projectiles.clear()
+                        self.door_cooldown = 0.25
+
+                    # Chequear si P2 llegó a 0 vidas (game over)
+                    if new_lives <= 0:
+                        log_game.warning("[P2_GAME_OVER] P2 llegó a 0 vidas - game over compartido")
+                        self._handle_remote_game_over("P2")
+                        return
+
+        # Servidor/Cliente: actualizar remote_players para renderizar P2 remoto en servidor
+        if not self.remote_players:
+            return
+        for rol, player_data in self.remote_players.items():
+            if "p2_vidas" in estado_datos:
+                player_data["p2_vidas"] = estado_datos["p2_vidas"]
+            if "p2_oro" in estado_datos:
+                player_data["p2_oro"] = estado_datos["p2_oro"]
+            if "p2_invulnerable" in estado_datos:
+                player_data["p2_invulnerable"] = estado_datos["p2_invulnerable"]
+
+    def _get_player_data_p2(self) -> dict:
+        """
+        Paso 6: Obtiene datos de P2 formateados para el HUD.
+        En servidor: extrae de self.estado_p2
+        En cliente: extrae del dict en remote_players
+        """
+        # En servidor: obtener de estado_p2
+        if self.estado_p2:
+            return {
+                "health": self.estado_p2.lives,
+                "max_health": self.estado_p2.max_lives,
+                "coins": self.estado_p2.gold,
+                "red_apoyo": 0,  # P2 no tiene estos powerups aún
+                "modo_privado": False,
+                "emp": False,
+                "eco_señal": False
+            }
+        # En cliente: obtener de remote_players (estado del servidor/P1)
+        if self.remote_players:
+            remote_player = next(iter(self.remote_players.values()), None)
+            if remote_player:
+                return {
+                    "health": remote_player.get("p2_vidas", 0),
+                    "max_health": 10,  # P2 tiene 10 vidas máximo (5 corazones)
+                    "coins": remote_player.get("p2_oro", 0),
+                    "red_apoyo": 0,
+                    "modo_privado": False,
+                    "emp": False,
+                    "eco_señal": False
+                }
+        # Sin datos disponibles
+        return {
+            "health": 0,
+            "max_health": 0,
+            "coins": 0,
+            "red_apoyo": 0,
+            "modo_privado": False,
+            "emp": False,
+            "eco_señal": False
+        }
 
     def _spawn_room_enemies(self, room) -> None:
         if getattr(room, "no_spawn", False):
@@ -2558,6 +2799,9 @@ class Game:
         phase_through = phase_active() if callable(phase_active) else False
         for enemy in room.enemies:
             if not player_rect.colliderect(enemy.rect()):
+                # Resetear flag de daño si no hay colisión (enemigo se alejó)
+                if hasattr(enemy, "_damage_dealt"):
+                    enemy._damage_dealt = False
                 continue
             if phase_through:
                 continue
@@ -2569,12 +2813,21 @@ class Game:
             contact_damage = getattr(enemy, "contact_damage", 0)
             if contact_damage <= 0:
                 continue
+
+            # Aplicar daño solo si no ha sido aplicado ya en este ataque
+            damage_already_dealt = getattr(enemy, "_damage_dealt", False)
+            if damage_already_dealt:
+                continue
+
             if player_invulnerable:
                 continue
             took_hit = False
             if hasattr(self.player, "take_damage"):
                 took_hit = bool(self.player.take_damage(contact_damage))
             if took_hit:
+                # Marcar que daño fue aplicado en este ataque
+                if hasattr(enemy, "_damage_dealt"):
+                    enemy._damage_dealt = True
                 player_invulnerable = getattr(self.player, "is_invulnerable", lambda: False)()
         for projectile in self.enemy_projectiles:
             if not projectile.alive:
@@ -2598,6 +2851,46 @@ class Game:
                 player_invulnerable = getattr(self.player, "is_invulnerable", lambda: False)()
             else:
                 projectile.alive = False
+
+        # --- Manejo de daño para P2 (solo en servidor) ---
+        if self.estado_p2 and self.net and self.net.es_servidor:
+            p2_invulnerable = self.estado_p2.timer_invulnerable > 0.0
+            p2_rect = self._get_p2_rect()
+
+            # Daño por contacto con enemigos
+            for enemy in room.enemies:
+                if not p2_rect.colliderect(enemy.rect()):
+                    continue
+                if p2_invulnerable:
+                    continue
+                contact_damage = getattr(enemy, "contact_damage", 0)
+                if contact_damage <= 0:
+                    continue
+                took_hit = self._aplicar_daño_p2(contact_damage)
+                if took_hit:
+                    p2_invulnerable = self.estado_p2.timer_invulnerable > 0.0
+
+            # Daño por proyectiles enemigos
+            for projectile in self.enemy_projectiles:
+                if not projectile.alive:
+                    continue
+                if projectile.ignore_player_timer > 0.0:
+                    continue
+                if not p2_rect.colliderect(projectile.rect()):
+                    continue
+                if p2_invulnerable:
+                    remaining_iframes = self.estado_p2.timer_invulnerable
+                    projectile.ignore_player_timer = max(
+                        projectile.ignore_player_timer,
+                        remaining_iframes + 0.05,
+                    )
+                    continue
+                took_hit = self._aplicar_daño_p2(1)
+                if took_hit:
+                    projectile.alive = False
+                    p2_invulnerable = self.estado_p2.timer_invulnerable > 0.0
+                else:
+                    projectile.alive = False
 
         survivors = []
         for enemy in room.enemies:
@@ -2715,20 +3008,32 @@ class Game:
             return
 
         player_rect = self.player.rect()
-        collected_total = 0
+        p2_rect = self._get_p2_rect() if self.estado_p2 else None
+        collected_p1 = 0
+        collected_p2 = 0
         survivors: list[Pickup] = []
         for pickup in pickups:
             pickup.update(dt, room)
             if pickup.collected:
                 continue
+            collected = False
+            # P1 recolecta
             if player_rect.colliderect(pickup.rect()):
                 pickup.collect()
-                collected_total += pickup.value
-            else:
+                collected_p1 += pickup.value
+                collected = True
+            # P2 recolecta (solo servidor, independiente de P1)
+            elif p2_rect and p2_rect.colliderect(pickup.rect()):
+                pickup.collect()
+                collected_p2 += pickup.value
+                collected = True
+            if not collected:
                 survivors.append(pickup)
         room.pickups = survivors
-        if collected_total:
-            self._add_player_gold(collected_total)
+        if collected_p1:
+            self._add_player_gold(collected_p1)
+        if collected_p2:
+            self._add_player_gold_p2(collected_p2)
 
     def _add_player_gold(self, amount: int) -> None:
         amount = int(amount)
@@ -2736,6 +3041,15 @@ class Game:
             return
         current_gold = getattr(self.player, "gold", 0)
         setattr(self.player, "gold", current_gold + amount)
+
+    def _add_player_gold_p2(self, amount: int) -> None:
+        """Agrega monedas al jugador remoto (P2)."""
+        if not self.estado_p2:
+            return
+        amount = int(amount)
+        if amount <= 0:
+            return
+        self.estado_p2.gold += amount
 
     def _apply_projectile_effects(self, projectile, enemy) -> None:
         effects = getattr(projectile, "effects", ())
@@ -2808,6 +3122,102 @@ class Game:
             else:
                 enemy.y = player_rect.top - enemy.h
 
+    def _get_p2_rect(self) -> pygame.Rect:
+        """Crea un rect para P2 usando su posición en estado_p2 y el hitbox de Player."""
+        if not self.estado_p2:
+            return pygame.Rect(0, 0, 0, 0)
+        from entities.Player import PLAYER_HITBOX_SIZE, PLAYER_HITBOX_OFFSET
+        rect = pygame.Rect(
+            self.estado_p2.x + PLAYER_HITBOX_OFFSET[0],
+            self.estado_p2.y + PLAYER_HITBOX_OFFSET[1],
+            PLAYER_HITBOX_SIZE[0],
+            PLAYER_HITBOX_SIZE[1],
+        )
+        return rect
+
+    def _aplicar_daño_p2(self, amount: int) -> bool:
+        """Aplica daño a P2 si no está en iframes. Devuelve True si impactó."""
+        if not self.estado_p2:
+            return False
+        if amount <= 0 or self.estado_p2.timer_invulnerable > 0.0:
+            return False
+        # Reducir HP actual
+        self.estado_p2.hp = max(0, self.estado_p2.hp - amount)
+        self.estado_p2.timer_invulnerable = self.estado_p2.TIEMPO_INVULNERABLE
+        log_game.warning(f"[P2] Daño recibido: {amount}, HP ahora: {self.estado_p2.hp}, Vidas: {self.estado_p2.lives}")
+        # Si HP llega a 0, perder una vida
+        if self.estado_p2.hp <= 0:
+            self._handle_p2_death()
+        return True
+
+    def _handle_p2_death(self) -> None:
+        """Maneja la muerte de P2 (pérdida de HP) y el respawn de corazones completos."""
+        if not self.estado_p2:
+            return
+
+        log_game.warning(f"[P2_DEATH] HP se agotó: lives={self.estado_p2.lives}, previous={self.estado_p2._previous_lives}")
+
+        # Guardar vidas ANTES de decrementar (para detect corazón completo)
+        prev_lives = self.estado_p2._previous_lives
+        self.estado_p2._previous_lives = self.estado_p2.lives
+
+        # Perder una vida
+        self.estado_p2.lives = max(0, self.estado_p2.lives - 1)
+        log_game.warning(f"[P2_DEATH] Vidas decrementadas: {prev_lives} → {self.estado_p2.lives}")
+
+        if self.estado_p2.lives <= 0:
+            self.estado_p2.vivo = False
+            log_game.warning("[P2_DEATH] *** GAME OVER - P2 MUERE (0 vidas) ***")
+            # Notificar al cliente que P2 murió
+            if self.net and self.net.es_servidor:
+                from network.protocol import msg_evento
+                self.net.enviar(msg_evento("p2_game_over"))
+            return
+
+        # Detectar si se perdió un CORAZÓN COMPLETO (impar → par)
+        # Con 10 vidas: 10→9 no, 9→8 sí, 8→7 no, 7→6 sí, etc.
+        should_respawn = (self.estado_p2._previous_lives % 2 == 1) and (self.estado_p2.lives % 2 == 0)
+
+        log_game.warning(f"[P2_RESPAWN] Lógica: {self.estado_p2._previous_lives}%2={self.estado_p2._previous_lives % 2}, {self.estado_p2.lives}%2={self.estado_p2.lives % 2}, should_respawn={should_respawn}")
+
+        if should_respawn:
+            # Restaurar HP y dar invulnerabilidad
+            self.estado_p2.hp = self.estado_p2.max_hp
+            self.estado_p2.timer_invulnerable = self.estado_p2.respawn_invulnerability
+
+            # Reaparición en el centro de la sala
+            if hasattr(self.dungeon, 'current_room'):
+                room = self.dungeon.current_room
+                if hasattr(room, 'center_px'):
+                    px, py = room.center_px()
+                    self.estado_p2.x = px - 9  # Centrado (PLAYER_HITBOX_SIZE[0] / 2)
+                    self.estado_p2.y = py - 12  # Centrado (PLAYER_HITBOX_SIZE[1] / 2)
+                    log_game.warning(f"[P2] RESPAWN en ({self.estado_p2.x:.0f}, {self.estado_p2.y:.0f})")
+
+                    # Efecto visual de spawn (como en P1)
+                    try:
+                        # Usar sprite de P2 (Cyborg) si está disponible
+                        if hasattr(self, '_client_ally_animations') and "idle" in self._client_ally_animations:
+                            idle_sprite = self._client_ally_animations["idle"].current_frame()
+                            self.spawn_effect_manager.spawn(
+                                self.estado_p2.x,
+                                self.estado_p2.y,
+                                idle_sprite,
+                                lifetime=0.5,
+                                num_particles=25
+                            )
+                    except Exception as e:
+                        log_game.warning(f"Error al iniciar spawn effect para P2: {e}")
+
+                    # Limpiar proyectiles (como en P1)
+                    self.projectiles.clear()
+                    self.enemy_projectiles.clear()
+                    self.door_cooldown = 0.25
+        else:
+            # No es corazón completo, solo restaurar HP para siguiente daño
+            self.estado_p2.hp = self.estado_p2.max_hp
+            log_game.warning(f"[P2] HP restaurado sin respawn")
+
     def _handle_player_death(self, room) -> None:
         log_player.warning("Jugador murió — lives=%s", getattr(self.player, "lives", "?"))
         can_continue = False
@@ -2823,6 +3233,16 @@ class Game:
             # Check if a complete corazón was lost (should_respawn)
             if hasattr(self.player, "should_respawn"):
                 should_do_respawn = bool(self.player.should_respawn())
+                # Verificación adicional: solo respawn si fue de impar a par
+                prev = getattr(self.player, "_previous_lives", 0)
+                curr = self.player.lives
+                is_heart_lost = (prev % 2 == 1) and (curr % 2 == 0)
+                log_player.warning(f"[RESPAWN_CHECK] prev={prev}, curr={curr}, should_respawn={should_do_respawn}, is_heart_lost={is_heart_lost}")
+
+                # Validación: solo respawn si la lógica es correcta
+                if should_do_respawn and not is_heart_lost:
+                    log_player.warning(f"[RESPAWN_ERROR] should_respawn=True pero no se perdió corazón! Forzando False")
+                    should_do_respawn = False
 
             # ONLY respawn and reset position if a complete corazón was lost
             if should_do_respawn:
@@ -2871,6 +3291,14 @@ class Game:
                 self.enemy_projectiles.clear()
             return
 
+        # P1 murió (sin vidas)
+        log_game.warning("[P1_DEATH] *** GAME OVER - P1 MUERE (0 vidas) ***")
+
+        # Notificar al otro jugador que P1 murió
+        if self.net:
+            from network.protocol import msg_evento
+            self.net.enviar(msg_evento("p1_game_over"))
+
         summary = self._collect_run_summary()
         self._record_stats_death()
         self._finalize_run_statistics("player_death")
@@ -2891,6 +3319,45 @@ class Game:
 
         # Cualquier otra acción reinicia la partida con nueva seed.
         self.start_new_run(seed=None)
+
+    def _handle_remote_game_over(self, quien_murio: str) -> None:
+        """
+        Manejador para cuando el otro jugador muere.
+        Ambos jugadores ven la pantalla de game over.
+        """
+        log_game.warning(f"[GAME_OVER] {quien_murio} murió - mostrando game over para ambos jugadores")
+
+        summary = self._collect_run_summary()
+        self._record_stats_death()
+        self._finalize_run_statistics("remote_player_death")
+
+        # --- Música: detener música al morir ---
+        music_manager.detener(fade_out_ms=1500)
+
+        # Mostrar pantalla de game over con mensaje que indica quién murió
+        action = self._show_game_over_screen_remote(summary, quien_murio)
+
+        if action == "quit":
+            self.running = False
+            return
+
+        if action == "main_menu":
+            if not self._open_start_menu():
+                self.running = False
+            return
+
+        # Reiniciar la partida con nueva seed
+        self.start_new_run(seed=None)
+
+    def _show_game_over_screen_remote(self, summary: dict[str, int], quien_murio: str) -> str:
+        """
+        Muestra pantalla de game over cuando el otro jugador muere.
+        """
+        pygame.mouse.set_visible(True)
+        background = self.screen.copy()
+        game_over = GameOverScreen(self.screen)
+        action = game_over.run(summary, background=background)
+        return action
 
     def _record_stats_death(self) -> None:
         try:
@@ -3495,15 +3962,34 @@ class Game:
 
             sala_actual = (self.dungeon.i, self.dungeon.j)
             if sala_remota == sala_actual:
-                # Renderizar sprite de Cyborg con animación idle
-                if "idle" in self._cyborg_animations:
-                    frame = self._cyborg_animations["idle"].current_frame()
-                    # Escalar el frame a 32x32 para coincidir con el tamaño esperado
-                    scaled_frame = pygame.transform.scale(frame, (32, 32))
-                    self.world.blit(scaled_frame, (int(x), int(y)))
+                # Seleccionar animaciones según rol del remoto
+                # En servidor: remoto es cliente (ALIADO) = Cyborg
+                # En cliente: remoto es servidor (VICTIMA) = FutureSoldier
+                is_server = self.net.es_servidor if self.net else False
+                animations = self._client_ally_animations if is_server else self._server_player_animations
+
+                # Renderizar sprite con animación idle
+                if "idle" in animations:
+                    frame = animations["idle"].current_frame()
+
+                    # Calcular la posición usando el mismo offset que Player.draw()
+                    # Constantes de Player.py
+                    PLAYER_HITBOX_SIZE = (18, 24)
+                    PLAYER_SPRITE_SIZE = (64, 64)
+                    PLAYER_HITBOX_OFFSET = (23, 40)
+                    PLAYER_SPRITE_CENTER_OFFSET_Y = (
+                        PLAYER_HITBOX_OFFSET[1] + PLAYER_HITBOX_SIZE[1] // 2 - PLAYER_SPRITE_SIZE[1] // 2
+                    )
+
+                    # Aplicar el mismo cálculo de posición que Player.draw()
+                    sprite_rect = frame.get_rect()
+                    sprite_rect.centerx = int(round(x + PLAYER_HITBOX_SIZE[0] / 2))
+                    sprite_rect.centery = int(round(y + PLAYER_HITBOX_SIZE[1] / 2 - PLAYER_SPRITE_CENTER_OFFSET_Y))
+
+                    self.world.blit(frame, sprite_rect)
                 else:
                     # Fallback: cubo negro si no hay animaciones
-                    pygame.draw.rect(self.world, (0, 0, 0), (int(x), int(y), 32, 32), 2)
+                    pygame.draw.rect(self.world, (0, 0, 0), (int(x), int(y), 64, 64), 2)
 
         self.projectiles.draw(self.world)
         self.enemy_projectiles.draw(self.world)
@@ -3567,42 +4053,41 @@ class Game:
         self.screen.blit(seed_text, seed_position)
 
         # Dibujar los nuevos paneles de jugadores (con placeholders de color)
-        player_data_p1 = {
-            "health": getattr(self.player, "lives", 0),
-            "max_health": getattr(self.player, "max_lives", 0),
-            "coins": getattr(self.player, "gold", 0),
-            "red_apoyo": getattr(self.player, "_ibarra_red_apoyo", 0),  # Contador de curaciones acumuladas
-            "modo_privado": getattr(self.player, "_ibarra_modo_privado", False),
-            "emp": getattr(self.player, "_ibarra_emp", False),
-            "eco_señal": getattr(self.player, "_ibarra_double_shot", False)
-        }
-        self.hud_panel_p1.render(self.screen, player_data_p1, es_p2=False)
-
-        # Panel del Jugador 2 (si hay jugador remoto)
-        if self.remote_players:
-            # Obtener datos del primer jugador remoto
+        # En servidor: mostrar datos de P1 local
+        # En cliente: mostrar datos de P1 remoto (desde remote_players)
+        if self.net and not self.net.es_servidor and self.remote_players:
+            # Cliente: obtener datos de P1 remoto
             remote_player = next(iter(self.remote_players.values()), None)
             if remote_player:
-                player_data_p2 = {
-                    "health": getattr(remote_player, "lives", 0),
-                    "max_health": getattr(remote_player, "max_lives", 0),
-                    "coins": getattr(remote_player, "gold", 0),
-                    "red_apoyo": getattr(remote_player, "_ibarra_red_apoyo", 0),  # Contador de curaciones acumuladas
-                    "modo_privado": getattr(remote_player, "_ibarra_modo_privado", False),
-                    "emp": getattr(remote_player, "_ibarra_emp", False),
-                    "eco_señal": getattr(remote_player, "_ibarra_double_shot", False)
+                player_data_p1 = {
+                    "health": remote_player.get("vidas", 0),
+                    "max_health": 10,
+                    "coins": remote_player.get("apoyo", 0),
+                    "red_apoyo": 0,
+                    "modo_privado": False,
+                    "emp": False,
+                    "eco_señal": False
                 }
             else:
-                player_data_p2 = {
-                    "health": 0, "max_health": 0, "coins": 0,
+                player_data_p1 = {
+                    "health": 0, "max_health": 10, "coins": 0,
                     "red_apoyo": 0, "modo_privado": False, "emp": False, "eco_señal": False
                 }
         else:
-            player_data_p2 = {
-                "health": 0, "max_health": 0, "coins": 0,
-                "red_apoyo": 0, "modo_privado": False, "emp": False, "eco_señal": False
+            # Servidor: mostrar datos de P1 local
+            player_data_p1 = {
+                "health": getattr(self.player, "lives", 0),
+                "max_health": getattr(self.player, "max_lives", 0),
+                "coins": getattr(self.player, "gold", 0),
+                "red_apoyo": getattr(self.player, "_ibarra_red_apoyo", 0),  # Contador de curaciones acumuladas
+                "modo_privado": getattr(self.player, "_ibarra_modo_privado", False),
+                "emp": getattr(self.player, "_ibarra_emp", False),
+                "eco_señal": getattr(self.player, "_ibarra_double_shot", False)
             }
+        self.hud_panel_p1.render(self.screen, player_data_p1, es_p2=False)
 
+        # Panel del Jugador 2 (Paso 7: usar _get_player_data_p2())
+        player_data_p2 = self._get_player_data_p2()
         self.hud_panel_p2.render(self.screen, player_data_p2, es_p2=True)
 
         minimap_surface = self.minimap.render(self.dungeon)

@@ -168,6 +168,11 @@ def msg_estado(
     enemigos_vivos: int = 0,
     sala_tipo: str = "normal",
     origen: str | None = None,
+    p2_vidas: int | None = None,
+    p2_oro: int | None = None,
+    p2_invulnerable: bool | None = None,
+    p2_x: float | None = None,
+    p2_y: float | None = None,
 ) -> Mensaje:
     """
     Snapshot completo del estado del juego.
@@ -177,19 +182,33 @@ def msg_estado(
 
     Args:
         origen: Rol que envía el estado. Si es None, se usa "servidor"
+        p2_vidas: Vidas del jugador 2 (remoto)
+        p2_oro: Monedas del jugador 2
+        p2_invulnerable: Si P2 está en iframes
+        p2_x, p2_y: Posición de P2
     """
+    data = {
+        "pos":            [pos_x, pos_y],
+        "sala":           list(sala),
+        "vidas":          vidas,
+        "hp":             hp,
+        "apoyo":          apoyo,
+        "arma_id":        arma_id,
+        "enemigos_vivos": enemigos_vivos,
+        "sala_tipo":      sala_tipo,
+    }
+    # Incluir estado de P2 si está disponible
+    if p2_vidas is not None:
+        data["p2_vidas"] = p2_vidas
+    if p2_oro is not None:
+        data["p2_oro"] = p2_oro
+    if p2_invulnerable is not None:
+        data["p2_invulnerable"] = p2_invulnerable
+    if p2_x is not None and p2_y is not None:
+        data["p2_pos"] = [p2_x, p2_y]
     return Mensaje(
         TipoMensaje.ESTADO,
-        {
-            "pos":            [pos_x, pos_y],
-            "sala":           list(sala),
-            "vidas":          vidas,
-            "hp":             hp,
-            "apoyo":          apoyo,
-            "arma_id":        arma_id,
-            "enemigos_vivos": enemigos_vivos,
-            "sala_tipo":      sala_tipo,
-        },
+        data,
         origen=origen or Rol.SERVIDOR,
     )
 
