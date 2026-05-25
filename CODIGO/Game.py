@@ -1114,6 +1114,10 @@ class Game:
             # Sincronización de balas de enemigos desde el servidor
             self._handle_enemy_projectiles_state(ev)
 
+        elif ev.tipo == "boss_state":
+            # Sincronización de estado del boss desde el servidor
+            self._handle_boss_state(ev)
+
         elif ev.tipo == "bullet_fired_by_client":
             # Servidor procesa disparo del cliente
             if self.net and self.net.es_servidor:
@@ -1672,6 +1676,79 @@ class Game:
         except Exception as e:
             log_net.error(f"Error en _handle_enemy_projectiles_state: {e}", exc_info=True)
 
+    def _handle_boss_state(self, ev: EventoRed) -> None:
+        """
+        Sincroniza el estado del boss desde el servidor.
+        El cliente actualiza su instancia local del boss con los datos del servidor.
+        """
+        try:
+            datos = ev.datos
+            room_id_raw = datos.get("room_id")
+            room_id = tuple(room_id_raw) if isinstance(room_id_raw, (list, tuple)) else (0, 0)
+
+            # Solo actualizar si estamos en la misma sala
+            if room_id != (self.dungeon.i, self.dungeon.j):
+                return
+
+            room = self.dungeon.current_room
+            if not hasattr(room, "boss") or room.boss is None:
+                return
+
+            boss = room.boss
+
+            # Sincronizar atributos básicos del boss
+            boss.x = datos.get("boss_x", boss.x)
+            boss.y = datos.get("boss_y", boss.y)
+            boss.hp = datos.get("boss_hp", boss.hp)
+            boss.max_hp = datos.get("boss_max_hp", boss.max_hp)
+            boss.activo = datos.get("boss_activo", boss.activo)
+            boss.vivo = datos.get("boss_vivo", boss.vivo)
+
+            # Sincronizar animación
+            nueva_animacion = datos.get("boss_animation", boss.animacion_actual)
+            nuevo_frame = datos.get("boss_frame", boss.frame_actual)
+
+            if nueva_animacion != boss.animacion_actual:
+                boss._set_animacion(nueva_animacion)
+
+            boss.frame_actual = nuevo_frame
+
+            # Sincronizar proyectiles del boss
+            # Los proyectiles se sincronizan basándose en su índice en la lista
+            proyectiles_servidor = datos.get("boss_proyectiles", [])
+
+            # Reconstruir la lista de proyectiles basándose en los del servidor
+            nuevos_proyectiles = []
+            for proj_data in proyectiles_servidor:
+                proj_id = proj_data.get("id", 0)
+
+                # Si el índice está dentro del rango, intentar actualizar el proyectil existente
+                if 0 <= proj_id < len(boss.proyectiles):
+                    proj = boss.proyectiles[proj_id]
+                    proj.x = proj_data.get("x", proj.x)
+                    proj.y = proj_data.get("y", proj.y)
+                    proj.dx = proj_data.get("dx", proj.dx)
+                    proj.dy = proj_data.get("dy", proj.dy)
+                    proj.activo = proj_data.get("vivo", True)
+                    nuevos_proyectiles.append(proj)
+                else:
+                    # Crear nuevo proyectil si está fuera del rango
+                    from entities.boss import ProyectilBoss
+                    nuevo_proj = ProyectilBoss(
+                        x=proj_data.get("x", 0),
+                        y=proj_data.get("y", 0),
+                        dx=proj_data.get("dx", 0),
+                        dy=proj_data.get("dy", 0),
+                        radio=proj_data.get("radio", 8),
+                    )
+                    nuevos_proyectiles.append(nuevo_proj)
+
+            # Reemplazar la lista de proyectiles
+            boss.proyectiles = nuevos_proyectiles
+
+        except Exception as e:
+            log_net.error(f"Error en _handle_boss_state: {e}", exc_info=True)
+
     def _process_client_bullet(self, ev: EventoRed) -> None:
         """
         El servidor procesa un disparo enviado por el cliente.
@@ -2089,6 +2166,7 @@ class Game:
 
         self._sync_enemies_to_client(room)  # Sincronizar enemigos con cliente remoto
         self._sync_enemy_projectiles_to_client(room)  # Sincronizar balas de enemigos
+        self._sync_boss_to_client(room)  # Sincronizar boss con cliente remoto
         self._update_projectiles(dt, room)
         self.death_effect_manager.update(dt)
         self.spawn_effect_manager.update(dt)  # Actualizar efectos de spawn del jugador
@@ -2711,6 +2789,68 @@ class Game:
             from network.protocol import msg_enemy_projectiles_state
             msg = msg_enemy_projectiles_state(projectiles_list, (self.dungeon.i, self.dungeon.j))
             self.net.enviar(msg)
+
+    def _sync_boss_to_client(self, room) -> None:
+        """
+        Sincroniza el estado del boss al cliente.
+        Solo ejecuta si es servidor y hay cliente conectado.
+        """
+        if not self.net or not self.net.es_servidor:
+            return
+
+        if not hasattr(room, "boss") or room.boss is None:
+            return
+
+        # Sincronizar cada 50ms (igual que enemigos)
+        ahora = time.time()
+        if not hasattr(self, '_last_boss_sync'):
+            self._last_boss_sync = 0.0
+
+        if ahora - self._last_boss_sync < 0.05:
+            return
+
+        self._last_boss_sync = ahora
+
+        boss = room.boss
+
+        # Preparar datos del boss
+        ataques_activos = []
+        for ataque in boss.ataques_activos:
+            ataques_activos.append({
+                "tipo": ataque.__class__.__name__,
+                "fase": getattr(ataque, "fase", "unknown"),
+            })
+
+        # Preparar proyectiles del boss
+        proyectiles_boss = []
+        for i, proj in enumerate(boss.proyectiles):
+            if proj.activo:
+                proyectiles_boss.append({
+                    "id": i,  # Usar índice en lugar de id(proj) para consistencia
+                    "x": round(proj.x, 1),
+                    "y": round(proj.y, 1),
+                    "dx": round(proj.dx, 2),
+                    "dy": round(proj.dy, 2),
+                    "radio": proj.radio,
+                    "vivo": True,
+                })
+
+        # Enviar sincronización
+        from network.protocol import msg_boss_state
+        msg = msg_boss_state(
+            boss.x,
+            boss.y,
+            boss.hp,
+            boss.max_hp,
+            boss.animacion_actual,
+            boss.frame_actual,
+            boss.activo,
+            boss.vivo,
+            ataques_activos,
+            proyectiles_boss,
+            (self.dungeon.i, self.dungeon.j),
+        )
+        self.net.enviar(msg)
 
     def _update_projectiles(self, dt: float, room) -> None:
         self.projectiles.update(dt, room)

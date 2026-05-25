@@ -456,6 +456,64 @@ def msg_enemy_projectiles_state(projectiles_list: list[dict], room_id: tuple[int
     )
 
 
+def msg_boss_state(
+    boss_x: float,
+    boss_y: float,
+    boss_hp: int,
+    boss_max_hp: int,
+    boss_animation: str,
+    boss_frame: int,
+    boss_activo: bool,
+    boss_vivo: bool,
+    boss_ataques_activos: list[dict],
+    boss_proyectiles: list[dict],
+    room_id: tuple[int, int],
+) -> Mensaje:
+    """
+    Sincronización continua: Estado del boss.
+
+    El servidor envía esto periódicamente para que el cliente mantenga el boss sincronizado.
+
+    Args:
+        boss_x, boss_y: Posición del boss
+        boss_hp: Vida actual del boss
+        boss_max_hp: Vida máxima del boss
+        boss_animation: Nombre de la animación actual (idle, laser, zigzag, fanout, emp)
+        boss_frame: Frame actual de la animación
+        boss_activo: Si el boss está activo (activado)
+        boss_vivo: Si el boss está vivo
+        boss_ataques_activos: Lista de ataques activos con sus datos
+        boss_proyectiles: Lista de proyectiles del boss con: {
+            "id": str,
+            "x": float,
+            "y": float,
+            "dx": float,
+            "dy": float,
+            "radio": int,
+            "vivo": bool,
+        }
+        room_id: Tupla (i, j) de la sala actual
+    """
+    return Mensaje(
+        TipoMensaje.EVENTO,
+        {
+            "evento": "boss_state",
+            "boss_x": round(boss_x, 1),
+            "boss_y": round(boss_y, 1),
+            "boss_hp": boss_hp,
+            "boss_max_hp": boss_max_hp,
+            "boss_animation": boss_animation,
+            "boss_frame": boss_frame,
+            "boss_activo": boss_activo,
+            "boss_vivo": boss_vivo,
+            "boss_ataques_activos": boss_ataques_activos,
+            "boss_proyectiles": boss_proyectiles,
+            "room_id": list(room_id),
+        },
+        origen=Rol.SERVIDOR,
+    )
+
+
 def msg_transicion_completada(
     sala_nueva: tuple[int, int],
     pos_victima: tuple[float, float],
