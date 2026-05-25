@@ -919,8 +919,8 @@ class StartMenu:
         # Cargar y mostrar logo PNG en lugar del texto
         logo_title = self._load_logo_title()
         if logo_title:
-            # Escalar a 1/2 del tamaño original (aumentado de 1/3)
-            scaled_size = (logo_title.get_width() // 2, logo_title.get_height() // 2)
+            # Escalar a 55% del tamaño original
+            scaled_size = (int(logo_title.get_width() * 0.55), int(logo_title.get_height() * 0.55))
             logo_title_scaled = pygame.transform.smoothscale(logo_title, scaled_size)
             logo_title_rect = logo_title_scaled.get_rect(center=(width // 2, height // 5))
             self.screen.blit(logo_title_scaled, logo_title_rect)
