@@ -715,11 +715,11 @@ class HUDPanel:
 
         # Parámetros de posicionamiento (ajustados según el panel)
         ICON_SIZE = 48  # Más grande
-        MARGEN_INF = 72  # Margen desde el borde inferior del panel
+        MARGEN_INF = 52 if es_p2 else 72  # P2: 20px más abajo (menor margen = más abajo)
 
         # P1 (497x221): márgenes más grandes a la derecha
         # P2 (450x200): márgenes más pequeños para caber en el panel
-        MARGEN_IZQ = 120 if es_p2 else 200  # Ajustado para P2
+        MARGEN_IZQ = 200 if es_p2 else 200  # Ajustado para P2 - movido a la derecha
         TEXT_MARGIN_LEFT = 12  # Espacio entre icono y número
 
         # Calcular Y desde el FONDO del panel hacia arriba
