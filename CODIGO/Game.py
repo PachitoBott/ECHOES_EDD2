@@ -960,10 +960,10 @@ class Game:
                     self._use_ibarra_item("modo_privado")
                 elif e.key == pygame.K_z:
                     self._use_ibarra_item("red_apoyo")
-                elif e.key == pygame.K_m:
+                elif e.key == pygame.K_MINUS:
                     self._stats_pending_reason = "manual_same_seed"
                     self.start_new_run(seed=self.current_seed)
-                elif e.key == pygame.K_n:
+                elif e.key == pygame.K_EQUALS:
                     self._stats_pending_reason = "manual_new_seed"
                     self.start_new_run(seed=None)
 
